@@ -20,7 +20,7 @@ OKR (Objectives and Key Results) and KPI (Key Performance Indicators) Management
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/RinWasBusted/okr-kpi-system-BE
 cd okr-kpi-system-BE
 ```
 
