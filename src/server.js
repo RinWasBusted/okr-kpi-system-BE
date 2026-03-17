@@ -1,9 +1,11 @@
 import express from 'express';
 import prisma from './utils/prisma';
+import { connectRedis } from './utils/redis.js';
 import cookieParser from 'cookie-parser';
 import apiRouter from './api';
 import errorHandler from './middlewares/errorHandler';
 import responseHandler from './middlewares/responseHandler';
+import { setupSwagger } from './config/swagger.config.js';
 
 const createApp = () => {
   const app = express();
@@ -14,6 +16,7 @@ const createApp = () => {
   app.use(cookieParser());
   app.use(responseHandler);
 
+  setupSwagger(app);
 
   // Routes
   app.get('/', (req, res) => {
@@ -38,6 +41,14 @@ const createApp = () => {
     })
     .catch((error) => {
       console.error('Error connecting to the database:', error);
+    });
+
+  connectRedis()
+    .then(() => {
+      console.log('Connected to Redis');
+    })
+    .catch((error) => {
+      console.error('Failed to connect to Redis', error);
     });
 
   return app;
