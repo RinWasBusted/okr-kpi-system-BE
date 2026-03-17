@@ -1,17 +1,28 @@
 import express from 'express';
 import prisma from './utils/prisma';
+import { connectRedis } from './utils/redis.js';
+import cookieParser from 'cookie-parser';
+import apiRouter from './api';
+import errorHandler from './middlewares/errorHandler';
+import responseHandler from './middlewares/responseHandler';
+import { setupSwagger } from './config/swagger.config.js';
 
 const createApp = () => {
   const app = express();
-
+  
   // Middleware
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser());
+  app.use(responseHandler);
+
+  setupSwagger(app);
 
   // Routes
   app.get('/', (req, res) => {
     res.json({ message: 'Welcome to OKR-KPI System API' });
   });
+  app.use('/api', apiRouter, errorHandler);
 
   // Error handling middleware
   app.use((err, req, res, next) => {
@@ -30,6 +41,14 @@ const createApp = () => {
     })
     .catch((error) => {
       console.error('Error connecting to the database:', error);
+    });
+
+  connectRedis()
+    .then(() => {
+      console.log('Connected to Redis');
+    })
+    .catch((error) => {
+      console.error('Failed to connect to Redis', error);
     });
 
   return app;

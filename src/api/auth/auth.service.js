@@ -1,0 +1,106 @@
+import prisma from '../../utils/prisma';
+import { generateToken } from '../../utils/jwt';
+import { comparePassword } from '../../utils/bcrypt';
+import AppError from '../../utils/appError';
+import client from '../../utils/redis';
+
+export const loginService = async (email, password) => {
+    try {
+        const user = await prisma.users.findUnique({
+            where: { email }
+        });
+
+        if (!user) {
+            throw new AppError("User not found", 404);
+        }
+
+        if (!await comparePassword(password, user.password)) {
+            throw new AppError("Invalid credentials", 401);
+        }
+
+        const tokenPayload = {
+            id: user.id,
+            role: user.role,
+            company_id: user.company_id,
+            unit_id: user.unit_id
+        }
+
+        const accessToken = generateToken(tokenPayload, '15m');
+        const refreshToken = generateToken(tokenPayload, '7d');
+
+        await client.setEx(`refreshToken:${refreshToken}`, 7 * 24 * 60 * 60, JSON.stringify(tokenPayload));
+
+
+        return { user, accessToken, refreshToken };
+    } catch (error) {
+        throw new Error("Error occurred while logging in");
+    }
+};
+
+export const refreshTokenService = async (refreshToken) => {
+    try {
+        const tokenData = await client.get(`refreshToken:${refreshToken}`);
+
+        if (!tokenData) {
+            throw new AppError("Invalid refresh token", 401);
+        }
+
+        const { id, role, company_id, unit_id } = JSON.parse(tokenData);
+
+        const accessToken = generateToken({ id, role, company_id, unit_id }, '15m');
+
+        return { accessToken };
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const getCurrentUser = async (userId) => {
+    try {
+        const user = await prisma.users.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                full_name: true,
+                email: true,
+                avatar_url: true,
+                role: true,
+                company_id: true,
+                unit_id: true
+            }
+        });
+
+        if (!user) {
+            throw new AppError("User not found", 404);
+        }
+
+        return user;
+    } catch (error) {
+        throw new AppError("Error occurred while fetching user", 500);
+    }
+};
+
+export const changePassword = async (userId, currentPassword, newPassword) => {
+    try {
+        const user = await prisma.users.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user) {
+            throw new AppError("User not found", 404);
+        }
+
+        if (!await comparePassword(currentPassword, user.password)) {
+            throw new AppError("Current password is incorrect", 401);
+        }
+
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+        await prisma.users.update({
+            where: { id: userId },
+            data: { password: hashedNewPassword }
+        });
+    } catch (error) {
+        throw error;
+    }
+};

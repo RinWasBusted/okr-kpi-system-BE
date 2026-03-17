@@ -49,8 +49,9 @@ model Users {
   id         Int      @id @default(autoincrement())
   company_id Int
   full_name  String
-  email      String
+  email      String   @unique
   password   String
+  avatar_url String?
   role       String
   unit_id    Int?
   created_at DateTime @default(now())
