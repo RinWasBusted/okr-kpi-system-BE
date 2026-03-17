@@ -1,17 +1,25 @@
 import express from 'express';
 import prisma from './utils/prisma';
+import cookieParser from 'cookie-parser';
+import apiRouter from './api';
+import errorHandler from './middlewares/errorHandler';
+import responseHandler from './middlewares/responseHandler';
 
 const createApp = () => {
   const app = express();
-
+  
   // Middleware
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser());
+  app.use(responseHandler);
+
 
   // Routes
   app.get('/', (req, res) => {
     res.json({ message: 'Welcome to OKR-KPI System API' });
   });
+  app.use('/api', apiRouter, errorHandler);
 
   // Error handling middleware
   app.use((err, req, res, next) => {
