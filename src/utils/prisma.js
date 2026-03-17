@@ -1,5 +1,14 @@
-import { PrismaClient } from '@prisma/client';
+import "dotenv/config";
+import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
-let prisma = new PrismaClient();    
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+
+export { prisma, Prisma };
 export default prisma;
