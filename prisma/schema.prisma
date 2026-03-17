@@ -13,208 +13,208 @@ datasource db {
   provider = "postgresql"
 }
 
-model Users {
-  id       String   @id @default(uuid())
-  fullname     String  
-  email      String?
-  password   String?
-  role       String?
-  department_id String?
+model Companies {
+  id         Int      @id @default(autoincrement())
+  name       String
+  slug       String   @unique
+  is_active  Boolean  @default(true)
   created_at DateTime @default(now())
 
-  managed_departments Departments[] @relation("DepartmentManager")
-  kpi_assignments KPIAssignments[]
-  objectives Objectives[]
-  check_ins CheckIns[]
-  feedbacks Feedbacks[]
-  evaluations Evaluations[]
-
-  department Departments? @relation("DepartmentMember",fields: [department_id], references: [id])
-}
-
-model Departments {
-  id   String @id @default(uuid())
-  name String @unique
-  parent_id String?
-  manager_id String?
-  created_at DateTime @default(now())
-
-  sub_departments Departments[] @relation("DepartmentHierarchy")
-  users Users[] @relation("DepartmentMember")
+  units            Units[]
+  users            Users[]
+  cycles           Cycles[]
   kpi_dictionaries KPIDictionaries[]
-  kpi_assignments KPIAssignments[]
-  objectives Objectives[]
-  evaluations Evaluations[]
-
-  manager Users? @relation("DepartmentManager",fields: [manager_id], references: [id])
-  department Departments? @relation("DepartmentHierarchy", fields: [parent_id], references: [id])
+  notifications    Notifications[]
 }
 
-enum ObjectiveStatus {
-  Draft
-  Pending_Approval
-  Active
-  Rejected
-  Closed
+model Units {
+  id         Int      @id @default(autoincrement())
+  company_id Int
+  name       String
+  parent_id  Int?
+  manager_id Int?
+  created_at DateTime @default(now())
+
+  company          Companies @relation(fields: [company_id], references: [id])
+  parent           Units?    @relation("UnitHierarchy", fields: [parent_id], references: [id])
+  children         Units[]   @relation("UnitHierarchy")
+  manager          Users?    @relation("UnitManager", fields: [manager_id], references: [id])
+  users            Users[]
+  kpi_dictionaries KPIDictionaries[]
+  kpi_assignments  KPIAssignments[]
+  objectives       Objectives[]
+  evaluations      Evaluations[]
+}
+
+model Users {
+  id         Int      @id @default(autoincrement())
+  company_id Int
+  full_name  String
+  email      String
+  password   String
+  role       String
+  unit_id    Int?
+  created_at DateTime @default(now())
+
+  company            Companies     @relation(fields: [company_id], references: [id])
+  unit               Units?        @relation(fields: [unit_id], references: [id])
+  managed_units      Units[]       @relation("UnitManager")
+  kpi_assignments    KPIAssignments[]
+  objectives         Objectives[]
+  approved_objectives Objectives[] @relation("ObjectiveApprover")
+  check_ins          CheckIns[]
+  feedbacks          Feedbacks[]
+  evaluations        Evaluations[] @relation("EmployeeEvaluations")
+  notifications      Notifications[]
 }
 
 model Cycles {
-  id String @id @default(uuid())
-  name String @unique
-  start_date DateTime
-  end_date DateTime
-  is_locked Boolean @default(false)
-  
-  kpi_assignments KPIAssignments[]
-  objectives Objectives[]
-  evaluations Evaluations[]
-}
+  id         Int     @id @default(autoincrement())
+  company_id Int
+  name       String
+  start_date DateTime @db.Date
+  end_date   DateTime @db.Date
+  is_locked  Boolean @default(false)
 
-enum KPIEvaluationMethod {
-  Postive
-  Negative
-  Stabilizing
+  company         Companies @relation(fields: [company_id], references: [id])
+  kpi_assignments KPIAssignments[]
+  objectives      Objectives[]
+  evaluations     Evaluations[]
 }
 
 model KPIDictionaries {
-  id Int @id @default(autoincrement())
-  name String @unique
-  unit String 
-  evaluation_method KPIEvaluationMethod
-  department_id String?
+  id                Int     @id @default(autoincrement())
+  company_id        Int?
+  name              String
+  unit              String
+  evaluation_method String
+  unit_id           Int?
 
+  company         Companies?     @relation(fields: [company_id], references: [id])
+  unit_ref        Units?         @relation(fields: [unit_id], references: [id])
   kpi_assignments KPIAssignments[]
-
-  department Departments? @relation(fields: [department_id], references: [id])
 }
 
 model KPIAssignments {
-  id String @id @default(uuid())
-  parent_assignment_id String?
-  kpi_dictionary_id Int
-  cycle_id String
-  owner_id String
-  department_id String?
-  target_value Float
-  weight Float
-  created_at DateTime @default(now())
+  id                   Int      @id @default(autoincrement())
+  parent_assignment_id Int?
+  kpi_dictionary_id    Int
+  cycle_id             Int
+  owner_id             Int?
+  unit_id              Int
+  target_value         Float
+  weight               Float
+  created_at           DateTime @default(now())
 
-  child_assignments KPIAssignments[] @relation("KPIParentAssignment")
-  kpi_records KPIRecords[]
-
-  parent_assignment KPIAssignments? @relation("KPIParentAssignment", fields: [parent_assignment_id], references: [id])
-  kpi_dictionary KPIDictionaries @relation(fields: [kpi_dictionary_id], references: [id])
-  cycle Cycles @relation(fields: [cycle_id], references: [id])
-  owner Users @relation(fields: [owner_id], references: [id])
-  department Departments? @relation(fields: [department_id], references: [id])
-}
-
-enum KPIStatus {
-  Normal
-  Warning
-  Danger
-}
-
-enum KPITrend {
-  Upward
-  Stable
-  Downward
+  parent_assignment KPIAssignments? @relation("KPIAssignmentHierarchy", fields: [parent_assignment_id], references: [id])
+  child_assignments KPIAssignments[] @relation("KPIAssignmentHierarchy")
+  kpi_dictionary    KPIDictionaries  @relation(fields: [kpi_dictionary_id], references: [id])
+  cycle             Cycles           @relation(fields: [cycle_id], references: [id])
+  owner             Users?           @relation(fields: [owner_id], references: [id])
+  unit              Units            @relation(fields: [unit_id], references: [id])
+  kpi_records       KPIRecords[]
 }
 
 model KPIRecords {
-  id Int @id @default(autoincrement())
-  kpi_assignment_id String
-  period_start DateTime
-  period_end DateTime
-  actual_value Float
+  id                  Int      @id @default(autoincrement())
+  kpi_assignment_id   Int
+  period_start        DateTime @db.Date
+  period_end          DateTime @db.Date
+  actual_value        Float
   progress_percentage Float
-  status KPIStatus @default(Normal)
-  trend KPITrend @default(Stable)
-  created_at DateTime @default(now())
+  status              String
+  trend               String
+  created_at          DateTime @default(now())
 
   kpi_assignment KPIAssignments @relation(fields: [kpi_assignment_id], references: [id])
 }
 
 model Objectives {
-  id String @id @default(uuid())
-  title String
-  description String?
-  owner_id String? 
-  department_id String?
-  cycle_id String?
-  parent_objective_id String?
-  status ObjectiveStatus @default(Draft)
-  progress_percentage Float @default(0)
-  created_at DateTime @default(now())
+  id                  Int      @id @default(autoincrement())
+  title               String
+  cycle_id            Int
+  unit_id             Int
+  owner_id            Int?
+  parent_objective_id Int?
+  status              String
+  approved_by         Int?
+  progress_percentage Float   @default(0)
+  created_at          DateTime @default(now())
 
-  sub_objectives Objectives[] @relation("ObjectiveHierarchy")
-  key_results KeyResults[]
-  feedbacks Feedbacks[]
-
-  owner Users? @relation(fields: [owner_id], references: [id])
-  department Departments? @relation(fields: [department_id], references: [id])
-  cycle Cycles? @relation(fields: [cycle_id], references: [id])
+  cycle            Cycles      @relation(fields: [cycle_id], references: [id])
+  unit             Units       @relation(fields: [unit_id], references: [id])
+  owner            Users?      @relation(fields: [owner_id], references: [id])
+  approver         Users?      @relation("ObjectiveApprover", fields: [approved_by], references: [id])
   parent_objective Objectives? @relation("ObjectiveHierarchy", fields: [parent_objective_id], references: [id])
+  sub_objectives   Objectives[] @relation("ObjectiveHierarchy")
+  key_results      KeyResults[]
+  feedbacks        Feedbacks[]
 }
 
 model KeyResults {
-  id String @id @default(uuid())
-  objective_id String
-  title String
-  target_value Float
-  current_value Float @default(0)
-  unit String
-  weight Float
-  progress_percentage Float @default(0)
-  created_at DateTime @default(now())
-
-  check_ins CheckIns[]
+  id                  Int     @id @default(autoincrement())
+  objective_id        Int
+  title               String
+  target_value        Float
+  current_value       Float   @default(0)
+  unit                String
+  weight              Float
+  due_date            DateTime @db.Date
+  progress_percentage Float   @default(0)
 
   objective Objectives @relation(fields: [objective_id], references: [id])
+  check_ins CheckIns[]
 }
 
 model CheckIns {
-  id Int @id @default(autoincrement())
-  key_result_id String
-  user_id String
-  achieved_value Float
-  evidence_url String
-  comments String?
-  created_at DateTime @default(now())
+  id                Int      @id @default(autoincrement())
+  key_result_id     Int
+  user_id           Int
+  achieved_value    Float
+  progress_snapshot Float
+  evidence_url      String
+  comment           String?
+  created_at        DateTime @default(now())
 
   key_result KeyResults @relation(fields: [key_result_id], references: [id])
-  user Users @relation(fields: [user_id], references: [id])
-}
-
-enum FeedbackType {
-  Comment
-  Recognition
-  Badge
+  user       Users      @relation(fields: [user_id], references: [id])
 }
 
 model Feedbacks {
-  id Int @id @default(autoincrement())
-  objective_id String
-  user_id String
-  content String
-  type FeedbackType
-  created_at DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  objective_id Int
+  user_id      Int
+  content      String   @db.Text
+  type         String
+  created_at   DateTime @default(now())
 
   objective Objectives @relation(fields: [objective_id], references: [id])
-  user Users @relation(fields: [user_id], references: [id])
+  user      Users      @relation(fields: [user_id], references: [id])
 }
 
 model Evaluations {
-  id String @id @default(uuid())
-  employee_id String
-  department_id String
-  cycle_id String
-  rank String
-  comment String?
-  created_at DateTime @default(now())
+  id          Int    @id @default(autoincrement())
+  employee_id Int
+  unit_id     Int
+  cycle_id    Int
+  rank        String
+  comment     String?
 
-  employee Users @relation(fields: [employee_id], references: [id])
-  department Departments @relation(fields: [department_id], references: [id])
-  cycle Cycles @relation(fields: [cycle_id], references: [id])
+  employee Users  @relation("EmployeeEvaluations", fields: [employee_id], references: [id])
+  unit     Units  @relation(fields: [unit_id], references: [id])
+  cycle    Cycles @relation(fields: [cycle_id], references: [id])
 }
 
+model Notifications {
+  id           Int      @id @default(autoincrement())
+  company_id   Int
+  recipient_id Int
+  type         String
+  ref_type     String?
+  ref_id       Int?
+  is_read      Boolean  @default(false)
+  created_at   DateTime @default(now())
+
+  company   Companies @relation(fields: [company_id], references: [id])
+  recipient Users     @relation(fields: [recipient_id], references: [id])
+}
