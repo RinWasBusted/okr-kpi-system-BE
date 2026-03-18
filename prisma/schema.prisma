@@ -45,18 +45,24 @@ model Units {
   evaluations      Evaluations[]
 }
 
+enum UserRole {
+  ADMIN
+  ADMIN_COMPANY
+  EMPLOYEE
+}
+
 model Users {
   id         Int      @id @default(autoincrement())
-  company_id Int
+  company_id Int?
   full_name  String
   email      String   @unique
   password   String
   avatar_url String?
-  role       String
+  role       UserRole
   unit_id    Int?
   created_at DateTime @default(now())
 
-  company            Companies     @relation(fields: [company_id], references: [id])
+  company            Companies?     @relation(fields: [company_id], references: [id])
   unit               Units?        @relation(fields: [unit_id], references: [id])
   managed_units      Units[]       @relation("UnitManager")
   kpi_assignments    KPIAssignments[]

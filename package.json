@@ -6,6 +6,7 @@
   "scripts": {
     "start": "NODE_ENV=production tsx src/index.js",
     "dev": "NODE_ENV=development tsx watch src/index.js",
+    "seed": "prisma db seed",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

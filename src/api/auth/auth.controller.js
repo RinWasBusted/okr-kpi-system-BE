@@ -1,4 +1,5 @@
-import { loginSchema, changePasswordSchema } from "../../schemas/auth.schema"
+import { loginSchema, changePasswordSchema } from "../../schemas/auth.schema";
+import client from "../../utils/redis.js";
 import * as authService from "./auth.service";
 import appError from "../../utils/appError";
 
