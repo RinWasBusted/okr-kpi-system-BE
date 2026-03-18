@@ -1,16 +1,32 @@
 import "dotenv/config";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from '../src/utils/prisma.js';
+import { hashPassword } from "../src/utils/bcrypt.js";
 
 const main = async () => {
-  // Seed data here when needed.
-  console.log("Prisma seed: no data to seed yet.");
+  await prisma.$connect();
+
+  console.log("Seeding database...");
+
+  // Create a user
+  const password = "admin123";
+  const hashedPassword = await hashPassword(password);
+
+  const user = await prisma.users.create({
+    data: {
+      full_name: "admin",
+      email: "admin@phamhoangthai.site",
+      password: hashedPassword,
+      role: "ADMIN",
+    }
+  });
+
+  console.log("Database seeded successfully!");
 };
 
 main()
-  .catch((error) => {
+  .catch(async (error) => {
     console.error("Prisma seed failed:", error);
+    await prisma.$disconnect();
     process.exitCode = 1;
   })
   .finally(async () => {
