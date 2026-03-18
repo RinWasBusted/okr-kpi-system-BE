@@ -1,6 +1,6 @@
 import prisma from '../../utils/prisma';
 import { generateToken } from '../../utils/jwt';
-import { comparePassword } from '../../utils/bcrypt';
+import { hashPassword, comparePassword } from '../../utils/bcrypt';
 import AppError from '../../utils/appError';
 import client from '../../utils/redis';
 
@@ -33,7 +33,10 @@ export const loginService = async (email, password) => {
 
         return { user, accessToken, refreshToken };
     } catch (error) {
-        throw new Error("Error occurred while logging in");
+        if (error instanceof AppError) {
+            throw error;
+        }
+        throw new AppError("Error occurred while logging in", 500);
     }
 };
 
@@ -49,7 +52,7 @@ export const refreshTokenService = async (refreshToken) => {
 
         const accessToken = generateToken({ id, role, company_id, unit_id }, '15m');
 
-        return { accessToken };
+        return accessToken;
     } catch (error) {
         throw error;
     }
@@ -94,7 +97,7 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
             throw new AppError("Current password is incorrect", 401);
         }
 
-        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+        const hashedNewPassword = await hashPassword(newPassword, 10);
 
         await prisma.users.update({
             where: { id: userId },

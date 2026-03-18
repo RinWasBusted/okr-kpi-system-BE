@@ -14,8 +14,16 @@ const SAME_ORIGIN_SERVER = {
 
 const ABSOLUTE_SERVER = {
   url: `${BASE_URL}/api`,
-  description: "Absolute API Server",
+  description: "Absolute API Server (cross-origin, cookies not auto-sent)",
 };
+
+const SWAGGER_ENABLE_ABSOLUTE_SERVER =
+  process.env.SWAGGER_ENABLE_ABSOLUTE_SERVER === "true";
+
+const swaggerServers = [SAME_ORIGIN_SERVER];
+if (SWAGGER_ENABLE_ABSOLUTE_SERVER) {
+  swaggerServers.push(ABSOLUTE_SERVER);
+}
 
 const swaggerOptions = {
   definition: {
@@ -25,7 +33,7 @@ const swaggerOptions = {
       version: "1.0.0",
       description: "API docs for OKR-KPI System Backend",
     },
-    servers: [SAME_ORIGIN_SERVER, ABSOLUTE_SERVER],
+    servers: swaggerServers,
     components: {
       securitySchemes: {
         cookieAuth: {

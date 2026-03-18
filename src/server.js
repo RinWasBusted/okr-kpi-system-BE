@@ -7,7 +7,7 @@ import errorHandler from './middlewares/errorHandler';
 import responseHandler from './middlewares/responseHandler';
 import { setupSwagger } from './config/swagger.config.js';
 
-const createApp = () => {
+const createApp = async () => {
   const app = express();
   
   // Middleware
@@ -35,22 +35,20 @@ const createApp = () => {
     res.status(404).json({ error: 'Route not found' });
   });
 
-  prisma.$connect()
-    .then(() => {
+  try {
+      await prisma.$connect();
       console.log('Connected to the database successfully!');
-    })
-    .catch((error) => {
+  } catch (error) {
       console.error('Error connecting to the database:', error);
-    });
+  }
 
-  connectRedis()
-    .then(() => {
+  try {
+      await connectRedis();
       console.log('Connected to Redis');
-    })
-    .catch((error) => {
+  } catch (error) {
       console.error('Failed to connect to Redis', error);
-    });
-
+  }
+  
   return app;
 };
 
