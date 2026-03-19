@@ -58,6 +58,7 @@ model Users {
   email      String   @unique
   password   String
   avatar_url String?
+  job_title  String?
   role       UserRole
   unit_id    Int?
   created_at DateTime @default(now())
@@ -88,6 +89,12 @@ model Cycles {
   evaluations     Evaluations[]
 }
 
+enum Visibility {
+  PUBLIC
+  PRIVATE
+  COMPANY
+}
+
 model KPIDictionaries {
   id                Int     @id @default(autoincrement())
   company_id        Int?
@@ -108,6 +115,7 @@ model KPIAssignments {
   cycle_id             Int
   owner_id             Int?
   unit_id              Int
+  visibility           Visibility
   target_value         Float
   weight               Float
   created_at           DateTime @default(now())
@@ -142,6 +150,7 @@ model Objectives {
   unit_id             Int
   owner_id            Int?
   parent_objective_id Int?
+  visibility          Visibility
   status              String
   approved_by         Int?
   progress_percentage Float   @default(0)
