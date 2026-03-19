@@ -1,7 +1,7 @@
 import { loginSchema, changePasswordSchema } from "../../schemas/auth.schema";
 import client from "../../utils/redis.js";
 import * as authService from "./auth.service";
-import appError from "../../utils/appError";
+import AppError from "../../utils/appError";
 
 export const login = async (req, res) => {
     try {
@@ -37,7 +37,7 @@ export const refreshToken = async (req, res) => {
         const { refreshToken } = req.cookies;
 
         if (!refreshToken) {
-            throw new appError("Refresh token not found", 401);
+            throw new AppError("Refresh token not found", 401);
         }
         
         const accessToken = await authService.refreshTokenService(refreshToken);
