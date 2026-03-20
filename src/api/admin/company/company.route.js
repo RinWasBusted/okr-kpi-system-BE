@@ -12,7 +12,7 @@ const router = express.Router();
 
 router.use(authenticate, authorize("ADMIN"));
 
-/**ADMIN
+/**
  * @swagger
  * tags:
  *   - name: Admin - Companies
