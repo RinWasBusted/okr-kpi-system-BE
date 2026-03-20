@@ -1,5 +1,5 @@
 import prisma from "../../../utils/prisma.js";
-import { UserRole } from "@prisma/client";
+import { UserRole, Prisma } from "@prisma/client";
 import AppError from "../../../utils/appError.js";
 
 export const getCompanies = async (filters, pagination) => {
@@ -84,18 +84,25 @@ export const createCompany = async ({ name, slug }) => {
         throw new AppError("Slug already exists on this platform", 409);
     }
 
-    const company = await prisma.companies.create({
-        data: { name, slug, is_active: true },
-        select: {
-            id: true,
-            name: true,
-            slug: true,
-            is_active: true,
-            created_at: true,
-        },
-    });
+    try {
+        const company = await prisma.companies.create({
+            data: { name, slug, is_active: true },
+            select: {
+                id: true,
+                name: true,
+                slug: true,
+                is_active: true,
+                created_at: true,
+            },
+        });
 
-    return company;
+        return company;
+    } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+            throw new AppError("Slug already exists on this platform", 409);
+        }
+        throw err;
+    }
 };
 
 export const updateCompany = async (id, { name, slug, is_active }) => {
@@ -112,23 +119,30 @@ export const updateCompany = async (id, { name, slug, is_active }) => {
         }
     }
 
-    const updated = await prisma.companies.update({
-        where: { id },
-        data: {
-            ...(name !== undefined && { name }),
-            ...(slug !== undefined && { slug }),
-            ...(is_active !== undefined && { is_active }),
-        },
-        select: {
-            id: true,
-            name: true,
-            slug: true,
-            is_active: true,
-            created_at: true,
-        },
-    });
+    try {
+        const updated = await prisma.companies.update({
+            where: { id },
+            data: {
+                ...(name !== undefined && { name }),
+                ...(slug !== undefined && { slug }),
+                ...(is_active !== undefined && { is_active }),
+            },
+            select: {
+                id: true,
+                name: true,
+                slug: true,
+                is_active: true,
+                created_at: true,
+            },
+        });
 
-    return updated;
+        return updated;
+    } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+            throw new AppError("Slug already exists on this platform", 409);
+        }
+        throw err;
+    }
 };
 
 export const deactivateCompany = async (id) => {
