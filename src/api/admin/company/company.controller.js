@@ -1,5 +1,5 @@
 import * as companyService from "./company.service.js";
-import AppError from "../../../utils/appError.js";
+import AppError from "../../utils/appError.js";
 
 export const getCompanies = async (req, res) => {
     try {
@@ -42,9 +42,9 @@ export const createCompany = async (req, res) => {
 export const updateCompany = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, is_active } = req.body;
+        const { name, slug, is_active } = req.body;
 
-        const company = await companyService.updateCompany(parseInt(id), { name, is_active });
+        const company = await companyService.updateCompany(parseInt(id), { name, slug, is_active });
 
         res.success("Company updated successfully", 200, { company });
     } catch (error) {
