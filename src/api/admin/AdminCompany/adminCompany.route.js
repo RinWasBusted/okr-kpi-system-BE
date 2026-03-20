@@ -124,7 +124,7 @@ const router = express.Router({ mergeParams: true });
  *                   type: string
  *                   example: "Company not found"
  */
-router.get("/companies/:company_id/admins", getCompanyAdmins);
+router.get("/", getCompanyAdmins);
 
 /**
  * @swagger
@@ -230,7 +230,7 @@ router.get("/companies/:company_id/admins", getCompanyAdmins);
  *                   type: string
  *                   example: "Email already exists"
  */
-router.post("/companies/:company_id/admins", createCompanyAdmin);
+router.post("/", createCompanyAdmin);
 
 /**
  * @swagger
@@ -326,7 +326,7 @@ router.post("/companies/:company_id/admins", createCompanyAdmin);
  *                   type: string
  *                   example: "Email already exists"
  */
-router.put("/companies/:company_id/admins/:admin_id", updateCompanyAdmin);
+router.put("/:admin_id", updateCompanyAdmin);
 
 /**
  * @swagger
@@ -394,6 +394,6 @@ router.put("/companies/:company_id/admins/:admin_id", updateCompanyAdmin);
  *                   type: string
  *                   example: "Admin not found"
  */
-router.delete("/companies/:company_id/admins/:admin_id", deactivateCompanyAdmin);
+router.delete("/:admin_id", deactivateCompanyAdmin);
 
 export default router;
