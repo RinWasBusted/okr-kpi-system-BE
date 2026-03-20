@@ -6,7 +6,7 @@ import apiRouter from './api';
 import errorHandler from './middlewares/errorHandler';
 import responseHandler from './middlewares/responseHandler';
 import { setupSwagger } from './config/swagger.config.js';
-import adminCompanyRoutes from './api/adminCompanyRoutes.js';
+import adminCompanyRoutes from './api/admin/AdminCompany/adminCompany.route.js';
 
 const createApp = async () => {
   const app = express();
@@ -26,7 +26,7 @@ const createApp = async () => {
   app.use('/api', apiRouter, errorHandler);
 
   // Admin-company management (company-level admins)
-  app.use('/admin', adminCompanyRoutes);
+  app.use('/admin', adminCompanyRoutes, errorHandler);
 
   // Error handling middleware
   app.use((err, req, res, next) => {

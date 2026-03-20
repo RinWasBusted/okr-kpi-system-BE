@@ -1,5 +1,5 @@
 import * as companyService from "./company.service.js";
-import AppError from "../../utils/appError.js";
+import AppError from "../../../utils/appError.js";
 
 export const getCompanies = async (req, res) => {
     try {

@@ -61,16 +61,17 @@ enum UserRole {
 }
 
 model Users {
-  id         Int      @id @default(autoincrement())
-  company_id Int?
-  full_name  String
-  email      String   @unique
-  password   String
-  avatar_url String?
-  job_title  String?
-  role       UserRole
-  unit_id    Int?
-  created_at DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  company_id      Int?
+  full_name       String
+  email           String   @unique
+  password        String
+  avatar_url      String?
+  job_title       String?
+  role            UserRole
+  unit_id         Int?
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now())
 
   company            Companies?     @relation(fields: [company_id], references: [id])
   unit               Units?        @relation(fields: [unit_id], references: [id])
@@ -83,11 +84,7 @@ model Users {
   evaluations        Evaluations[] @relation("EmployeeEvaluations")
   notifications      Notifications[]
 
-<<<<<<< HEAD
-  @@unique([company_id, email])
-=======
   @@index([company_id])
->>>>>>> f6629f3879fb3c858303c4e2d91f11ce78c98e6d
 }
 
 model Cycles {
@@ -279,10 +276,6 @@ model Notifications {
 
   company   Companies @relation(fields: [company_id], references: [id])
   recipient Users     @relation(fields: [recipient_id], references: [id])
-<<<<<<< HEAD
-}
-=======
 
   @@index([company_id])
 }
->>>>>>> f6629f3879fb3c858303c4e2d91f11ce78c98e6d

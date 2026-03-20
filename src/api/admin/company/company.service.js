@@ -1,5 +1,5 @@
-import prisma from "../../utils/prisma.js";
-import AppError from "../../utils/appError.js";
+import prisma from "../../../utils/prisma.js";
+import AppError from "../../../utils/appError.js";
 
 export const getCompanies = async (filters, pagination) => {
     const { is_active, search } = filters;
@@ -29,7 +29,7 @@ export const getCompanies = async (filters, pagination) => {
                 _count: {
                     select: {
                         users: {
-                            where: { role: "AdminCompany" },
+                            where: { role: "ADMIN_COMPANY" },
                         },
                     },
                 },
@@ -42,7 +42,7 @@ export const getCompanies = async (filters, pagination) => {
     const employeeCounts = await Promise.all(
         companies.map((company) =>
             prisma.users.count({
-                where: { company_id: company.id, role: "Employee" },
+                where: { company_id: company.id, role: "EMPLOYEE" },
             })
         )
     );
