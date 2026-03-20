@@ -284,7 +284,7 @@ router.post("/", createCompany);
  * /admin/companies/{id}:
  *   put:
  *     summary: Update company information
- *     description: Update company name, slug, or lock/unlock status. All fields are optional — only provided fields will be updated.
+ *     description: Update company name, slug, or lock/unlock status.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
