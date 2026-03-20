@@ -39,21 +39,27 @@ export const getCompanies = async (filters, pagination) => {
         prisma.companies.count({ where }),
     ]);
 
-    const employeeCounts = await Promise.all(
-        companies.map((company) =>
-            prisma.users.count({
-                where: { company_id: company.id, role: Prisma.UserRole.EMPLOYEE },
-            })
-        )
-    );
+    const companyIds = companies.map((c) => c.id);
 
-    const data = companies.map((company, index) => ({
+    const employeeCountMap = {};
+    if (companyIds.length > 0) {
+        const employeeCountRows = await prisma.users.groupBy({
+            by: ["company_id"],
+            where: { company_id: { in: companyIds }, role: Prisma.UserRole.EMPLOYEE },
+            _count: { _all: true },
+        });
+        for (const row of employeeCountRows) {
+            employeeCountMap[row.company_id] = row._count._all;
+        }
+    }
+
+    const data = companies.map((company) => ({
         id: company.id,
         name: company.name,
         slug: company.slug,
         is_active: company.is_active,
         admin_count: company._count.users,
-        employee_count: employeeCounts[index],
+        employee_count: employeeCountMap[company.id] ?? 0,
         created_at: company.created_at,
     }));
 
