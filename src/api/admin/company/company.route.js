@@ -33,7 +33,7 @@ router.use(authenticate, authorize("ADMIN"));
  *         name: is_active
  *         schema:
  *           type: boolean
- *         description: "true = active, false = locked"
+ *         description: "true = active, false = inactive (deactivated)"
  *       - in: query
  *         name: search
  *         schema:
