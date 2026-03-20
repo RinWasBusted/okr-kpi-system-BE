@@ -48,9 +48,87 @@ const swaggerOptions = {
         },
       },
     },
+    // 👇 Đưa paths vào đây
+    paths: {
+      "/admin/companies/{company_id}/admins": {
+        get: {
+          summary: "Lấy danh sách AdminCompany của một công ty",
+          parameters: [
+            { name: "company_id", in: "path", required: true, schema: { type: "integer" } },
+            { name: "is_active", in: "query", schema: { type: "boolean" } },
+            { name: "page", in: "query", schema: { type: "integer" } },
+            { name: "per_page", in: "query", schema: { type: "integer" } },
+          ],
+          responses: {
+            200: { description: "Danh sách AdminCompany" },
+            404: { description: "COMPANY_NOT_FOUND" },
+          },
+        },
+        post: {
+          summary: "Tạo tài khoản AdminCompany mới",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["full_name", "email", "password"],
+                  properties: {
+                    full_name: { type: "string" },
+                    email: { type: "string" },
+                    password: { type: "string", minLength: 8 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: { description: "Tạo thành công" },
+            409: { description: "EMAIL_EXISTS" },
+            404: { description: "COMPANY_NOT_FOUND" },
+            403: { description: "COMPANY_INACTIVE" },
+          },
+        },
+      },
+      "/admin/companies/{company_id}/admins/{admin_id}": {
+        put: {
+          summary: "Cập nhật tài khoản AdminCompany",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    full_name: { type: "string" },
+                    email: { type: "string" },
+                    password: { type: "string", minLength: 8 },
+                    is_active: { type: "boolean" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Cập nhật thành công" },
+            404: { description: "COMPANY_NOT_FOUND hoặc ADMIN_NOT_FOUND" },
+            409: { description: "EMAIL_EXISTS" },
+            400: { description: "INVALID_PASSWORD hoặc INVALID_PAYLOAD" },
+          },
+        },
+        delete: {
+          summary: "Xoá tài khoản AdminCompany (soft delete)",
+          responses: {
+            200: { description: "Xoá thành công (is_active = false)" },
+            404: { description: "ADMIN_NOT_FOUND" },
+            400: { description: "LAST_ADMIN" },
+          },
+        },
+      },
+    },
   },
   apis: ["./src/api/**/*.js", "./src/server.js"],
 };
+
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
@@ -72,4 +150,125 @@ export const setupSwagger = (app) => {
     res.setHeader("Content-Type", "application/json");
     res.send(swaggerSpec);
   });
+};
+
+// 2.2 Thêm tài liệu cho API quản lý AdminCompany
+
+swaggerOptions.definition.paths = {
+  "/admin/companies/{company_id}/admins": {
+    get: {
+      summary: "Lấy danh sách AdminCompany của một công ty",
+      parameters: [
+        {
+          name: "company_id",
+          in: "path",
+          required: true,
+          schema: { type: "integer" },
+        },
+        { name: "is_active", in: "query", schema: { type: "boolean" } },
+        { name: "page", in: "query", schema: { type: "integer" } },
+        { name: "per_page", in: "query", schema: { type: "integer" } },
+      ],
+      responses: {
+        200: {
+          description: "Danh sách AdminCompany",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: { type: "integer" },
+                        full_name: { type: "string" },
+                        email: { type: "string" },
+                        is_active: { type: "boolean" },
+                        created_at: { type: "string", format: "date-time" },
+                        last_login_at: {
+                          type: "string",
+                          format: "date-time",
+                          nullable: true,
+                        },
+                      },
+                    },
+                  },
+                  meta: {
+                    type: "object",
+                    properties: {
+                      page: { type: "integer" },
+                      per_page: { type: "integer" },
+                      total: { type: "integer" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        404: { description: "COMPANY_NOT_FOUND" },
+      },
+    },
+    post: {
+      summary: "Tạo tài khoản AdminCompany mới",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["full_name", "email", "password"],
+              properties: {
+                full_name: { type: "string" },
+                email: { type: "string" },
+                password: { type: "string", minLength: 8 },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: { description: "Tạo thành công" },
+        409: { description: "EMAIL_EXISTS" },
+        404: { description: "COMPANY_NOT_FOUND" },
+        403: { description: "COMPANY_INACTIVE" },
+      },
+    },
+  },
+  "/admin/companies/{company_id}/admins/{admin_id}": {
+    put: {
+      summary: "Cập nhật tài khoản AdminCompany",
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                full_name: { type: "string" },
+                email: { type: "string" },
+                password: { type: "string", minLength: 8 },
+                is_active: { type: "boolean" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Cập nhật thành công" },
+        404: { description: "COMPANY_NOT_FOUND hoặc ADMIN_NOT_FOUND" },
+        409: { description: "EMAIL_EXISTS" },
+        400: { description: "INVALID_PASSWORD hoặc INVALID_PAYLOAD" },
+      },
+    },
+    delete: {
+      summary: "Xoá tài khoản AdminCompany (soft delete)",
+      responses: {
+        200: { description: "Xoá thành công (is_active = false)" },
+        404: { description: "ADMIN_NOT_FOUND" },
+        400: { description: "LAST_ADMIN" },
+      },
+    },
+  },
 };

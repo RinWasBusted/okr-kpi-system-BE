@@ -72,6 +72,8 @@ model Users {
   feedbacks          Feedbacks[]
   evaluations        Evaluations[] @relation("EmployeeEvaluations")
   notifications      Notifications[]
+
+  @@unique([company_id, email])
 }
 
 model Cycles {
