@@ -10,9 +10,9 @@ import { authenticate, authorize } from "../../middlewares/auth.js";
 
 const router = express.Router();
 
-router.use(authenticate, authorize('ADMIN'));
+router.use(authenticate, authorize("ADMIN"));
 
-/**
+/**ADMIN
  * @swagger
  * tags:
  *   - name: Admin - Companies
@@ -23,7 +23,7 @@ router.use(authenticate, authorize('ADMIN'));
  * @swagger
  * /admin/companies:
  *   get:
- *     summary: Get all companies
+ *     summary: Get list of companies with pagination and filters
  *     description: Returns a paginated list of companies with optional filters by status or search keyword.
  *     tags: [Admin - Companies]
  *     security:
@@ -33,18 +33,18 @@ router.use(authenticate, authorize('ADMIN'));
  *         name: is_active
  *         schema:
  *           type: boolean
- *         description: "true = active, false = deactivated"
+ *         description: "true = active, false = locked"
  *       - in: query
  *         name: search
  *         schema:
  *           type: string
- *         description: Search by name or slug
+ *         description: Search by name or slug (partial match)
  *       - in: query
  *         name: page
  *         schema:
  *           type: integer
  *           default: 1
- *         description: Current page
+ *         description: Current page number 
  *       - in: query
  *         name: per_page
  *         schema:
@@ -148,7 +148,7 @@ router.get("/", getCompanies);
  * /admin/companies:
  *   post:
  *     summary: Create a new company
- *     description: After creating, set up the first AdminCompany account via /admin/companies/:id/admins.
+ *     description: Creating a new company requires a unique slug. The slug is used as a unique identifier for the company across the platform, especially during login. If the slug already exists, an error will be returned.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -420,7 +420,7 @@ router.put("/:id", updateCompany);
  *         description: Company ID
  *     responses:
  *       204:
- *         description: Company deactivated successfully
+ *         description: Company deactivated successfully. No response body is returned.
  *       404:
  *         description: Company not found
  *         content:

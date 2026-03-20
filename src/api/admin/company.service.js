@@ -1,4 +1,4 @@
-import prisma from "../../utils/prisma.js";
+import prisma, { Prisma } from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
 
 export const getCompanies = async (filters, pagination) => {
@@ -29,7 +29,7 @@ export const getCompanies = async (filters, pagination) => {
                 _count: {
                     select: {
                         users: {
-                            where: { role: "AdminCompany" },
+                            where: { role: Prisma.UserRole.ADMIN_COMPANY },
                         },
                     },
                 },
@@ -42,7 +42,7 @@ export const getCompanies = async (filters, pagination) => {
     const employeeCounts = await Promise.all(
         companies.map((company) =>
             prisma.users.count({
-                where: { company_id: company.id, role: "Employee" },
+                where: { company_id: company.id, role: Prisma.UserRole.EMPLOYEE },
             })
         )
     );
@@ -134,11 +134,11 @@ export const getCompanyStats = async (id) => {
 
     const [admin_count, employee_count, active_cycles, total_objectives, total_kpi_assignments, okr_progress] =
         await Promise.all([
-            prisma.users.count({ where: { company_id: id, role: "AdminCompany" } }),
-            prisma.users.count({ where: { company_id: id, role: "Employee" } }),
+            prisma.users.count({ where: { company_id: id, role: Prisma.UserRole.ADMIN_COMPANY } }),
+            prisma.users.count({ where: { company_id: id, role: Prisma.UserRole.EMPLOYEE } }),
             prisma.cycles.count({ where: { company_id: id, is_locked: false } }),
             prisma.objectives.count({ where: { company_id: id } }),
-            prisma.kpi_assignments.count({ where: { company_id: id } }),
+            prisma.kPIAssignments.count({ where: { company_id: id } }),
             prisma.objectives.aggregate({
                 where: { company_id: id, status: "Active" },
                 _avg: { progress_percentage: true },
