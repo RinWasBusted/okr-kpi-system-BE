@@ -284,7 +284,7 @@ router.post("/", createCompany);
  * /admin/companies/{id}:
  *   put:
  *     summary: Update company information
- *     description: Update the company name or lock/unlock the company.
+ *     description: Update company name, slug, or lock/unlock status.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -305,6 +305,10 @@ router.post("/", createCompany);
  *               name:
  *                 type: string
  *                 example: "Acme Corporation"
+*               slug:
+ *                 type: string
+ *                 example: "acme-corporation"
+ *                 description: New slug. Must be unique across the platform.
  *               is_active:
  *                 type: boolean
  *                 example: false
@@ -342,6 +346,25 @@ router.post("/", createCompany);
  *                           type: string
  *                           format: date-time
  *                           example: "2026-01-01T00:00:00.000Z"
+ *       409:
+ *         description: Slug already exists on the platform
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "SLUG_EXISTS"
+ *                     message:
+ *                       type: string
+ *                       example: "Slug already exists on this platform"
  *       404:
  *         description: Company not found
  *         content:
