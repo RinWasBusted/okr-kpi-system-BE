@@ -44,7 +44,7 @@ router.use(authenticate, authorize("ADMIN"));
  *         schema:
  *           type: integer
  *           default: 1
- *         description: Current page number 
+ *         description: Current page number
  *       - in: query
  *         name: per_page
  *         schema:
