@@ -1,6 +1,6 @@
-import prisma, { Prisma } from "../../utils/prisma.js";
+import prisma from "../../../utils/prisma.js";
 import { UserRole } from "@prisma/client";
-import AppError from "../../utils/appError.js";
+import AppError from "../../../utils/appError.js";
 
 export const getCompanies = async (filters, pagination) => {
     const { is_active, search } = filters;
