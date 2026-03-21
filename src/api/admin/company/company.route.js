@@ -6,13 +6,11 @@ import {
     deactivateCompany,
     getCompanyStats,
 } from "./company.controller.js";
-import adminCompanyRouter from "../AdminCompany/adminCompany.route.js";
 import { authenticate, authorize } from "../../../middlewares/auth.js";
 
 const router = express.Router();
 
-router.use(authenticate, authorize('ADMIN'));
-router.use("/:company_id/admins", adminCompanyRouter);
+router.use(authenticate, authorize("ADMIN"));
 
 /**
  * @swagger
@@ -25,7 +23,7 @@ router.use("/:company_id/admins", adminCompanyRouter);
  * @swagger
  * /admin/companies:
  *   get:
- *     summary: Get all companies
+ *     summary: Get list of companies with pagination and filters
  *     description: Returns a paginated list of companies with optional filters by status or search keyword.
  *     tags: [Admin - Companies]
  *     security:
@@ -35,18 +33,18 @@ router.use("/:company_id/admins", adminCompanyRouter);
  *         name: is_active
  *         schema:
  *           type: boolean
- *         description: "true = active, false = deactivated"
+ *         description: "true = active, false = inactive (deactivated)"
  *       - in: query
  *         name: search
  *         schema:
  *           type: string
- *         description: Search by name or slug
+ *         description: Search by name or slug (partial match)
  *       - in: query
  *         name: page
  *         schema:
  *           type: integer
  *           default: 1
- *         description: Current page
+ *         description: Current page number
  *       - in: query
  *         name: per_page
  *         schema:
@@ -150,7 +148,7 @@ router.get("/", getCompanies);
  * /admin/companies:
  *   post:
  *     summary: Create a new company
- *     description: After creating, set up the first AdminCompany account via /admin/companies/:id/admins.
+ *     description: Creating a new company requires a unique slug. The slug is used as a unique identifier for the company across the platform, especially during login. If the slug already exists, an error will be returned.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -286,7 +284,7 @@ router.post("/", createCompany);
  * /admin/companies/{id}:
  *   put:
  *     summary: Update company information
- *     description: Update the company name or lock/unlock the company.
+ *     description: Update company name, slug, or lock/unlock status.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -307,6 +305,11 @@ router.post("/", createCompany);
  *               name:
  *                 type: string
  *                 example: "Acme Corporation"
+ *                 description: New company name
+ *               slug:
+ *                 type: string
+ *                 example: "acme-corporation"
+ *                 description: New slug. Must be unique across the platform.
  *               is_active:
  *                 type: boolean
  *                 example: false
@@ -344,6 +347,25 @@ router.post("/", createCompany);
  *                           type: string
  *                           format: date-time
  *                           example: "2026-01-01T00:00:00.000Z"
+ *       409:
+ *         description: Slug already exists on the platform
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "SLUG_EXISTS"
+ *                     message:
+ *                       type: string
+ *                       example: "Slug already exists on this platform"
  *       404:
  *         description: Company not found
  *         content:
@@ -422,7 +444,7 @@ router.put("/:id", updateCompany);
  *         description: Company ID
  *     responses:
  *       204:
- *         description: Company deactivated successfully
+ *         description: Company deactivated successfully. No response body is returned.
  *       404:
  *         description: Company not found
  *         content:
