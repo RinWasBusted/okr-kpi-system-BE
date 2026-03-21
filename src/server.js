@@ -3,10 +3,10 @@ import prisma from './utils/prisma';
 import { connectRedis } from './utils/redis.js';
 import cookieParser from 'cookie-parser';
 import apiRouter from './api';
+import adminRouter from './api/admin/index.js';
 import errorHandler from './middlewares/errorHandler';
 import responseHandler from './middlewares/responseHandler';
 import { setupSwagger } from './config/swagger.config.js';
-import adminCompanyRoutes from './api/admin/AdminCompany/adminCompany.route.js';
 
 const createApp = async () => {
   const app = express();
@@ -24,9 +24,8 @@ const createApp = async () => {
     res.json({ message: 'Welcome to OKR-KPI System API' });
   });
   app.use('/api', apiRouter, errorHandler);
+  app.use('/api/admin', adminRouter, errorHandler);
 
-  // Admin-company management (company-level admins)
-  app.use('/admin', adminCompanyRoutes, errorHandler);
 
   // Error handling middleware
   app.use((err, req, res, next) => {

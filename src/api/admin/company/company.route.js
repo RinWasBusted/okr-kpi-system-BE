@@ -6,11 +6,13 @@ import {
     deactivateCompany,
     getCompanyStats,
 } from "./company.controller.js";
+import adminCompanyRoutes from "../AdminCompany/adminCompany.route.js";
 import { authenticate, authorize } from "../../../middlewares/auth.js";
 
 const router = express.Router();
 
 router.use(authenticate, authorize("ADMIN"));
+router.use("/:company_id/admins", adminCompanyRoutes);
 
 /**
  * @swagger
@@ -112,15 +114,9 @@ router.use(authenticate, authorize("ADMIN"));
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "UNAUTHORIZED"
- *                     message:
- *                       type: string
- *                       example: "Access token is missing"
+ *                 message:
+ *                   type: string
+ *                   example: "Access token is missing"
  *       403:
  *         description: Forbidden
  *         content:
@@ -131,15 +127,9 @@ router.use(authenticate, authorize("ADMIN"));
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "FORBIDDEN"
- *                     message:
- *                       type: string
- *                       example: "Access denied"
+ *                 message:
+ *                   type: string
+ *                   example: "Access denied"
  */
 router.get("/", getCompanies);
 
@@ -210,15 +200,9 @@ router.get("/", getCompanies);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "SLUG_EXISTS"
- *                     message:
- *                       type: string
- *                       example: "Slug already exists on this platform"
+ *                 message:
+ *                   type: string
+ *                   example: "Slug already exists"
  *       401:
  *         description: Unauthenticated
  *         content:
@@ -229,15 +213,9 @@ router.get("/", getCompanies);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "UNAUTHORIZED"
- *                     message:
- *                       type: string
- *                       example: "Access token is missing"
+ *                 message:
+ *                   type: string
+ *                   example: "Access token is missing"
  *       403:
  *         description: Forbidden
  *         content:
@@ -248,15 +226,9 @@ router.get("/", getCompanies);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "FORBIDDEN"
- *                     message:
- *                       type: string
- *                       example: "Access denied"
+ *                 message:
+ *                   type: string
+ *                   example: "Access denied"
  *       422:
  *         description: Validation error
  *         content:
@@ -267,15 +239,9 @@ router.get("/", getCompanies);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "VALIDATION_ERROR"
- *                     message:
- *                       type: string
- *                       example: "name and slug are required"
+ *                 message:
+ *                   type: string
+ *                   example: "name and slug are required"
  */
 router.post("/", createCompany);
 
@@ -357,15 +323,9 @@ router.post("/", createCompany);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "SLUG_EXISTS"
- *                     message:
- *                       type: string
- *                       example: "Slug already exists on this platform"
+ *                 message:
+ *                   type: string
+ *                   example: "Slug already exists"
  *       404:
  *         description: Company not found
  *         content:
@@ -376,15 +336,9 @@ router.post("/", createCompany);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "NOT_FOUND"
- *                     message:
- *                       type: string
- *                       example: "Company not found"
+ *                 message:
+ *                   type: string
+ *                   example: "Company not found"
  *       401:
  *         description: Unauthenticated
  *         content:
@@ -395,15 +349,9 @@ router.post("/", createCompany);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "UNAUTHORIZED"
- *                     message:
- *                       type: string
- *                       example: "Access token is missing"
+ *                 message:
+ *                   type: string
+ *                   example: "Access token is missing"
  *       403:
  *         description: Forbidden
  *         content:
@@ -414,15 +362,9 @@ router.post("/", createCompany);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "FORBIDDEN"
- *                     message:
- *                       type: string
- *                       example: "Access denied"
+ *                 message:
+ *                   type: string
+ *                   example: "Access denied"
  */
 router.put("/:id", updateCompany);
 
@@ -455,15 +397,9 @@ router.put("/:id", updateCompany);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "NOT_FOUND"
- *                     message:
- *                       type: string
- *                       example: "Company not found"
+ *                 message:
+ *                   type: string
+ *                   example: "Company not found"
  *       401:
  *         description: Unauthenticated
  *         content:
@@ -474,15 +410,9 @@ router.put("/:id", updateCompany);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "UNAUTHORIZED"
- *                     message:
- *                       type: string
- *                       example: "Access token is missing"
+ *                 message:
+ *                   type: string
+ *                   example: "Access token is missing"
  *       403:
  *         description: Forbidden
  *         content:
@@ -493,15 +423,9 @@ router.put("/:id", updateCompany);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "FORBIDDEN"
- *                     message:
- *                       type: string
- *                       example: "Access denied"
+ *                 message:
+ *                   type: string
+ *                   example: "Access denied"
  */
 router.delete("/:id", deactivateCompany);
 
@@ -567,15 +491,9 @@ router.delete("/:id", deactivateCompany);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "NOT_FOUND"
- *                     message:
- *                       type: string
- *                       example: "Company not found"
+ *                 message:
+ *                   type: string
+ *                   example: "Company not found"
  *       401:
  *         description: Unauthenticated
  *         content:
@@ -586,15 +504,9 @@ router.delete("/:id", deactivateCompany);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "UNAUTHORIZED"
- *                     message:
- *                       type: string
- *                       example: "Access token is missing"
+ *                 message:
+ *                   type: string
+ *                   example: "Access token is missing"
  *       403:
  *         description: Forbidden
  *         content:
@@ -605,15 +517,9 @@ router.delete("/:id", deactivateCompany);
  *                 success:
  *                   type: boolean
  *                   example: false
- *                 error:
- *                   type: object
- *                   properties:
- *                     code:
- *                       type: string
- *                       example: "FORBIDDEN"
- *                     message:
- *                       type: string
- *                       example: "Access denied"
+ *                 message:
+ *                   type: string
+ *                   example: "Access denied"
  */
 router.get("/:id/stats", getCompanyStats);
 
