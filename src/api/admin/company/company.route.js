@@ -7,10 +7,12 @@ import {
     getCompanyStats,
 } from "./company.controller.js";
 import { authenticate, authorize } from "../../../middlewares/auth.js";
+import adminCompanyRouter from "../AdminCompany/adminCompany.route.js";
 
 const router = express.Router();
 
 router.use(authenticate, authorize("ADMIN"));
+router.use("/:company_id/admins", adminCompanyRouter);
 
 /**
  * @swagger
