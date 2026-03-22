@@ -32,10 +32,8 @@ const formatUser = (user) => ({
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-export const listUsers = async (companyId, { unit_id, search, page, per_page }) => {
+export const listUsers = async ({ unit_id, search, page, per_page }) => {
     const where = {
-        company_id: companyId,
-        role: UserRole.EMPLOYEE,
         ...(unit_id !== undefined && { unit_id }),
         ...(search && {
             OR: [
@@ -65,9 +63,9 @@ export const listUsers = async (companyId, { unit_id, search, page, per_page }) 
 
 // ─── Find ─────────────────────────────────────────────────────────────────────
 
-export const findUserById = async (companyId, userId) => {
+export const findUserById = async (userId) => {
     const user = await prisma.users.findFirst({
-        where: { id: userId, company_id: companyId, role: UserRole.EMPLOYEE },
+        where: { id: userId, role: UserRole.EMPLOYEE },
         select: userSelect,
     });
 
@@ -81,12 +79,12 @@ export const findUserById = async (companyId, userId) => {
 export const createUser = async (companyId, { full_name, email, password, unit_id }) => {
     // email is @unique globally in schema — check globally to give a clean error
     // instead of letting Prisma throw a constraint violation
-    const existing = await prisma.users.findUnique({ where: { email } });
+    const existing = await prisma.users.findFirst({ where: { email } });
     if (existing) throw new AppError("Email already exists", 409, "EMAIL_EXISTS");
 
     if (unit_id !== undefined && unit_id !== null) {
         const unit = await prisma.units.findFirst({
-            where: { id: unit_id, company_id: companyId },
+            where: { id: unit_id },
         });
         if (!unit) throw new AppError("Unit not found", 404, "UNIT_NOT_FOUND");
     }
@@ -111,15 +109,15 @@ export const createUser = async (companyId, { full_name, email, password, unit_i
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 
-export const updateUser = async (companyId, userId, { full_name, unit_id, password, is_active }) => {
+export const updateUser = async (userId, { full_name, unit_id, password, is_active }) => {
     const existing = await prisma.users.findFirst({
-        where: { id: userId, company_id: companyId, role: UserRole.EMPLOYEE },
+        where: { id: userId, role: UserRole.EMPLOYEE },
     });
     if (!existing) throw new AppError("User not found", 404);
 
     if (unit_id !== undefined && unit_id !== null) {
         const unit = await prisma.units.findFirst({
-            where: { id: unit_id, company_id: companyId },
+            where: { id: unit_id },
         });
         if (!unit) throw new AppError("Unit not found", 404, "UNIT_NOT_FOUND");
     }

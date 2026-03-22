@@ -24,7 +24,7 @@ export const getUnits = async (req, res) => {
         const page = parsePositiveInt(req.query.page, 1);
         const per_page = parsePositiveInt(req.query.per_page, 100);
 
-        const { total, data } = await unitService.listUnits(companyId, { page, per_page });
+        const { total, data } = await unitService.listUnits({ page, per_page });
 
         res.success("Units retrieved successfully", 200, data, {
             page,
@@ -87,7 +87,7 @@ export const updateUnit = async (req, res) => {
             throw new AppError("No fields provided to update", 400);
         }
 
-        const unit = await unitService.updateUnit(companyId, unitId, updates);
+        const unit = await unitService.updateUnit(unitId, updates);
 
         res.success("Unit updated successfully", 200, { unit });
     } catch (error) {
@@ -106,7 +106,7 @@ export const deleteUnit = async (req, res) => {
             throw new AppError("Invalid unit ID", 400);
         }
 
-        await unitService.deleteUnit(companyId, unitId);
+        await unitService.deleteUnit(unitId);
 
         res.status(204).send();
     } catch (error) {

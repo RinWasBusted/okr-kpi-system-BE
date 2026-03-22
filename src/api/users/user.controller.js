@@ -26,7 +26,7 @@ export const getUsers = async (req, res) => {
         const page = parsePositiveInt(req.query.page, 1);
         const per_page = Math.min(parsePositiveInt(req.query.per_page, 20), 100);
 
-        const { total, data, last_page } = await userService.listUsers(companyId, {
+        const { total, data, last_page } = await userService.listUsers({
             unit_id,
             search: search || undefined,
             page,
@@ -53,7 +53,7 @@ export const getUserById = async (req, res) => {
         const userId = parsePositiveInt(req.params.id, null);
         if (!userId) throw new AppError("Invalid user ID", 400);
 
-        const user = await userService.findUserById(companyId, userId);
+        const user = await userService.findUserById(userId);
 
         res.success("User retrieved successfully", 200, { user });
     } catch (error) {
@@ -137,7 +137,7 @@ export const updateUser = async (req, res) => {
             throw new AppError("No fields provided to update", 400);
         }
 
-        const user = await userService.updateUser(companyId, userId, updates);
+        const user = await userService.updateUser(userId, updates);
 
         res.success("User updated successfully", 200, { user });
     } catch (error) {

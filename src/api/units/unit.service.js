@@ -31,13 +31,10 @@ const formatUnit = (unit) => ({
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-export const listUnits = async (companyId, { page, per_page }) => {
-    const where = { company_id: companyId };
-
+export const listUnits = async ({ page, per_page }) => {
     const [total, units] = await Promise.all([
-        prisma.units.count({ where }),
+        prisma.units.count(),
         prisma.units.findMany({
-            where,
             skip: (page - 1) * per_page,
             take: per_page,
             orderBy: { id: "asc" },
@@ -53,14 +50,14 @@ export const listUnits = async (companyId, { page, per_page }) => {
 export const createUnit = async (companyId, { name, parent_id, manager_id }) => {
     if (parent_id !== undefined && parent_id !== null) {
         const parent = await prisma.units.findFirst({
-            where: { id: parent_id, company_id: companyId },
+            where: { id: parent_id },
         });
         if (!parent) throw new AppError("Parent unit not found", 404);
     }
 
     if (manager_id !== undefined && manager_id !== null) {
         const manager = await prisma.users.findFirst({
-            where: { id: manager_id, company_id: companyId, role: UserRole.EMPLOYEE },
+            where: { id: manager_id, role: UserRole.EMPLOYEE },
         });
         if (!manager) throw new AppError("Manager not found in this company", 404);
     }
@@ -80,9 +77,9 @@ export const createUnit = async (companyId, { name, parent_id, manager_id }) => 
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 
-export const updateUnit = async (companyId, unitId, { name, parent_id, manager_id }) => {
+export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
     const existing = await prisma.units.findFirst({
-        where: { id: unitId, company_id: companyId },
+        where: { id: unitId },
     });
     if (!existing) throw new AppError("Unit not found", 404);
 
@@ -90,18 +87,18 @@ export const updateUnit = async (companyId, unitId, { name, parent_id, manager_i
         if (parent_id === unitId) throw new AppError("Unit cannot be its own parent", 400);
 
         const parent = await prisma.units.findFirst({
-            where: { id: parent_id, company_id: companyId },
+            where: { id: parent_id },
         });
         if (!parent) throw new AppError("Parent unit not found", 404);
 
         // Prevent circular hierarchy: check that unitId is not an ancestor of parent_id
-        const isCircular = await isAncestor(unitId, parent_id, companyId);
+        const isCircular = await isAncestor(unitId, parent_id);
         if (isCircular) throw new AppError("Circular unit hierarchy is not allowed", 400);
     }
 
     if (manager_id !== undefined && manager_id !== null) {
         const manager = await prisma.users.findFirst({
-            where: { id: manager_id, company_id: companyId, role: UserRole.EMPLOYEE },
+            where: { id: manager_id, role: UserRole.EMPLOYEE },
         });
         if (!manager) throw new AppError("Manager not found in this company", 404);
     }
@@ -126,9 +123,9 @@ export const updateUnit = async (companyId, unitId, { name, parent_id, manager_i
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
-export const deleteUnit = async (companyId, unitId) => {
+export const deleteUnit = async (unitId) => {
     const unit = await prisma.units.findFirst({
-        where: { id: unitId, company_id: companyId },
+        where: { id: unitId },
         include: {
             _count: {
                 select: {
@@ -148,7 +145,7 @@ export const deleteUnit = async (companyId, unitId) => {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const isAncestor = async (potentialAncestorId, nodeId, companyId) => {
+const isAncestor = async (potentialAncestorId, nodeId) => {
     let currentId = nodeId;
     const visited = new Set();
 
@@ -159,7 +156,7 @@ const isAncestor = async (potentialAncestorId, nodeId, companyId) => {
         if (currentId === potentialAncestorId) return true;
 
         const node = await prisma.units.findFirst({
-            where: { id: currentId, company_id: companyId },
+            where: { id: currentId },
             select: { parent_id: true },
         });
 
