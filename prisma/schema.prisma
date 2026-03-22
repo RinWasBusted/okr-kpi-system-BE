@@ -64,7 +64,7 @@ model Users {
   id              Int      @id @default(autoincrement())
   company_id      Int?
   full_name       String
-  email           String   @unique
+  email           String   
   password        String
   avatar_url      String?
   job_title       String?
@@ -84,6 +84,7 @@ model Users {
   evaluations        Evaluations[] @relation("EmployeeEvaluations")
   notifications      Notifications[]
 
+  @@unique([email, company_id])
   @@index([company_id])
 }
 

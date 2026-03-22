@@ -1,16 +1,15 @@
-import express from 'express';
+import express, { request } from 'express';
 import prisma from './utils/prisma';
 import { connectRedis } from './utils/redis.js';
 import cookieParser from 'cookie-parser';
 import apiRouter from './api';
-import adminRouter from './api/admin/index.js';
 import errorHandler from './middlewares/errorHandler';
 import responseHandler from './middlewares/responseHandler';
 import { setupSwagger } from './config/swagger.config.js';
 
 const createApp = async () => {
   const app = express();
-  
+
   // Middleware
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
@@ -24,7 +23,6 @@ const createApp = async () => {
     res.json({ message: 'Welcome to OKR-KPI System API' });
   });
   app.use('/api', apiRouter, errorHandler);
-  app.use('/api/admin', adminRouter, errorHandler);
 
 
   // Error handling middleware

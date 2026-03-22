@@ -3,10 +3,23 @@ import { generateToken } from '../../utils/jwt';
 import { hashPassword, comparePassword } from '../../utils/bcrypt';
 import AppError from '../../utils/appError';
 import client from '../../utils/redis';
+import requestContext from '../../utils/context';
 
-export const loginService = async (email, password) => {
-    try {
-        const user = await prisma.users.findUnique({
+export const loginService = async (email, password, company_slug = '') => {
+    let company_id = null;
+    if( company_slug !== '' ){
+        const company = await requestContext.run({ company_id: '', role: 'ADMIN' }, 
+            async () => await prisma.companies.findUnique({ where: { slug: company_slug } })
+        );
+        if(!company){
+            throw new AppError("Company not found", 404);
+        }
+        company_id = company.id;
+    }
+
+    return await requestContext.run({ company_id: company_id, role: '' }, async () => {
+        try {
+            const user = await prisma.users.findFirst({
             where: { email }
         });
 
@@ -30,14 +43,14 @@ export const loginService = async (email, password) => {
 
         await client.setEx(`refreshToken:${refreshToken}`, 7 * 24 * 60 * 60, JSON.stringify(tokenPayload));
 
-
-        return { user, accessToken, refreshToken };
+        return { user: { id: user.id, full_name: user.full_name, avatar_url: user.avatar_url, email: user.email, job_title: user.job_title, role: user.role, company_id: user.company_id, unit_id: user.unit_id }, accessToken, refreshToken };
     } catch (error) {
         if (error instanceof AppError) {
             throw error;
         }
         throw new AppError("Error occurred while logging in", 500);
     }
+    });
 };
 
 export const refreshTokenService = async (refreshToken) => {
