@@ -1,0 +1,140 @@
+import prisma from "../../utils/prisma.js";
+import AppError from "../../utils/appError.js";
+import { hashPassword } from "../../utils/bcrypt.js";
+import { UserRole } from "@prisma/client";
+
+const userSelect = {
+    id: true,
+    full_name: true,
+    email: true,
+    job_title: true,
+    avatar_url: true,
+    is_active: true,
+    created_at: true,
+    unit: {
+        select: {
+            id: true,
+            name: true,
+        },
+    },
+};
+
+const formatUser = (user) => ({
+    id: user.id,
+    full_name: user.full_name,
+    email: user.email,
+    job_title: user.job_title ?? null,
+    avatar_url: user.avatar_url ?? null,
+    unit: user.unit ?? null,
+    is_active: user.is_active,
+    created_at: user.created_at,
+});
+
+// ─── List ─────────────────────────────────────────────────────────────────────
+
+export const listUsers = async (companyId, { unit_id, search, page, per_page }) => {
+    const where = {
+        company_id: companyId,
+        role: UserRole.EMPLOYEE,
+        ...(unit_id !== undefined && { unit_id }),
+        ...(search && {
+            OR: [
+                { full_name: { contains: search, mode: "insensitive" } },
+                { email: { contains: search, mode: "insensitive" } },
+            ],
+        }),
+    };
+
+    const [total, users] = await Promise.all([
+        prisma.users.count({ where }),
+        prisma.users.findMany({
+            where,
+            skip: (page - 1) * per_page,
+            take: per_page,
+            orderBy: { id: "asc" },
+            select: userSelect,
+        }),
+    ]);
+
+    return {
+        total,
+        data: users.map(formatUser),
+        last_page: Math.ceil(total / per_page),
+    };
+};
+
+// ─── Find ─────────────────────────────────────────────────────────────────────
+
+export const findUserById = async (companyId, userId) => {
+    const user = await prisma.users.findFirst({
+        where: { id: userId, company_id: companyId, role: UserRole.EMPLOYEE },
+        select: userSelect,
+    });
+
+    if (!user) throw new AppError("User not found", 404);
+
+    return formatUser(user);
+};
+
+// ─── Create ───────────────────────────────────────────────────────────────────
+
+export const createUser = async (companyId, { full_name, email, password, unit_id }) => {
+    // email is @unique globally in schema — check globally to give a clean error
+    // instead of letting Prisma throw a constraint violation
+    const existing = await prisma.users.findUnique({ where: { email } });
+    if (existing) throw new AppError("Email already exists", 409, "EMAIL_EXISTS");
+
+    if (unit_id !== undefined && unit_id !== null) {
+        const unit = await prisma.units.findFirst({
+            where: { id: unit_id, company_id: companyId },
+        });
+        if (!unit) throw new AppError("Unit not found", 404, "UNIT_NOT_FOUND");
+    }
+
+    const hashed = await hashPassword(password);
+
+    const user = await prisma.users.create({
+        data: {
+            company_id: companyId,
+            full_name,
+            email,
+            password: hashed,
+            role: UserRole.EMPLOYEE,
+            unit_id: unit_id ?? null,
+            is_active: true,
+        },
+        select: userSelect,
+    });
+
+    return formatUser(user);
+};
+
+// ─── Update ───────────────────────────────────────────────────────────────────
+
+export const updateUser = async (companyId, userId, { full_name, unit_id, password, is_active }) => {
+    const existing = await prisma.users.findFirst({
+        where: { id: userId, company_id: companyId, role: UserRole.EMPLOYEE },
+    });
+    if (!existing) throw new AppError("User not found", 404);
+
+    if (unit_id !== undefined && unit_id !== null) {
+        const unit = await prisma.units.findFirst({
+            where: { id: unit_id, company_id: companyId },
+        });
+        if (!unit) throw new AppError("Unit not found", 404, "UNIT_NOT_FOUND");
+    }
+
+    const updates = {};
+    if (full_name !== undefined) updates.full_name = full_name;
+    if (unit_id !== undefined) updates.unit_id = unit_id ?? null;
+    if (is_active !== undefined) updates.is_active = is_active;
+    if (password !== undefined) updates.password = await hashPassword(password);
+
+    const updated = await prisma.users.update({
+        where: { id: userId },
+        data: updates,
+        select: userSelect,
+    });
+
+    return formatUser(updated);
+};
