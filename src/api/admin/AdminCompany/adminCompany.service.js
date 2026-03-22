@@ -1,4 +1,5 @@
 import prisma from "../../../utils/prisma.js";
+import { hashPassword } from "../../../utils/bcrypt.js";
 
 const COMPANY_ADMIN_ROLE = "ADMIN_COMPANY";
 
@@ -50,7 +51,7 @@ export const createCompanyAdmin = async (companyId, { full_name, email, password
       company_id: companyId,
       full_name,
       email,
-      password,
+      password: await hashPassword(password, 10),
       role: COMPANY_ADMIN_ROLE,
       is_active: true,
     },

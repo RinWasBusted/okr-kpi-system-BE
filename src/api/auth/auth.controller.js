@@ -5,9 +5,9 @@ import AppError from "../../utils/appError";
 
 export const login = async (req, res) => {
     try {
-        const { email, password } = loginSchema.parse(req.body);
+        const { email, password, company_slug } = loginSchema.parse(req.body);
 
-        const { user, accessToken, refreshToken } = await authService.loginService(email, password);
+        const { user, accessToken, refreshToken } = await authService.loginService(email, password, company_slug ? company_slug : '');
 
         const cookieOptions = {
             httpOnly: true,
