@@ -15,6 +15,7 @@ OKR (Objectives and Key Results) and KPI (Key Performance Indicators) Management
 - Node.js >= 18.x
 - npm >= 9.x
 - PostgreSQL >= 14.x
+- Redis >= 6.x
 
 ## 🛠️ Installation
 
@@ -29,16 +30,16 @@ cd okr-kpi-system-BE
 npm install
 ```
 
-3. Configure environment variables:
-```bash
-cp .env.example .env
-```
+3. Create and configure environment variables:
 
-Update the `.env` file with your database credentials:
+Create a `.env` file at the project root with:
 ```env
 DATABASE_URL="postgresql://user:password@localhost:5432/okr_kpi_db"
+REDIS_URL="redis://localhost:6379"
+JWT_SECRET="your_jwt_secret"
 PORT=3000
 NODE_ENV=development
+BASE_URL="http://localhost"
 ```
 
 4. Run Prisma migrations:
@@ -64,12 +65,13 @@ npm start
 ```
 
 Server will run at: `http://localhost:3000`
+Swagger UI: `http://localhost:3000/api-docs`
 
 ## 📡 API Endpoints
 
 ### Health Check
 - `GET /` - Welcome message
-- `GET /api/health` - Check server status
+- `GET /api-docs` - Swagger UI
 
 ## 🗂️ Project Structure
 
@@ -81,7 +83,6 @@ okr-kpi-system-BE/
 │   ├── index.js         # Entry point - server startup
 │   └── server.js        # Express app setup (factory pattern)
 ├── .env                 # Environment variables (not committed)
-├── .env.example         # Environment variables template
 ├── .gitignore          # Git ignore rules
 └── package.json        # Dependencies and scripts
 ```
@@ -90,6 +91,7 @@ okr-kpi-system-BE/
 
 - `npm start` - Run production server
 - `npm run dev` - Run development server with auto-reload
+- `npm run seed` - Seed database
 - `npx prisma studio` - Open Prisma Studio to manage database
 - `npx prisma migrate dev` - Create and run migrations
 - `npx prisma generate` - Generate Prisma Client

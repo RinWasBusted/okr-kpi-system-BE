@@ -23,6 +23,13 @@ model Companies {
   users            Users[]
   cycles           Cycles[]
   kpi_dictionaries KPIDictionaries[]
+  kpi_assignments  KPIAssignments[]
+  kpi_records      KPIRecords[]
+  objectives       Objectives[]
+  key_results      KeyResults[]
+  check_ins        CheckIns[]
+  feedbacks        Feedbacks[]
+  evaluations      Evaluations[]
   notifications    Notifications[]
 }
 
@@ -32,6 +39,8 @@ model Units {
   name       String
   parent_id  Int?
   manager_id Int?
+  path       Unsupported("ltree")
+  deleted_at DateTime?
   created_at DateTime @default(now())
 
   company          Companies @relation(fields: [company_id], references: [id])
@@ -43,19 +52,31 @@ model Units {
   kpi_assignments  KPIAssignments[]
   objectives       Objectives[]
   evaluations      Evaluations[]
+
+  @@index([company_id])
+}
+
+enum UserRole {
+  ADMIN
+  ADMIN_COMPANY
+  EMPLOYEE
 }
 
 model Users {
-  id         Int      @id @default(autoincrement())
-  company_id Int
-  full_name  String
-  email      String
-  password   String
-  role       String
-  unit_id    Int?
-  created_at DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  company_id      Int?
+  full_name       String
+  email           String   
+  password        String
+  avatar_url      String?
+  job_title       String?
+  role            UserRole
+  unit_id         Int?
+  is_active       Boolean  @default(true)
+  deleted_at      DateTime?
+  created_at      DateTime @default(now())
 
-  company            Companies     @relation(fields: [company_id], references: [id])
+  company            Companies?     @relation(fields: [company_id], references: [id])
   unit               Units?        @relation(fields: [unit_id], references: [id])
   managed_units      Units[]       @relation("UnitManager")
   kpi_assignments    KPIAssignments[]
@@ -65,6 +86,9 @@ model Users {
   feedbacks          Feedbacks[]
   evaluations        Evaluations[] @relation("EmployeeEvaluations")
   notifications      Notifications[]
+
+  @@unique([email, company_id])
+  @@index([company_id])
 }
 
 model Cycles {
@@ -79,6 +103,14 @@ model Cycles {
   kpi_assignments KPIAssignments[]
   objectives      Objectives[]
   evaluations     Evaluations[]
+
+  @@index([company_id])
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+  INTERNAL
 }
 
 model KPIDictionaries {
@@ -88,23 +120,31 @@ model KPIDictionaries {
   unit              String
   evaluation_method String
   unit_id           Int?
+  deleted_at        DateTime?
 
   company         Companies?     @relation(fields: [company_id], references: [id])
   unit_ref        Units?         @relation(fields: [unit_id], references: [id])
   kpi_assignments KPIAssignments[]
+
+  @@index([company_id])
 }
 
 model KPIAssignments {
   id                   Int      @id @default(autoincrement())
+  company_id           Int
   parent_assignment_id Int?
   kpi_dictionary_id    Int
   cycle_id             Int
   owner_id             Int?
   unit_id              Int
+  visibility           Visibility
+  access_path          Unsupported("ltree")
   target_value         Float
   weight               Float
+  deleted_at           DateTime?
   created_at           DateTime @default(now())
 
+  company           Companies      @relation(fields: [company_id], references: [id])
   parent_assignment KPIAssignments? @relation("KPIAssignmentHierarchy", fields: [parent_assignment_id], references: [id])
   child_assignments KPIAssignments[] @relation("KPIAssignmentHierarchy")
   kpi_dictionary    KPIDictionaries  @relation(fields: [kpi_dictionary_id], references: [id])
@@ -112,10 +152,13 @@ model KPIAssignments {
   owner             Users?           @relation(fields: [owner_id], references: [id])
   unit              Units            @relation(fields: [unit_id], references: [id])
   kpi_records       KPIRecords[]
+
+  @@index([company_id])
 }
 
 model KPIRecords {
   id                  Int      @id @default(autoincrement())
+  company_id          Int
   kpi_assignment_id   Int
   period_start        DateTime @db.Date
   period_end          DateTime @db.Date
@@ -125,21 +168,29 @@ model KPIRecords {
   trend               String
   created_at          DateTime @default(now())
 
+  company        Companies     @relation(fields: [company_id], references: [id])
   kpi_assignment KPIAssignments @relation(fields: [kpi_assignment_id], references: [id])
+
+  @@index([company_id])
 }
 
 model Objectives {
   id                  Int      @id @default(autoincrement())
+  company_id          Int
   title               String
   cycle_id            Int
   unit_id             Int
   owner_id            Int?
   parent_objective_id Int?
+  visibility          Visibility
+  access_path         Unsupported("ltree")
   status              String
   approved_by         Int?
   progress_percentage Float   @default(0)
+  deleted_at          DateTime?
   created_at          DateTime @default(now())
 
+  company          Companies   @relation(fields: [company_id], references: [id])
   cycle            Cycles      @relation(fields: [cycle_id], references: [id])
   unit             Units       @relation(fields: [unit_id], references: [id])
   owner            Users?      @relation(fields: [owner_id], references: [id])
@@ -148,10 +199,13 @@ model Objectives {
   sub_objectives   Objectives[] @relation("ObjectiveHierarchy")
   key_results      KeyResults[]
   feedbacks        Feedbacks[]
+
+  @@index([company_id])
 }
 
 model KeyResults {
   id                  Int     @id @default(autoincrement())
+  company_id          Int
   objective_id        Int
   title               String
   target_value        Float
@@ -160,13 +214,18 @@ model KeyResults {
   weight              Float
   due_date            DateTime @db.Date
   progress_percentage Float   @default(0)
+  deleted_at          DateTime?
 
+  company   Companies  @relation(fields: [company_id], references: [id])
   objective Objectives @relation(fields: [objective_id], references: [id])
   check_ins CheckIns[]
+
+  @@index([company_id])
 }
 
 model CheckIns {
   id                Int      @id @default(autoincrement())
+  company_id        Int
   key_result_id     Int
   user_id           Int
   achieved_value    Float
@@ -175,33 +234,44 @@ model CheckIns {
   comment           String?
   created_at        DateTime @default(now())
 
+  company    Companies  @relation(fields: [company_id], references: [id])
   key_result KeyResults @relation(fields: [key_result_id], references: [id])
   user       Users      @relation(fields: [user_id], references: [id])
+
+  @@index([company_id])
 }
 
 model Feedbacks {
   id           Int      @id @default(autoincrement())
+  company_id   Int
   objective_id Int
   user_id      Int
   content      String   @db.Text
   type         String
   created_at   DateTime @default(now())
 
+  company   Companies  @relation(fields: [company_id], references: [id])
   objective Objectives @relation(fields: [objective_id], references: [id])
   user      Users      @relation(fields: [user_id], references: [id])
+
+  @@index([company_id])
 }
 
 model Evaluations {
   id          Int    @id @default(autoincrement())
+  company_id  Int
   employee_id Int
   unit_id     Int
   cycle_id    Int
   rank        String
   comment     String?
 
-  employee Users  @relation("EmployeeEvaluations", fields: [employee_id], references: [id])
-  unit     Units  @relation(fields: [unit_id], references: [id])
-  cycle    Cycles @relation(fields: [cycle_id], references: [id])
+  company  Companies @relation(fields: [company_id], references: [id])
+  employee Users     @relation("EmployeeEvaluations", fields: [employee_id], references: [id])
+  unit     Units     @relation(fields: [unit_id], references: [id])
+  cycle    Cycles    @relation(fields: [cycle_id], references: [id])
+
+  @@index([company_id])
 }
 
 model Notifications {
@@ -216,4 +286,6 @@ model Notifications {
 
   company   Companies @relation(fields: [company_id], references: [id])
   recipient Users     @relation(fields: [recipient_id], references: [id])
+
+  @@index([company_id])
 }
