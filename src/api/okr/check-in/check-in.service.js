@@ -2,12 +2,11 @@ import prisma from "../../../utils/prisma.js";
 import AppError from "../../../utils/appError.js";
 import {
     calculateKeyResultProgress,
+    canEditObjective,
     canViewObjective,
     ensureCycleUnlocked,
-    isUnitManager,
     recalculateObjectiveProgress,
 } from "../okr.utils.js";
-import { UserRole } from "@prisma/client";
 
 const checkInSelect = {
     id: true,
@@ -18,13 +17,14 @@ const checkInSelect = {
     created_at: true,
 };
 
-const getKeyResultWithObjective = async (companyId, keyResultId) => {
+const getKeyResultWithObjective = async (keyResultId) => {
     const keyResult = await prisma.keyResults.findFirst({
-        where: { id: keyResultId, company_id: companyId },
+        where: { id: keyResultId },
         include: {
             objective: {
                 select: {
                     id: true,
+                    status: true,
                     cycle_id: true,
                     visibility: true,
                     unit_id: true,
@@ -38,20 +38,16 @@ const getKeyResultWithObjective = async (companyId, keyResultId) => {
     return keyResult;
 };
 
-const canCheckIn = async (user, objective) => {
-    if (user.role === UserRole.ADMIN_COMPANY) return true;
-    if (objective.owner_id && objective.owner_id === user.id) return true;
-    if (objective.unit_id && await isUnitManager(user.id, objective.unit_id)) return true;
-    return false;
-};
-
 export const createCheckIn = async (user, keyResultId, payload) => {
-    const companyId = user.company_id;
-    const keyResult = await getKeyResultWithObjective(companyId, keyResultId);
+    const keyResult = await getKeyResultWithObjective(keyResultId);
 
-    const allowed = await canCheckIn(user, keyResult.objective);
+    if (keyResult.objective.status !== "Active") {
+        throw new AppError("Objective must be active to check in", 400);
+    }
+
+    const allowed = await canEditObjective(user, keyResult.objective);
     if (!allowed) {
-        throw new AppError("You do not have permission to check in", 403, "NOT_KR_OWNER");
+        throw new AppError("You do not have permission to check in", 403);
     }
 
     await ensureCycleUnlocked(keyResult.objective.cycle_id);
@@ -63,7 +59,7 @@ export const createCheckIn = async (user, keyResultId, payload) => {
 
     const checkIn = await prisma.checkIns.create({
         data: {
-            company_id: companyId,
+            company_id: user.company_id,
             key_result_id: keyResultId,
             user_id: user.id,
             achieved_value: payload.achieved_value,
@@ -92,8 +88,7 @@ export const createCheckIn = async (user, keyResultId, payload) => {
 };
 
 export const listCheckIns = async (user, keyResultId) => {
-    const companyId = user.company_id;
-    const keyResult = await getKeyResultWithObjective(companyId, keyResultId);
+    const keyResult = await getKeyResultWithObjective(keyResultId);
 
     const allowed = await canViewObjective(user, keyResult.objective);
     if (!allowed) {
@@ -101,7 +96,7 @@ export const listCheckIns = async (user, keyResultId) => {
     }
 
     const checkIns = await prisma.checkIns.findMany({
-        where: { key_result_id: keyResultId, company_id: companyId },
+        where: { key_result_id: keyResultId },
         orderBy: { created_at: "asc" },
         select: checkInSelect,
     });

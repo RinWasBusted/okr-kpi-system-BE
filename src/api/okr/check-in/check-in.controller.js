@@ -17,9 +17,6 @@ const parseNumber = (value) => {
 // POST /key-results/:kr_id/check-ins
 export const createCheckIn = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const keyResultId = parsePositiveInt(req.params.kr_id, null);
         if (!keyResultId) throw new AppError("Invalid key result ID", 400);
 
@@ -29,7 +26,7 @@ export const createCheckIn = async (req, res) => {
         if (achievedValue === undefined) throw new AppError("achieved_value is required", 422);
 
         if (!evidence_url || typeof evidence_url !== "string" || evidence_url.trim() === "") {
-            throw new AppError("evidence_url is required", 422, "EVIDENCE_REQUIRED");
+            throw new AppError("evidence_url is required", 422);
         }
 
         if (comment !== undefined && comment !== null && typeof comment !== "string") {
@@ -45,9 +42,9 @@ export const createCheckIn = async (req, res) => {
         res.success("Check-in created successfully", 200, {
             id: result.check_in.id,
             achieved_value: result.check_in.achieved_value,
-            progress_snapshot: result.check_in.progress_snapshot,
-            kr_progress: result.kr_progress,
-            objective_progress: result.objective_progress,
+            progress_snapshot: Math.round(result.check_in.progress_snapshot * 100) / 100,
+            kr_progress: Math.round(result.kr_progress * 100) / 100,
+            objective_progress: Math.round(result.objective_progress * 100) / 100,
             evidence_url: result.check_in.evidence_url,
             comment: result.check_in.comment,
             created_at: result.check_in.created_at,
@@ -60,9 +57,6 @@ export const createCheckIn = async (req, res) => {
 // GET /key-results/:kr_id/check-ins
 export const getCheckIns = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const keyResultId = parsePositiveInt(req.params.kr_id, null);
         if (!keyResultId) throw new AppError("Invalid key result ID", 400);
 
