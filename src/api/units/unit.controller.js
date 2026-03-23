@@ -8,7 +8,8 @@ const parsePositiveInt = (value, fallback) => {
 };
 
 const parseOptionalId = (value) => {
-    if (value === undefined || value === null) return undefined;
+    if (value === undefined) return undefined;
+    if (value === null) return null;
     if (value === 0 || value === "0" || value === null) return null; // explicit null to unset
     const parsed = Number(value);
     if (!Number.isInteger(parsed) || parsed <= 0) return undefined; // invalid → ignore
@@ -74,7 +75,7 @@ export const updateUnit = async (req, res) => {
         const { name, parent_id, manager_id } = req.body;
 
         const updates = {};
-        if (name !== undefined) {
+        if (name !== undefined && name !== null) {
             if (typeof name !== "string" || name.trim() === "") {
                 throw new AppError("name must be a non-empty string", 422);
             }

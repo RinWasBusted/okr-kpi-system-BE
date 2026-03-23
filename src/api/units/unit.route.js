@@ -67,6 +67,9 @@ router.use(authenticate, authorize("ADMIN_COMPANY"));
  *                         type: integer
  *                         nullable: true
  *                         example: null
+ *                       path:
+ *                         type: string
+ *                         example: "1.3.5"
  *                       manager:
  *                         type: object
  *                         nullable: true
@@ -176,6 +179,9 @@ router.get("/", getUnits);
  *                           type: integer
  *                           nullable: true
  *                           example: 1
+ *                         path:
+ *                           type: string
+ *                           example: "1.3"
  *                         manager:
  *                           type: object
  *                           nullable: true
@@ -336,6 +342,9 @@ router.post("/", createUnit);
  *                           type: integer
  *                           nullable: true
  *                           example: 2
+ *                         path:
+ *                           type: string
+ *                           example: "1.2.3"
  *                         manager:
  *                           type: object
  *                           nullable: true

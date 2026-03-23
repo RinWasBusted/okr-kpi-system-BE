@@ -39,6 +39,7 @@ model Units {
   name       String
   parent_id  Int?
   manager_id Int?
+  path       Unsupported("ltree")
   created_at DateTime @default(now())
 
   company          Companies @relation(fields: [company_id], references: [id])
@@ -107,7 +108,7 @@ model Cycles {
 enum Visibility {
   PUBLIC
   PRIVATE
-  COMPANY
+  INTERNAL
 }
 
 model KPIDictionaries {
@@ -134,6 +135,7 @@ model KPIAssignments {
   owner_id             Int?
   unit_id              Int
   visibility           Visibility
+  access_path          Unsupported("ltree")
   target_value         Float
   weight               Float
   created_at           DateTime @default(now())
@@ -177,6 +179,7 @@ model Objectives {
   owner_id            Int?
   parent_objective_id Int?
   visibility          Visibility
+  access_path         Unsupported("ltree")
   status              String
   approved_by         Int?
   progress_percentage Float   @default(0)
