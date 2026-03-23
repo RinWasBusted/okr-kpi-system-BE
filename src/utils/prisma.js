@@ -30,7 +30,60 @@ const prisma = basePrisma.$extends({
         return result;
       }
     }
-  }
+  },
+  client: {
+    async $queryRaw(...args) {
+      const store = requestContext.getStore();
+      const company_id = store?.company_id || '';
+      const role = store?.role || ''; 
+      return basePrisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`
+          SET LOCAL app.current_company_id = '${company_id}';
+          SET LOCAL app.user_role = '${role}';
+        `);
+        return tx.$queryRaw(...args);
+      });
+    },
+
+    async $queryRawUnsafe(...args) {
+      const store = requestContext.getStore();
+      const company_id = store?.company_id || '';
+      const role = store?.role || ''; 
+      return basePrisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`
+          SET LOCAL app.current_company_id = '${company_id}';
+          SET LOCAL app.user_role = '${role}';
+        `);
+        return tx.$queryRawUnsafe(...args);
+      });
+    },
+
+    async $executeRaw(...args) {
+      const store = requestContext.getStore();
+      const company_id = store?.company_id || '';
+      const role = store?.role || ''; 
+      return basePrisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`
+          SET LOCAL app.current_company_id = '${company_id}';
+          SET LOCAL app.user_role = '${role}';
+        `);
+        return tx.$executeRaw(...args);
+      });
+    },
+
+    async $executeRawUnsafe(...args) {
+      const store = requestContext.getStore();
+      const company_id = store?.company_id || '';
+      const role = store?.role || ''; 
+      return basePrisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`
+          SET LOCAL app.current_company_id = '${company_id}';
+          SET LOCAL app.user_role = '${role}';
+        `);
+        return tx.$executeRawUnsafe(...args);
+      });
+    },
+  },
 });
 
 export default prisma;

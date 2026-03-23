@@ -39,6 +39,8 @@ model Units {
   name       String
   parent_id  Int?
   manager_id Int?
+  path       Unsupported("ltree")
+  deleted_at DateTime?
   created_at DateTime @default(now())
 
   company          Companies @relation(fields: [company_id], references: [id])
@@ -71,6 +73,7 @@ model Users {
   role            UserRole
   unit_id         Int?
   is_active       Boolean  @default(true)
+  deleted_at      DateTime?
   created_at      DateTime @default(now())
 
   company            Companies?     @relation(fields: [company_id], references: [id])
@@ -107,7 +110,7 @@ model Cycles {
 enum Visibility {
   PUBLIC
   PRIVATE
-  COMPANY
+  INTERNAL
 }
 
 model KPIDictionaries {
@@ -117,6 +120,7 @@ model KPIDictionaries {
   unit              String
   evaluation_method String
   unit_id           Int?
+  deleted_at        DateTime?
 
   company         Companies?     @relation(fields: [company_id], references: [id])
   unit_ref        Units?         @relation(fields: [unit_id], references: [id])
@@ -134,8 +138,10 @@ model KPIAssignments {
   owner_id             Int?
   unit_id              Int
   visibility           Visibility
+  access_path          Unsupported("ltree")
   target_value         Float
   weight               Float
+  deleted_at           DateTime?
   created_at           DateTime @default(now())
 
   company           Companies      @relation(fields: [company_id], references: [id])
@@ -177,9 +183,11 @@ model Objectives {
   owner_id            Int?
   parent_objective_id Int?
   visibility          Visibility
+  access_path         Unsupported("ltree")
   status              String
   approved_by         Int?
   progress_percentage Float   @default(0)
+  deleted_at          DateTime?
   created_at          DateTime @default(now())
 
   company          Companies   @relation(fields: [company_id], references: [id])
@@ -206,6 +214,7 @@ model KeyResults {
   weight              Float
   due_date            DateTime @db.Date
   progress_percentage Float   @default(0)
+  deleted_at          DateTime?
 
   company   Companies  @relation(fields: [company_id], references: [id])
   objective Objectives @relation(fields: [objective_id], references: [id])

@@ -16,7 +16,6 @@ const main = async () => {
       full_name: "admin",
       email: "admin@phamhoangthai.site",
       password: hashedPassword,
-      company_id: -1,
       role: "ADMIN",
     }
   });
