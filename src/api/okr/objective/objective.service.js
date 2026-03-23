@@ -4,17 +4,16 @@ import { UserRole } from "@prisma/client";
 import {
     canApproveObjective,
     canEditObjective,
+    daysBetweenUtc,
+    getObjectiveAccessPath,
+    getUnitPath,
+    isAncestorUnit,
+    recalculateObjectiveProgress,
+    calculateKeyResultProgress,
 } from "../okr.utils.js";
 
 const toDateOnlyUtc = (date) =>
     new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-
-const daysBetweenUtc = (endDate, startDate) => {
-    const end = toDateOnlyUtc(endDate);
-    const start = toDateOnlyUtc(startDate);
-    const diffMs = end.getTime() - start.getTime();
-    return Math.floor(diffMs / (24 * 60 * 60 * 1000));
-};
 
 const isDescendantOrEqual = (candidate, ancestor) => {
     if (!candidate || !ancestor) return false;
@@ -24,26 +23,6 @@ const isDescendantOrEqual = (candidate, ancestor) => {
 const isAncestorOrEqual = (candidate, descendant) => {
     if (!candidate || !descendant) return false;
     return descendant === candidate || descendant.startsWith(`${candidate}.`);
-};
-
-const getUnitPath = async (unitId) => {
-    if (!unitId) return null;
-    const rows = await prisma.$queryRaw`
-        SELECT path::text AS path
-        FROM "Units"
-        WHERE id = ${unitId}
-    `;
-    return rows[0]?.path ?? null;
-};
-
-const getObjectiveAccessPath = async (objectiveId) => {
-    if (!objectiveId) return null;
-    const rows = await prisma.$queryRaw`
-        SELECT access_path::text AS access_path
-        FROM "Objectives"
-        WHERE id = ${objectiveId}
-    `;
-    return rows[0]?.access_path ?? null;
 };
 
 const canViewObjective = async (user, objective, unitContext) => {
@@ -71,36 +50,6 @@ const canViewObjective = async (user, objective, unitContext) => {
     }
 
     return false;
-};
-
-const isAncestorUnit = async (potentialAncestorId, unitId) => {
-    if (!potentialAncestorId || !unitId) return false;
-    const ancestorPath = await getUnitPath(potentialAncestorId);
-    if (!ancestorPath) return false;
-    
-    const unitPath = await getUnitPath(unitId);
-    if (!unitPath) return false;
-    
-    return isDescendantOrEqual(unitPath, ancestorPath);
-};
-
-const recalculateObjectiveProgress = async (objectiveId) => {
-    const keyResults = await prisma.keyResults.findMany({
-        where: { objective_id: objectiveId },
-        select: { progress_percentage: true, weight: true },
-    });
-
-    const progress = keyResults.reduce(
-        (sum, kr) => sum + (kr.progress_percentage * kr.weight) / 100,
-        0,
-    );
-
-    await prisma.objectives.update({
-        where: { id: objectiveId },
-        data: { progress_percentage: progress },
-    });
-
-    return progress;
 };
 
 const ownerSelect = {

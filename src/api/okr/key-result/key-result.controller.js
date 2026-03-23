@@ -33,9 +33,6 @@ const parseDateInput = (value) => {
 // GET /objectives/:objective_id/key-results
 export const getKeyResults = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const objectiveId = parsePositiveInt(req.params.objective_id, null);
         if (!objectiveId) throw new AppError("Invalid objective ID", 400);
 
@@ -50,13 +47,10 @@ export const getKeyResults = async (req, res) => {
 // POST /objectives/:objective_id/key-results
 export const createKeyResult = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const objectiveId = parsePositiveInt(req.params.objective_id, null);
         if (!objectiveId) throw new AppError("Invalid objective ID", 400);
 
-        const { title, target_value, unit, weight, due_date } = req.body;
+        const { title, target_value, current_value, unit, weight, due_date } = req.body;
 
         if (!title || typeof title !== "string" || title.trim() === "") {
             throw new AppError("title is required", 422);
@@ -80,9 +74,13 @@ export const createKeyResult = async (req, res) => {
             throw new AppError("due_date must be in YYYY-MM-DD format", 422);
         }
 
+        const currentValue = current_value !== undefined ? parseNumber(current_value) : 0;
+        if (currentValue === undefined) throw new AppError("current_value must be a number", 422);
+
         const keyResult = await keyResultService.createKeyResult(req.user, objectiveId, {
             title: title.trim(),
             target_value: targetValue,
+            current_value: currentValue,
             unit: unit.trim(),
             weight: weightValue,
             due_date: parsedDueDate,
@@ -97,13 +95,10 @@ export const createKeyResult = async (req, res) => {
 // PUT /key-results/:id
 export const updateKeyResult = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const keyResultId = parsePositiveInt(req.params.id, null);
         if (!keyResultId) throw new AppError("Invalid key result ID", 400);
 
-        const { title, target_value, unit, weight, due_date } = req.body;
+        const { title, target_value, current_value, unit, weight, due_date } = req.body;
         const updates = {};
 
         if (title !== undefined) {
@@ -117,6 +112,12 @@ export const updateKeyResult = async (req, res) => {
             const parsed = parseNumber(target_value);
             if (parsed === undefined) throw new AppError("target_value must be a number", 422);
             updates.target_value = parsed;
+        }
+
+        if (current_value !== undefined) {
+            const parsed = parseNumber(current_value);
+            if (parsed === undefined) throw new AppError("current_value must be a number", 422);
+            updates.current_value = parsed;
         }
 
         if (unit !== undefined) {
@@ -156,9 +157,6 @@ export const updateKeyResult = async (req, res) => {
 // DELETE /key-results/:id
 export const deleteKeyResult = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const keyResultId = parsePositiveInt(req.params.id, null);
         if (!keyResultId) throw new AppError("Invalid key result ID", 400);
 
