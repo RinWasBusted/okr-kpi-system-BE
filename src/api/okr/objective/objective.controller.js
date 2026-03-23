@@ -40,9 +40,6 @@ const parseStatus = (value) => {
 // GET /objectives
 export const getObjectives = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const filters = {
             cycle_id: parseOptionalId(req.query.cycle_id),
             unit_id: parseOptionalId(req.query.unit_id),
@@ -57,7 +54,6 @@ export const getObjectives = async (req, res) => {
         const per_page = Math.min(parsePositiveInt(req.query.per_page, 20), 100);
 
         const { total, data, last_page } = await objectiveService.listObjectives({
-            companyId,
             user: req.user,
             filters,
             include_key_results,
@@ -79,9 +75,6 @@ export const getObjectives = async (req, res) => {
 // POST /objectives
 export const createObjective = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const { title, cycle_id, unit_id, owner_id, parent_objective_id, visibility } = req.body;
 
         if (!title || typeof title !== "string" || title.trim() === "") {
@@ -109,9 +102,6 @@ export const createObjective = async (req, res) => {
 // PUT /objectives/:id
 export const updateObjective = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const objectiveId = parsePositiveInt(req.params.id, null);
         if (!objectiveId) throw new AppError("Invalid objective ID", 400);
 
@@ -148,9 +138,6 @@ export const updateObjective = async (req, res) => {
 // POST /objectives/:id/submit
 export const submitObjective = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const objectiveId = parsePositiveInt(req.params.id, null);
         if (!objectiveId) throw new AppError("Invalid objective ID", 400);
 
@@ -165,9 +152,6 @@ export const submitObjective = async (req, res) => {
 // POST /objectives/:id/approve
 export const approveObjective = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const objectiveId = parsePositiveInt(req.params.id, null);
         if (!objectiveId) throw new AppError("Invalid objective ID", 400);
 
@@ -200,9 +184,6 @@ export const approveObjective = async (req, res) => {
 // POST /objectives/:id/reject
 export const rejectObjective = async (req, res) => {
     try {
-        const companyId = req.user.company_id;
-        if (!companyId) throw new AppError("Company context is required", 403);
-
         const objectiveId = parsePositiveInt(req.params.id, null);
         if (!objectiveId) throw new AppError("Invalid objective ID", 400);
 
@@ -214,6 +195,20 @@ export const rejectObjective = async (req, res) => {
         const objective = await objectiveService.rejectObjective(req.user, objectiveId, comment?.trim());
 
         res.success("Objective rejected successfully", 200, { objective });
+    } catch (error) {
+        throw error;
+    }
+};
+
+// DELETE /objectives/:id
+export const deleteObjective = async (req, res) => {
+    try {
+        const objectiveId = parsePositiveInt(req.params.id, null);
+        if (!objectiveId) throw new AppError("Invalid objective ID", 400);
+
+        await objectiveService.deleteObjective(req.user, objectiveId);
+
+        res.success("Objective deleted successfully", 200, null);
     } catch (error) {
         throw error;
     }

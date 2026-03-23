@@ -6,6 +6,7 @@ import {
     submitObjective,
     approveObjective,
     rejectObjective,
+    deleteObjective,
 } from "./objective.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
 
@@ -214,5 +215,23 @@ router.post("/objectives/:id/approve", approveObjective);
  *         description: Objective rejected successfully
  */
 router.post("/objectives/:id/reject", rejectObjective);
+
+/**
+ * @swagger
+ * /objectives/{id}:
+ *   delete:
+ *     summary: Delete objective (soft delete)
+ *     tags: [Objectives]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Objective deleted successfully
+ */
+router.delete("/objectives/:id", deleteObjective);
 
 export default router;

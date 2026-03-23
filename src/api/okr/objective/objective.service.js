@@ -4,12 +4,104 @@ import { UserRole } from "@prisma/client";
 import {
     canApproveObjective,
     canEditObjective,
-    canViewObjective,
-    getUnitContext,
-    isAncestorUnit,
-    recalculateObjectiveProgress,
-    daysBetweenUtc,
 } from "../okr.utils.js";
+
+const toDateOnlyUtc = (date) =>
+    new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+
+const daysBetweenUtc = (endDate, startDate) => {
+    const end = toDateOnlyUtc(endDate);
+    const start = toDateOnlyUtc(startDate);
+    const diffMs = end.getTime() - start.getTime();
+    return Math.floor(diffMs / (24 * 60 * 60 * 1000));
+};
+
+const isDescendantOrEqual = (candidate, ancestor) => {
+    if (!candidate || !ancestor) return false;
+    return candidate === ancestor || candidate.startsWith(`${ancestor}.`);
+};
+
+const isAncestorOrEqual = (candidate, descendant) => {
+    if (!candidate || !descendant) return false;
+    return descendant === candidate || descendant.startsWith(`${candidate}.`);
+};
+
+const getUnitPath = async (unitId) => {
+    if (!unitId) return null;
+    const rows = await prisma.$queryRaw`
+        SELECT path::text AS path
+        FROM "Units"
+        WHERE id = ${unitId}
+    `;
+    return rows[0]?.path ?? null;
+};
+
+const getObjectiveAccessPath = async (objectiveId) => {
+    if (!objectiveId) return null;
+    const rows = await prisma.$queryRaw`
+        SELECT access_path::text AS access_path
+        FROM "Objectives"
+        WHERE id = ${objectiveId}
+    `;
+    return rows[0]?.access_path ?? null;
+};
+
+const canViewObjective = async (user, objective, unitContext) => {
+    if (!objective) return false;
+    if (user.role === UserRole.ADMIN_COMPANY) return true;
+
+    if (objective.visibility === "PUBLIC") return true;
+
+    const userPath = unitContext || (user.unit_id ? await getUnitPath(user.unit_id) : null);
+    const objectivePath =
+        objective.access_path ?? (objective.id ? await getObjectiveAccessPath(objective.id) : null);
+
+    if (objective.visibility === "INTERNAL") {
+        if (!objectivePath || !userPath) return false;
+        return (
+            isAncestorOrEqual(objectivePath, userPath) ||
+            isDescendantOrEqual(objectivePath, userPath)
+        );
+    }
+
+    if (objective.visibility === "PRIVATE") {
+        if (objective.owner_id === user.id) return true;
+        if (!objectivePath || !userPath) return false;
+        return objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath);
+    }
+
+    return false;
+};
+
+const isAncestorUnit = async (potentialAncestorId, unitId) => {
+    if (!potentialAncestorId || !unitId) return false;
+    const ancestorPath = await getUnitPath(potentialAncestorId);
+    if (!ancestorPath) return false;
+    
+    const unitPath = await getUnitPath(unitId);
+    if (!unitPath) return false;
+    
+    return isDescendantOrEqual(unitPath, ancestorPath);
+};
+
+const recalculateObjectiveProgress = async (objectiveId) => {
+    const keyResults = await prisma.keyResults.findMany({
+        where: { objective_id: objectiveId },
+        select: { progress_percentage: true, weight: true },
+    });
+
+    const progress = keyResults.reduce(
+        (sum, kr) => sum + (kr.progress_percentage * kr.weight) / 100,
+        0,
+    );
+
+    await prisma.objectives.update({
+        where: { id: objectiveId },
+        data: { progress_percentage: progress },
+    });
+
+    return progress;
+};
 
 const ownerSelect = {
     id: true,
@@ -89,35 +181,48 @@ const formatObjective = (objective, includeKeyResults = false) => {
     };
 };
 
-const buildVisibilityWhere = async (user) => {
+const getVisibleObjectiveIds = async (user) => {
     if (user.role === UserRole.ADMIN_COMPANY) return null;
 
-    const context = user.unit_id ? await getUnitContext(user.unit_id) : null;
-    const orConditions = [{ visibility: "PUBLIC" }];
+    const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
 
-    if (context && context.lineage.length > 0) {
-        orConditions.push({
-            visibility: "INTERNAL",
-            unit_id: { in: context.lineage },
-        });
+    if (!userPath) {
+        const rows = await prisma.$queryRaw`
+            SELECT id
+            FROM "Objectives"
+            WHERE (
+                visibility = 'PUBLIC'
+                OR (visibility = 'PRIVATE' AND owner_id = ${user.id})
+              )
+        `;
+        return rows.map((row) => row.id);
     }
 
-    const privateConditions = [{ owner_id: user.id }];
-    if (context && context.descendants.length > 0) {
-        privateConditions.push({ unit_id: { in: context.descendants } });
-    }
+    const rows = await prisma.$queryRaw`
+        SELECT id
+        FROM "Objectives"
+        WHERE (
+            visibility = 'PUBLIC'
+            OR (
+                visibility = 'INTERNAL'
+                AND (access_path <@ ${userPath}::ltree OR access_path @> ${userPath}::ltree)
+            )
+            OR (
+                visibility = 'PRIVATE'
+                AND (
+                    owner_id = ${user.id}
+                    OR (access_path <@ ${userPath}::ltree AND access_path <> ${userPath}::ltree)
+                )
+            )
+          )
+    `;
 
-    orConditions.push({
-        visibility: "PRIVATE",
-        OR: privateConditions,
-    });
-
-    return { OR: orConditions };
+    return rows.map((row) => row.id);
 };
 
-const getObjectiveOrThrow = async (companyId, objectiveId, includeRelations = false) => {
+const getObjectiveOrThrow = async (objectiveId, includeRelations = false) => {
     const objective = await prisma.objectives.findFirst({
-        where: { id: objectiveId, company_id: companyId },
+        where: { id: objectiveId },
         ...(includeRelations
             ? {
                   select: {
@@ -129,29 +234,30 @@ const getObjectiveOrThrow = async (companyId, objectiveId, includeRelations = fa
     });
 
     if (!objective) throw new AppError("Objective not found", 404);
+    objective.access_path = await getObjectiveAccessPath(objective.id);
     return objective;
 };
 
-const ensureCycleExists = async (companyId, cycleId) => {
+const ensureCycleExists = async (cycleId) => {
     const cycle = await prisma.cycles.findFirst({
-        where: { id: cycleId, company_id: companyId },
+        where: { id: cycleId },
         select: { id: true },
     });
     if (!cycle) throw new AppError("Cycle not found", 404);
 };
 
-const ensureUnitExists = async (companyId, unitId) => {
+const ensureUnitExists = async (unitId) => {
     const unit = await prisma.units.findFirst({
-        where: { id: unitId, company_id: companyId },
+        where: { id: unitId },
         select: { id: true, parent_id: true },
     });
     if (!unit) throw new AppError("Unit not found", 404);
     return unit;
 };
 
-const ensureUserExists = async (companyId, userId) => {
+const ensureUserExists = async (userId) => {
     const user = await prisma.users.findFirst({
-        where: { id: userId, company_id: companyId },
+        where: { id: userId },
         select: { id: true, unit_id: true },
     });
     if (!user) throw new AppError("User not found", 404);
@@ -180,15 +286,15 @@ const determineObjectiveStatus = async (user, targetUnitId, ownerId) => {
 };
 
 export const listObjectives = async ({
-    companyId,
     user,
     filters,
     include_key_results,
     page,
     per_page,
 }) => {
+    const visibleObjectiveIds = await getVisibleObjectiveIds(user);
+
     const where = {
-        company_id: companyId,
         ...(filters.cycle_id !== undefined && { cycle_id: filters.cycle_id }),
         ...(filters.unit_id !== undefined && { unit_id: filters.unit_id }),
         ...(filters.owner_id !== undefined && { owner_id: filters.owner_id }),
@@ -199,9 +305,11 @@ export const listObjectives = async ({
         ...(filters.visibility !== undefined && { visibility: filters.visibility }),
     };
 
-    const visibilityWhere = await buildVisibilityWhere(user);
-    if (visibilityWhere) {
-        where.AND = [visibilityWhere];
+    if (visibleObjectiveIds) {
+        if (visibleObjectiveIds.length === 0) {
+            return { total: 0, data: [], last_page: 0 };
+        }
+        where.id = { in: visibleObjectiveIds };
     }
 
     const select = {
@@ -228,18 +336,17 @@ export const listObjectives = async ({
 };
 
 export const createObjective = async (user, payload) => {
-    const companyId = user.company_id;
-    await ensureCycleExists(companyId, payload.cycle_id);
+    await ensureCycleExists(payload.cycle_id);
 
     let owner = null;
     if (payload.owner_id) {
-        owner = await ensureUserExists(companyId, payload.owner_id);
+        owner = await ensureUserExists(payload.owner_id);
     }
 
     let unitId = payload.unit_id ?? owner?.unit_id ?? null;
     if (!unitId) throw new AppError("unit_id is required", 422);
 
-    await ensureUnitExists(companyId, unitId);
+    await ensureUnitExists(unitId);
 
     if (owner && owner.unit_id && owner.unit_id !== unitId) {
         throw new AppError("owner_id does not belong to unit_id", 422);
@@ -247,7 +354,7 @@ export const createObjective = async (user, payload) => {
 
     if (payload.parent_objective_id) {
         const parent = await prisma.objectives.findFirst({
-            where: { id: payload.parent_objective_id, company_id: companyId },
+            where: { id: payload.parent_objective_id },
             select: { id: true },
         });
         if (!parent) throw new AppError("Parent objective not found", 404);
@@ -259,20 +366,48 @@ export const createObjective = async (user, payload) => {
     }
 
     const status = await determineObjectiveStatus(user, unitId, payload.owner_id ?? null);
+    const accessPath = await getUnitPath(unitId);
+    if (!accessPath) throw new AppError("Unit not found", 404);
 
-    const objective = await prisma.objectives.create({
-        data: {
-            company_id: companyId,
-            title: payload.title,
-            cycle_id: payload.cycle_id,
-            unit_id: unitId,
-            owner_id: payload.owner_id ?? null,
-            parent_objective_id: payload.parent_objective_id ?? null,
-            visibility: resolvedVisibility,
+    const nextIdRows = await prisma.$queryRaw`
+        SELECT nextval(pg_get_serial_sequence('"Objectives"', 'id'))::int AS id
+    `;
+    const objectiveId = nextIdRows[0]?.id;
+    if (!objectiveId) throw new AppError("Failed to allocate objective ID", 500);
+
+    await prisma.$executeRaw`
+        INSERT INTO "Objectives" (
+            id,
+            company_id,
+            title,
+            cycle_id,
+            unit_id,
+            owner_id,
+            parent_objective_id,
+            visibility,
+            access_path,
             status,
-            approved_by: null,
-            progress_percentage: 0,
-        },
+            approved_by,
+            progress_percentage
+        )
+        VALUES (
+            ${objectiveId},
+            ${user.company_id},
+            ${payload.title},
+            ${payload.cycle_id},
+            ${unitId},
+            ${payload.owner_id ?? null},
+            ${payload.parent_objective_id ?? null},
+            ${resolvedVisibility},
+            ${accessPath}::ltree,
+            ${status},
+            ${null},
+            ${0}
+        )
+    `;
+
+    const objective = await prisma.objectives.findFirst({
+        where: { id: objectiveId },
         select: objectiveBaseSelect,
     });
 
@@ -280,8 +415,7 @@ export const createObjective = async (user, payload) => {
 };
 
 export const updateObjective = async (user, objectiveId, updates) => {
-    const companyId = user.company_id;
-    const objective = await getObjectiveOrThrow(companyId, objectiveId);
+    const objective = await getObjectiveOrThrow(objectiveId);
 
     if (!await canEditObjective(user, objective)) {
         throw new AppError("You do not have permission to update this objective", 403);
@@ -296,7 +430,7 @@ export const updateObjective = async (user, objectiveId, updates) => {
             throw new AppError("Objective cannot be its own parent", 400);
         }
         const parent = await prisma.objectives.findFirst({
-            where: { id: updates.parent_objective_id, company_id: companyId },
+            where: { id: updates.parent_objective_id },
             select: { id: true },
         });
         if (!parent) throw new AppError("Parent objective not found", 404);
@@ -324,8 +458,7 @@ export const updateObjective = async (user, objectiveId, updates) => {
 };
 
 export const submitObjective = async (user, objectiveId) => {
-    const companyId = user.company_id;
-    const objective = await getObjectiveOrThrow(companyId, objectiveId);
+    const objective = await getObjectiveOrThrow(objectiveId);
 
     if (!await canEditObjective(user, objective)) {
         throw new AppError("You do not have permission to submit this objective", 403);
@@ -345,8 +478,7 @@ export const submitObjective = async (user, objectiveId) => {
 };
 
 export const approveObjective = async (user, objectiveId, updates) => {
-    const companyId = user.company_id;
-    const objective = await getObjectiveOrThrow(companyId, objectiveId);
+    const objective = await getObjectiveOrThrow(objectiveId);
 
     if (!await canApproveObjective(user, objective)) {
         throw new AppError("You do not have permission to approve this objective", 403);
@@ -361,7 +493,7 @@ export const approveObjective = async (user, objectiveId, updates) => {
             throw new AppError("Objective cannot be its own parent", 400);
         }
         const parent = await prisma.objectives.findFirst({
-            where: { id: updates.parent_objective_id, company_id: companyId },
+            where: { id: updates.parent_objective_id },
             select: { id: true },
         });
         if (!parent) throw new AppError("Parent objective not found", 404);
@@ -391,8 +523,7 @@ export const approveObjective = async (user, objectiveId, updates) => {
 };
 
 export const rejectObjective = async (user, objectiveId, comment) => {
-    const companyId = user.company_id;
-    const objective = await getObjectiveOrThrow(companyId, objectiveId);
+    const objective = await getObjectiveOrThrow(objectiveId);
 
     if (!await canApproveObjective(user, objective)) {
         throw new AppError("You do not have permission to reject this objective", 403);
@@ -411,7 +542,7 @@ export const rejectObjective = async (user, objectiveId, comment) => {
     if (comment) {
         await prisma.feedbacks.create({
             data: {
-                company_id: companyId,
+                company_id: user.company_id,
                 objective_id: objectiveId,
                 user_id: user.id,
                 content: comment,
@@ -424,8 +555,7 @@ export const rejectObjective = async (user, objectiveId, comment) => {
 };
 
 export const ensureObjectiveVisible = async (user, objectiveId) => {
-    const companyId = user.company_id;
-    const objective = await getObjectiveOrThrow(companyId, objectiveId);
+    const objective = await getObjectiveOrThrow(objectiveId);
     const canView = await canViewObjective(user, objective);
     if (!canView) {
         throw new AppError("You do not have permission to view this objective", 403);
@@ -434,11 +564,33 @@ export const ensureObjectiveVisible = async (user, objectiveId) => {
 };
 
 export const ensureObjectiveEditable = async (user, objectiveId) => {
-    const companyId = user.company_id;
-    const objective = await getObjectiveOrThrow(companyId, objectiveId);
+    const objective = await getObjectiveOrThrow(objectiveId);
     const canEdit = await canEditObjective(user, objective);
     if (!canEdit) {
         throw new AppError("You do not have permission to edit this objective", 403);
     }
     return objective;
+};
+
+export const deleteObjective = async (user, objectiveId) => {
+    const objective = await getObjectiveOrThrow(objectiveId);
+
+    if (!await canEditObjective(user, objective)) {
+        throw new AppError("You do not have permission to delete this objective", 403);
+    }
+
+    const now = new Date();
+
+    await prisma.$transaction([
+        prisma.keyResults.updateMany({
+            where: { objective_id: objectiveId },
+            data: { deleted_at: now },
+        }),
+        prisma.objectives.update({
+            where: { id: objectiveId },
+            data: { deleted_at: now },
+        }),
+    ]);
+
+    return { success: true, message: "Objective deleted successfully" };
 };
