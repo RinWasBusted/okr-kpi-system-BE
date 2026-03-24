@@ -9,7 +9,7 @@ import { authenticate, authorize } from "../../middlewares/auth.js";
 
 const router = express.Router();
 
-router.use(authenticate, authorize("ADMIN_COMPANY"));
+router.use(authenticate);
 
 /**
  * @swagger

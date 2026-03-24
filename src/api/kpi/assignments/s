@@ -254,59 +254,6 @@ export const recalculateCurrentValueFromChildren = async (assignmentId) => {
     }
 };
 
-// Helper function to build nested structure with sub_assignments
-const buildNestedAssignments = async (assignments) => {
-    // Map to store all assignments by id for easy lookup
-    const assignmentMap = new Map();
-    const rootAssignments = [];
-
-    // Fetch all access_paths using raw SQL for each assignment
-    const assignmentsWithPath = await Promise.all(
-        assignments.map(async (a) => {
-            const pathResult = await prisma.$queryRaw`
-                SELECT access_path::text AS access_path
-                FROM "KPIAssignments"
-                WHERE id = ${a.id}
-            `;
-            return {
-                ...a,
-                access_path: pathResult[0]?.access_path || null,
-            };
-        })
-    );
-
-    // Format all assignments and store in map
-    const formatted = await Promise.all(
-        assignmentsWithPath.map(async (a) => {
-            const formattedAssignment = await formatAssignment(a);
-            return {
-                ...formattedAssignment,
-                sub_assignments: [],
-            };
-        })
-    );
-
-    formatted.forEach((a) => {
-        assignmentMap.set(a.id, a);
-    });
-
-    // Build hierarchy
-    formatted.forEach((a) => {
-        if (!a.parent_assignment?.id) {
-            // This is a root assignment
-            rootAssignments.push(a);
-        } else {
-            // This is a child assignment
-            const parent = assignmentMap.get(a.parent_assignment.id);
-            if (parent) {
-                parent.sub_assignments.push(a);
-            }
-        }
-    });
-
-    return rootAssignments;
-};
-
 export const listKPIAssignments = async (user, filters) => {
     const where = {
         deleted_at: null,
@@ -340,26 +287,40 @@ export const listKPIAssignments = async (user, filters) => {
         where.id = { in: visibleIds };
     }
 
-    // Get all assignments without pagination first (to build hierarchy)
-    const allAssignments = await prisma.kPIAssignments.findMany({
-        where,
-        select: assignmentSelect,
-        orderBy: { id: "asc" },
-    });
-
-    // Build nested structure
-    const nestedAssignments = await buildNestedAssignments(allAssignments);
-
-    // Apply pagination on root assignments only
     const page = filters.page || 1;
     const per_page = filters.per_page || 20;
     const skip = (page - 1) * per_page;
 
-    const paginatedRoots = nestedAssignments.slice(skip, skip + per_page);
-    const total = nestedAssignments.length;
+    const [assignments, total] = await Promise.all([
+        prisma.kPIAssignments.findMany({
+            where,
+            select: assignmentSelect,
+            orderBy: { id: "asc" },
+            skip,
+            take: per_page,
+        }),
+        prisma.kPIAssignments.count({ where }),
+    ]);
+
+    // Fetch access_path using raw SQL for ltree type support
+    const assignmentsWithPath = await Promise.all(
+        assignments.map(async (a) => {
+            const pathResult = await prisma.$queryRaw`
+                SELECT access_path::text AS access_path
+                FROM "KPIAssignments"
+                WHERE id = ${a.id}
+            `;
+            return {
+                ...a,
+                access_path: pathResult[0]?.access_path || null,
+            };
+        })
+    );
+
+    const formatted = await Promise.all(assignmentsWithPath.map((a) => formatAssignment(a)));
 
     return {
-        data: paginatedRoots,
+        data: formatted,
         meta: {
             total,
             page,

@@ -67,15 +67,8 @@ const getUnitRowById = async (tx, unitId) => {
 
 export const listUnits = async ({ page, per_page }) => {
     return withContext(async (tx) => {
-        const offset = (page - 1) * per_page;
-
-        const totalRows = await tx.$queryRaw`
-            SELECT COUNT(*)::int AS total
-            FROM "Units"
-        `;
-        const total = totalRows[0]?.total ?? 0;
-
-        const units = await tx.$queryRaw`
+        // Get all units (no pagination for tree building)
+        const allUnits = await tx.$queryRaw`
             SELECT
                 u.id,
                 u.name,
@@ -97,10 +90,41 @@ export const listUnits = async ({ page, per_page }) => {
                 m.id,
                 m.full_name
             ORDER BY u.id ASC
-            OFFSET ${offset} LIMIT ${per_page}
         `;
 
-        return { total, data: units.map(formatUnitRow) };
+        // Build tree structure
+        const unitsMap = new Map();
+        const formattedUnits = allUnits.map((unit) => ({
+            ...formatUnitRow(unit),
+            sub_units: [],
+        }));
+
+        // Create map for quick lookup
+        formattedUnits.forEach((unit) => {
+            unitsMap.set(unit.id, unit);
+        });
+
+        // Build parent-child relationships
+        const rootUnits = [];
+        formattedUnits.forEach((unit) => {
+            if (unit.parent_id === null) {
+                rootUnits.push(unit);
+            } else {
+                const parent = unitsMap.get(unit.parent_id);
+                if (parent) {
+                    parent.sub_units.push(unit);
+                }
+            }
+        });
+
+        // Apply pagination to root units
+        const offset = (page - 1) * per_page;
+        const paginatedRoots = rootUnits.slice(offset, offset + per_page);
+
+        return {
+            total: rootUnits.length,
+            data: paginatedRoots,
+        };
     });
 };
 
