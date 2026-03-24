@@ -210,7 +210,7 @@ const canUpdateKPIAssignment = async (user, assignment) => {
 };
 
 // Helper function to recalculate current_value from children recursively
-const recalculateCurrentValueFromChildren = async (assignmentId) => {
+export const recalculateCurrentValueFromChildren = async (assignmentId) => {
     const children = await prisma.kPIAssignments.findMany({
         where: { parent_assignment_id: assignmentId, deleted_at: null },
         select: { id: true, current_value: true },
