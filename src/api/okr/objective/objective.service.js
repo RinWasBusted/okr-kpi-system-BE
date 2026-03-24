@@ -4,13 +4,15 @@ import { UserRole } from "@prisma/client";
 import {
     canApproveObjective,
     canEditObjective,
-    daysBetweenUtc,
+    recalculateObjectiveProgress,
+    calculateKeyResultProgress,
+} from "../../../utils/okr.js";
+import { daysBetweenUtc } from "../../../utils/date.js";
+import {
     getObjectiveAccessPath,
     getUnitPath,
     isAncestorUnit,
-    recalculateObjectiveProgress,
-    calculateKeyResultProgress,
-} from "../okr.utils.js";
+} from "../../../utils/path.js";
 
 const toDateOnlyUtc = (date) =>
     new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -266,21 +268,46 @@ export const listObjectives = async ({
         ...(include_key_results && { key_results: { select: keyResultSelect } }),
     };
 
-    const [total, objectives] = await Promise.all([
-        prisma.objectives.count({ where }),
-        prisma.objectives.findMany({
-            where,
-            skip: (page - 1) * per_page,
-            take: per_page,
-            orderBy: { created_at: "desc" },
-            select,
-        }),
-    ]);
+    // Get all objectives matching filters (no pagination yet)
+    const allObjectives = await prisma.objectives.findMany({
+        where,
+        orderBy: { created_at: "desc" },
+        select,
+    });
+
+    // Build tree structure
+    const objectivesMap = new Map();
+    const formattedObjectives = allObjectives.map((objective) => ({
+        ...formatObjective(objective, include_key_results),
+        sub_objectives: [],
+    }));
+
+    // Create map for quick lookup
+    formattedObjectives.forEach((objective) => {
+        objectivesMap.set(objective.id, objective);
+    });
+
+    // Build parent-child relationships
+    const rootObjectives = [];
+    formattedObjectives.forEach((objective) => {
+        if (objective.parent_objective_id === null) {
+            rootObjectives.push(objective);
+        } else {
+            const parent = objectivesMap.get(objective.parent_objective_id);
+            if (parent) {
+                parent.sub_objectives.push(objective);
+            }
+        }
+    });
+
+    // Apply pagination to root objectives
+    const offset = (page - 1) * per_page;
+    const paginatedRoots = rootObjectives.slice(offset, offset + per_page);
 
     return {
-        total,
-        data: objectives.map((objective) => formatObjective(objective, include_key_results)),
-        last_page: Math.ceil(total / per_page),
+        total: rootObjectives.length,
+        data: paginatedRoots,
+        last_page: Math.ceil(rootObjectives.length / per_page),
     };
 };
 
