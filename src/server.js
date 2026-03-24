@@ -2,6 +2,8 @@ import express, { request } from 'express';
 import prisma from './utils/prisma';
 import { connectRedis } from './utils/redis.js';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
+import { corsOptions } from './utils/cors.js';
 import apiRouter from './api';
 import errorHandler from './middlewares/errorHandler';
 import responseHandler from './middlewares/responseHandler';
@@ -11,6 +13,8 @@ const createApp = async () => {
   const app = express();
 
   // Middleware
+  app.use(cors(corsOptions));
+  app.options(/.*/, cors(corsOptions));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
