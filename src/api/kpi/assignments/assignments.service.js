@@ -209,6 +209,51 @@ const canUpdateKPIAssignment = async (user, assignment) => {
     return false;
 };
 
+// Helper function to recalculate current_value from children recursively
+const recalculateCurrentValueFromChildren = async (assignmentId) => {
+    const children = await prisma.kPIAssignments.findMany({
+        where: { parent_assignment_id: assignmentId, deleted_at: null },
+        select: { id: true, current_value: true },
+    });
+
+    const totalCurrentValue = children.reduce((sum, child) => sum + (child.current_value || 0), 0);
+
+    // Get assignment to recalculate progress
+    const assignment = await prisma.kPIAssignments.findUnique({
+        where: { id: assignmentId },
+        select: { kpi_dictionary_id: true, target_value: true },
+    });
+
+    if (!assignment) return;
+
+    const dict = await prisma.kPIDictionaries.findUnique({
+        where: { id: assignment.kpi_dictionary_id },
+        select: { evaluation_method: true },
+    });
+
+    const progressPercentage = calculateProgressPercentage(
+        totalCurrentValue,
+        assignment.target_value,
+        dict.evaluation_method,
+    );
+
+    // Update the assignment's current_value and progress
+    await prisma.kPIAssignments.update({
+        where: { id: assignmentId },
+        data: { current_value: totalCurrentValue, progress_percentage: progressPercentage },
+    });
+
+    // Recursively update parent
+    const parentAssignment = await prisma.kPIAssignments.findUnique({
+        where: { id: assignmentId },
+        select: { parent_assignment_id: true },
+    });
+
+    if (parentAssignment?.parent_assignment_id) {
+        await recalculateCurrentValueFromChildren(parentAssignment.parent_assignment_id);
+    }
+};
+
 export const listKPIAssignments = async (user, filters) => {
     const where = {
         deleted_at: null,
@@ -410,7 +455,14 @@ export const createKPIAssignment = async (user, payload) => {
             created_at
     `;
 
-    return await formatAssignment(created[0]);
+    const result = await formatAssignment(created[0]);
+
+    // If parent_assignment_id is provided, recalculate parent's current_value
+    if (payload.parent_assignment_id) {
+        await recalculateCurrentValueFromChildren(payload.parent_assignment_id);
+    }
+
+    return result;
 };
 
 export const updateKPIAssignment = async (user, assignmentId, payload) => {
@@ -439,6 +491,15 @@ export const updateKPIAssignment = async (user, assignmentId, payload) => {
     }
 
     if (payload.current_value !== undefined) {
+        // Check if this assignment has children
+        const hasChildren = await prisma.kPIAssignments.findFirst({
+            where: { parent_assignment_id: assignmentId, deleted_at: null },
+        });
+
+        if (hasChildren) {
+            throw new AppError("Cannot update current_value for assignment with children. Current value is calculated from children.", 400);
+        }
+
         // Only allow updating current_value if no KPI records exist
         const existingRecords = await prisma.kPIRecords.findFirst({
             where: { kpi_assignment_id: assignmentId },
@@ -482,6 +543,18 @@ export const updateKPIAssignment = async (user, assignmentId, payload) => {
         select: assignmentSelect,
     });
 
+    // If current_value was updated, recalculate all ancestors
+    if (updates.current_value !== undefined) {
+        const parent = await prisma.kPIAssignments.findUnique({
+            where: { id: assignmentId },
+            select: { parent_assignment_id: true },
+        });
+
+        if (parent?.parent_assignment_id) {
+            await recalculateCurrentValueFromChildren(parent.parent_assignment_id);
+        }
+    }
+
     // Fetch access_path using raw SQL for ltree type support
     const pathResult = await prisma.$queryRaw`
         SELECT access_path::text AS access_path
@@ -506,6 +579,8 @@ export const deleteKPIAssignment = async (user, assignmentId, cascade = false) =
 
     const allowed = await canUpdateKPIAssignment(user, assignment);
     if (!allowed) throw new AppError("You do not have permission to delete this assignment", 403);
+
+    const parentAssignmentId = assignment.parent_assignment_id;
 
     if (cascade) {
         // Recursively soft delete all descendants
@@ -535,5 +610,10 @@ export const deleteKPIAssignment = async (user, assignmentId, cascade = false) =
             where: { id: assignmentId },
             data: { deleted_at: new Date() },
         });
+    }
+
+    // If parent exists, recalculate its current_value
+    if (parentAssignmentId) {
+        await recalculateCurrentValueFromChildren(parentAssignmentId);
     }
 };
