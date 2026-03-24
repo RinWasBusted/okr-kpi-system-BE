@@ -5,6 +5,7 @@ import unitRoutes from "./units/unit.route.js";
 import userRoutes from "./users/user.route.js";
 import cycleRoutes from "./cycle/cycle.route.js";
 import okrRoutes from "./okr/index.js";
+import kpiRoutes from "./kpi/index.js";
 const router = express.Router();
 
 router.use("/admin", adminRoutes);
@@ -13,5 +14,6 @@ router.use("/units", unitRoutes);
 router.use("/users", userRoutes);
 router.use("/cycles", cycleRoutes);
 router.use("/", okrRoutes);
+router.use("/", kpiRoutes);
 
 export default router;

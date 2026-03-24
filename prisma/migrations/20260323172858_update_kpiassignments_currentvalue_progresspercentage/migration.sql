@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "KPIAssignments" ADD COLUMN     "current_value" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "progress_percentage" DOUBLE PRECISION NOT NULL DEFAULT 0;

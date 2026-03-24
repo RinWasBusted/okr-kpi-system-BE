@@ -140,7 +140,8 @@ model KPIAssignments {
   visibility           Visibility
   access_path          Unsupported("ltree")
   target_value         Float
-  weight               Float
+  current_value        Float   @default(0)
+  progress_percentage  Float   @default(0)
   deleted_at           DateTime?
   created_at           DateTime @default(now())
 

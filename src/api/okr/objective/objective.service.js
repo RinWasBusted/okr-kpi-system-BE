@@ -4,13 +4,15 @@ import { UserRole } from "@prisma/client";
 import {
     canApproveObjective,
     canEditObjective,
-    daysBetweenUtc,
+    recalculateObjectiveProgress,
+    calculateKeyResultProgress,
+} from "../../../utils/okr.js";
+import { daysBetweenUtc } from "../../../utils/date.js";
+import {
     getObjectiveAccessPath,
     getUnitPath,
     isAncestorUnit,
-    recalculateObjectiveProgress,
-    calculateKeyResultProgress,
-} from "../okr.utils.js";
+} from "../../../utils/path.js";
 
 const toDateOnlyUtc = (date) =>
     new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));

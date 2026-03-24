@@ -3,12 +3,14 @@ import AppError from "../../../utils/appError.js";
 import {
     canApproveObjective,
     canEditObjective,
-    daysBetweenUtc,
-    getObjectiveAccessPath,
-    getUnitPath,
     calculateKeyResultProgress,
     recalculateObjectiveProgress,
-} from "../okr.utils.js";
+} from "../../../utils/okr.js";
+import { daysBetweenUtc } from "../../../utils/date.js";
+import {
+    getObjectiveAccessPath,
+    getUnitPath,
+} from "../../../utils/path.js";
 
 // Utility functions
 const toDateOnlyUtc = (date) =>
