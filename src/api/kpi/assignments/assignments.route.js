@@ -192,6 +192,8 @@ router.post("/kpi-assignments", createKPIAssignment);
  *           schema:
  *             type: object
  *             properties:
+ *               cycle_id:
+ *                 type: integer
  *               target_value:
  *                 type: number
  *               current_value:
@@ -221,6 +223,12 @@ router.put("/kpi-assignments/:id", updateKPIAssignment);
  *         required: true
  *         schema:
  *           type: integer
+ *       - in: query
+ *         name: cascade
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: If true, soft delete all descendants recursively. If false, only soft delete direct children.
  *     responses:
  *       204:
  *         description: KPI Assignment deleted successfully

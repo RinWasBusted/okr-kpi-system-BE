@@ -62,6 +62,7 @@ export const getUnitDescendants = async (unitId) => {
     return rows.map((row) => row.id);
 };
 
+
 export const isAncestorUnit = async (potentialAncestorId, unitId) => {
     if (!potentialAncestorId || !unitId) return false;
     const ancestorPath = await getUnitPath(potentialAncestorId);
@@ -69,7 +70,6 @@ export const isAncestorUnit = async (potentialAncestorId, unitId) => {
     
     const unitPath = await getUnitPath(unitId);
     if (!unitPath) return false;
-    
     return isDescendantOrEqual(unitPath, ancestorPath);
 };
 

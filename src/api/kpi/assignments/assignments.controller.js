@@ -94,8 +94,14 @@ export const updateKPIAssignment = async (req, res) => {
         const assignmentId = parsePositiveInt(req.params.id, null);
         if (!assignmentId) throw new AppError("Invalid assignment ID", 400);
 
-        const { target_value, current_value, visibility } = req.body;
+        const { cycle_id, target_value, current_value, visibility } = req.body;
         const updates = {};
+
+        if (cycle_id !== undefined) {
+            const parsed = parsePositiveInt(cycle_id, null);
+            if (parsed === null) throw new AppError("cycle_id must be a positive integer", 422);
+            updates.cycle_id = parsed;
+        }
 
         if (target_value !== undefined) {
             const parsed = parseNumber(target_value);
@@ -138,7 +144,9 @@ export const deleteKPIAssignment = async (req, res) => {
         const assignmentId = parsePositiveInt(req.params.id, null);
         if (!assignmentId) throw new AppError("Invalid assignment ID", 400);
 
-        await assignmentsService.deleteKPIAssignment(req.user, assignmentId);
+        const cascade = req.query.cascade === "true";
+
+        await assignmentsService.deleteKPIAssignment(req.user, assignmentId, cascade);
 
         res.status(204).send();
     } catch (error) {
