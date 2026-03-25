@@ -179,6 +179,11 @@ export const getCompanyStats = async (id) => {
         ]);
 
     return {
+        id: company.id,
+        name: company.name,
+        slug: company.slug,
+        is_active: company.is_active,
+        created_at: company.created_at,
         admin_count,
         employee_count,
         active_cycles,

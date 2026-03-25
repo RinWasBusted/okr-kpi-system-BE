@@ -68,9 +68,9 @@ export const getCompanyStats = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const stats = await companyService.getCompanyStats(parseInt(id));
+        const companyStats = await companyService.getCompanyStats(parseInt(id));
 
-        res.success("Company stats retrieved successfully", 200, { stats });
+        res.success("Company stats retrieved successfully", 200, companyStats);
     } catch (error) {
         throw error;
     }

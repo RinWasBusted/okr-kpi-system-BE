@@ -433,8 +433,8 @@ router.delete("/:id", deactivateCompany);
  * @swagger
  * /admin/companies/{id}/stats:
  *   get:
- *     summary: Get company overview stats
- *     description: Returns aggregated statistics for a specific company.
+ *     summary: Get company overview stats with details
+ *     description: Returns company information along with aggregated statistics.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -459,28 +459,41 @@ router.delete("/:id", deactivateCompany);
  *                 data:
  *                   type: object
  *                   properties:
- *                     stats:
- *                       type: object
- *                       properties:
- *                         admin_count:
- *                           type: integer
- *                           example: 2
- *                         employee_count:
- *                           type: integer
- *                           example: 50
- *                         active_cycles:
- *                           type: integer
- *                           example: 3
- *                         total_objectives:
- *                           type: integer
- *                           example: 120
- *                         avg_okr_progress:
- *                           type: number
- *                           format: float
- *                           example: 67.5
- *                         total_kpi_assignments:
- *                           type: integer
- *                           example: 80
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     name:
+ *                       type: string
+ *                       example: "Acme Corp"
+ *                     slug:
+ *                       type: string
+ *                       example: "acme-corp"
+ *                     is_active:
+ *                       type: boolean
+ *                       example: true
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2026-01-01T00:00:00.000Z"
+ *                     admin_count:
+ *                       type: integer
+ *                       example: 2
+ *                     employee_count:
+ *                       type: integer
+ *                       example: 50
+ *                     active_cycles:
+ *                       type: integer
+ *                       example: 3
+ *                     total_objectives:
+ *                       type: integer
+ *                       example: 120
+ *                     avg_okr_progress:
+ *                       type: number
+ *                       format: float
+ *                       example: 67.5
+ *                     total_kpi_assignments:
+ *                       type: integer
+ *                       example: 80
  *       404:
  *         description: Company not found
  *         content:

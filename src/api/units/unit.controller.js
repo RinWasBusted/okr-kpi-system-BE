@@ -114,3 +114,22 @@ export const deleteUnit = async (req, res) => {
         throw error;
     }
 };
+
+// GET /units/:id/detail
+export const getUnitDetail = async (req, res) => {
+    try {
+        const companyId = req.user.company_id;
+        if (!companyId) throw new AppError("Company context is required", 403);
+
+        const unitId = Number(req.params.id);
+        if (!Number.isInteger(unitId) || unitId <= 0) {
+            throw new AppError("Invalid unit ID", 400);
+        }
+
+        const unit = await unitService.getUnitDetail(unitId);
+
+        res.success("Unit detail retrieved successfully", 200, unit);
+    } catch (error) {
+        throw error;
+    }
+};

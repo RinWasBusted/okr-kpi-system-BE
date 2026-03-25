@@ -3,7 +3,8 @@ import {
     getUnits,
     createUnit,
     updateUnit,
-    deleteUnit
+    deleteUnit,
+    getUnitDetail
 } from "./unit.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.js";
 
@@ -120,6 +121,116 @@ router.use(authenticate);
  *                       example: "Access token is missing"
  */
 router.get("/", getUnits);
+
+/**
+ * @swagger
+ * /units/{id}/detail:
+ *   get:
+ *     summary: Get unit details
+ *     description: Retrieve detailed information about a specific unit including manager info, KPI assignments count, and objectives count. Requires `accessToken` cookie.
+ *     tags: [Units]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Unit ID
+ *     responses:
+ *       200:
+ *         description: Unit detail retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Unit detail retrieved successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     name:
+ *                       type: string
+ *                       example: "Engineering"
+ *                     parent_id:
+ *                       type: integer
+ *                       nullable: true
+ *                       example: null
+ *                     manager:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                           example: 5
+ *                         full_name:
+ *                           type: string
+ *                           example: "Nguyen Van A"
+ *                         email:
+ *                           type: string
+ *                           format: email
+ *                           example: "manager@example.com"
+ *                         avatar_url:
+ *                           type: string
+ *                           nullable: true
+ *                           example: "https://example.com/avatar.jpg"
+ *                         job_title:
+ *                           type: string
+ *                           nullable: true
+ *                           example: "Engineering Lead"
+ *                     total_kpi:
+ *                       type: integer
+ *                       example: 12
+ *                     total_objective:
+ *                       type: integer
+ *                       example: 8
+ *       401:
+ *         description: Access token missing or invalid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "UNAUTHORIZED"
+ *                     message:
+ *                       type: string
+ *                       example: "Access token is missing"
+ *       404:
+ *         description: Unit not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "NOT_FOUND"
+ *                     message:
+ *                       type: string
+ *                       example: "Unit not found"
+ */
+router.get("/:id/detail", getUnitDetail);
 
 /**
  * @swagger
