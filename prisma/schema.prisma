@@ -16,6 +16,7 @@ model Companies {
   id         Int      @id @default(autoincrement())
   name       String
   slug       String   @unique
+  logo       String?
   is_active  Boolean  @default(true)
   created_at DateTime @default(now())
 

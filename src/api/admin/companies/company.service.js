@@ -1,6 +1,7 @@
 import prisma from "../../../utils/prisma.js";
 import { UserRole, Prisma } from "@prisma/client";
 import AppError from "../../../utils/appError.js";
+import { deleteImageFromCloudinary } from "../../../utils/cloudinary.js";
 
 export const getCompanies = async (filters, pagination) => {
     const { is_active, search } = filters;
@@ -25,6 +26,7 @@ export const getCompanies = async (filters, pagination) => {
                 id: true,
                 name: true,
                 slug: true,
+                logo: true,
                 is_active: true,
                 created_at: true,
                 _count: {
@@ -62,6 +64,7 @@ export const getCompanies = async (filters, pagination) => {
         id: company.id,
         name: company.name,
         slug: company.slug,
+        logo: company.logo,
         is_active: company.is_active,
         admin_count: company._count.users,
         employee_count: employeeCountMap[company.id] ?? 0,
@@ -77,7 +80,7 @@ export const getCompanies = async (filters, pagination) => {
     return { data, meta };
 };
 
-export const createCompany = async ({ name, slug }) => {
+export const createCompany = async ({ name, slug, logo }) => {
     const existing = await prisma.companies.findUnique({ where: { slug } });
 
     if (existing) {
@@ -86,11 +89,12 @@ export const createCompany = async ({ name, slug }) => {
 
     try {
         const company = await prisma.companies.create({
-            data: { name, slug, is_active: true },
+            data: { name, slug, is_active: true, logo: logo ?? null },
             select: {
                 id: true,
                 name: true,
                 slug: true,
+                logo: true,
                 is_active: true,
                 created_at: true,
             },
@@ -131,6 +135,7 @@ export const updateCompany = async (id, { name, slug, is_active }) => {
                 id: true,
                 name: true,
                 slug: true,
+                logo: true,
                 is_active: true,
                 created_at: true,
             },
@@ -143,6 +148,70 @@ export const updateCompany = async (id, { name, slug, is_active }) => {
         }
         throw err;
     }
+};
+
+// ─── Logo ────────────────────────────────────────────────────────────────────
+
+export const updateCompanyLogo = async (id, publicId) => {
+    const company = await prisma.companies.findUnique({
+        where: { id },
+        select: { id: true, logo: true },
+    });
+
+    if (!company) {
+        throw new AppError("Company not found", 404);
+    }
+
+    // Delete old logo from Cloudinary if exists
+    if (company.logo) {
+        await deleteImageFromCloudinary(company.logo);
+    }
+
+    const updated = await prisma.companies.update({
+        where: { id },
+        data: { logo: publicId },
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            logo: true,
+            is_active: true,
+            created_at: true,
+        },
+    });
+
+    return updated;
+};
+
+export const deleteCompanyLogo = async (id) => {
+    const company = await prisma.companies.findUnique({
+        where: { id },
+        select: { id: true, logo: true },
+    });
+
+    if (!company) {
+        throw new AppError("Company not found", 404);
+    }
+
+    // Delete logo from Cloudinary if exists
+    if (company.logo) {
+        await deleteImageFromCloudinary(company.logo);
+    }
+
+    const updated = await prisma.companies.update({
+        where: { id },
+        data: { logo: null },
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            logo: true,
+            is_active: true,
+            created_at: true,
+        },
+    });
+
+    return updated;
 };
 
 export const deactivateCompany = async (id) => {

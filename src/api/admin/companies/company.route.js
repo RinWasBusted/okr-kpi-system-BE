@@ -5,9 +5,14 @@ import {
     updateCompany,
     deactivateCompany,
     getCompanyStats,
+    uploadLogo,
+    deleteLogo,
 } from "./company.controller.js";
 import adminCompanyRoutes from "../AdminCompany/adminCompany.route.js";
 import { authenticate, authorize } from "../../../middlewares/auth.js";
+import { uploadSingle } from "../../../utils/multer.js";
+import { wrapMulter } from "../../../utils/wrapMulter.js";
+import requestContext from "../../../utils/context.js";
 
 const router = express.Router();
 
@@ -138,14 +143,14 @@ router.get("/", getCompanies);
  * /admin/companies:
  *   post:
  *     summary: Create a new company
- *     description: Creating a new company requires a unique slug. The slug is used as a unique identifier for the company across the platform, especially during login. If the slug already exists, an error will be returned.
+ *     description: Creating a new company requires a unique slug. The slug is used as a unique identifier for the company across the platform, especially during login. If the slug already exists, an error will be returned. Optionally upload a logo image file.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             required: [name, slug]
@@ -157,6 +162,10 @@ router.get("/", getCompanies);
  *                 type: string
  *                 example: "acme-corp"
  *                 description: Unique identifier slug across the platform. Used during login.
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Optional company logo image file
  *     responses:
  *       201:
  *         description: Company created successfully
@@ -183,6 +192,11 @@ router.get("/", getCompanies);
  *                         slug:
  *                           type: string
  *                           example: "acme-corp"
+ *                         logo:
+ *                           type: string
+ *                           nullable: true
+ *                           example: "okr-kpi-system/companies/logos/1234567890"
+ *                           description: Cloudinary public_id or null
  *                         is_active:
  *                           type: boolean
  *                           example: true
@@ -243,7 +257,7 @@ router.get("/", getCompanies);
  *                   type: string
  *                   example: "name and slug are required"
  */
-router.post("/", createCompany);
+router.post("/", wrapMulter(requestContext, uploadSingle("file")), createCompany);
 
 /**
  * @swagger
@@ -535,5 +549,125 @@ router.delete("/:id", deactivateCompany);
  *                   example: "Access denied"
  */
 router.get("/:id/stats", getCompanyStats);
+
+/**
+ * @swagger
+ * /admin/companies/{id}/logo:
+ *   patch:
+ *     summary: Upload or update company logo
+ *     description: Upload a new logo for the company. Logo must be an image file. Send empty request (no file) to delete current logo.
+ *     tags: [Admin - Companies]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Company ID
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Logo image file (optional - omit to delete current logo)
+ *     responses:
+ *       200:
+ *         description: Logo uploaded/deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Logo updated successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     name:
+ *                       type: string
+ *                       example: "Acme Corp"
+ *                     logo:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "okr-kpi-system/companies/logos/1234567890"
+ *                       description: Cloudinary public_id or null
+ *       400:
+ *         description: Invalid company ID
+ *       404:
+ *         description: Company not found
+ *       401:
+ *         description: Unauthenticated
+ *       403:
+ *         description: Forbidden
+ */
+router.patch("/:id/logo", wrapMulter(requestContext, uploadSingle("file")), uploadLogo);
+
+/**
+ * @swagger
+ * /admin/companies/{id}/logo:
+ *   delete:
+ *     summary: Delete company logo
+ *     description: Remove the logo from a company.
+ *     tags: [Admin - Companies]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Company ID
+ *     responses:
+ *       200:
+ *         description: Logo deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Logo deleted successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     name:
+ *                       type: string
+ *                       example: "Acme Corp"
+ *                     logo:
+ *                       type: string
+ *                       nullable: true
+ *                       example: null
+ *       400:
+ *         description: Invalid company ID
+ *       404:
+ *         description: Company not found
+ *       401:
+ *         description: Unauthenticated
+ *       403:
+ *         description: Forbidden
+ */
+router.delete("/:id/logo", deleteLogo);
 
 export default router;
