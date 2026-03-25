@@ -275,10 +275,6 @@ model Notifications {
 
   company   Companies @relation(fields: [company_id], references: [id])
   recipient Users     @relation(fields: [recipient_id], references: [id])
-<<<<<<< HEAD
-}
-=======
 
   @@index([company_id])
 }
->>>>>>> f6629f3879fb3c858303c4e2d91f11ce78c98e6d

@@ -34,6 +34,12 @@ const swaggerOptions = {
       description: "API docs for OKR-KPI System Backend",
     },
     servers: swaggerServers,
+    tags: [
+      {
+        name: "Admin - Company Admins",
+        description: "Manage company-level admin accounts (AdminCompany)",
+      },
+    ],
     components: {
       securitySchemes: {
         cookieAuth: {
@@ -53,6 +59,8 @@ const swaggerOptions = {
       "/admin/companies/{company_id}/admins": {
         get: {
           summary: "Lấy danh sách AdminCompany của một công ty",
+          tags: ["Admin - Company Admins"],
+          security: [{ cookieAuth: [] }],
           parameters: [
             { name: "company_id", in: "path", required: true, schema: { type: "integer" } },
             { name: "is_active", in: "query", schema: { type: "boolean" } },
@@ -66,6 +74,8 @@ const swaggerOptions = {
         },
         post: {
           summary: "Tạo tài khoản AdminCompany mới",
+          tags: ["Admin - Company Admins"],
+          security: [{ cookieAuth: [] }],
           requestBody: {
             required: true,
             content: {
@@ -93,6 +103,8 @@ const swaggerOptions = {
       "/admin/companies/{company_id}/admins/{admin_id}": {
         put: {
           summary: "Cập nhật tài khoản AdminCompany",
+          tags: ["Admin - Company Admins"],
+          security: [{ cookieAuth: [] }],
           requestBody: {
             content: {
               "application/json": {
@@ -117,6 +129,8 @@ const swaggerOptions = {
         },
         delete: {
           summary: "Xoá tài khoản AdminCompany (soft delete)",
+          tags: ["Admin - Company Admins"],
+          security: [{ cookieAuth: [] }],
           responses: {
             200: { description: "Xoá thành công (is_active = false)" },
             404: { description: "ADMIN_NOT_FOUND" },
@@ -130,7 +144,9 @@ const swaggerOptions = {
 };
 
 
-const swaggerSpec = swaggerJsdoc(swaggerOptions);
+// IMPORTANT: swaggerSpec must be created AFTER we finish mutating swaggerOptions.definition.paths
+// (the file currently overrides paths later for AdminCompany documentation).
+let swaggerSpec;
 
 export const setupSwagger = (app) => {
   const swaggerUiOptions = {
@@ -158,6 +174,8 @@ swaggerOptions.definition.paths = {
   "/admin/companies/{company_id}/admins": {
     get: {
       summary: "Lấy danh sách AdminCompany của một công ty",
+      tags: ["Admin - Company Admins"],
+      security: [{ cookieAuth: [] }],
       parameters: [
         {
           name: "company_id",
@@ -213,6 +231,8 @@ swaggerOptions.definition.paths = {
     },
     post: {
       summary: "Tạo tài khoản AdminCompany mới",
+      tags: ["Admin - Company Admins"],
+      security: [{ cookieAuth: [] }],
       requestBody: {
         required: true,
         content: {
@@ -240,6 +260,8 @@ swaggerOptions.definition.paths = {
   "/admin/companies/{company_id}/admins/{admin_id}": {
     put: {
       summary: "Cập nhật tài khoản AdminCompany",
+      tags: ["Admin - Company Admins"],
+      security: [{ cookieAuth: [] }],
       requestBody: {
         content: {
           "application/json": {
@@ -264,6 +286,8 @@ swaggerOptions.definition.paths = {
     },
     delete: {
       summary: "Xoá tài khoản AdminCompany (soft delete)",
+      tags: ["Admin - Company Admins"],
+      security: [{ cookieAuth: [] }],
       responses: {
         200: { description: "Xoá thành công (is_active = false)" },
         404: { description: "ADMIN_NOT_FOUND" },
@@ -271,4 +295,82 @@ swaggerOptions.definition.paths = {
       },
     },
   },
+  "/objectives/{objectiveId}/key-results/generate": {
+    post: {
+      summary: "Generate key results for an objective",
+      tags: ["OKR AI"],
+      security: [{ cookieAuth: [] }],
+      parameters: [
+        {
+          name: "objectiveId",
+          in: "path",
+          required: true,
+          schema: { type: "integer" },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                count: { type: "integer", minimum: 1, maximum: 10 },
+                language: { type: "string", enum: ["vi", "en"] },
+                constraints: {
+                  type: "object",
+                  properties: {
+                    due_date: { type: "string", format: "date" },
+                    unit: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Generated key results successfully",
+        },
+        401: { description: "Unauthorized" },
+      },
+    },
+  },
+  "/okr-ai/generate-test": {
+    post: {
+      summary: "Generate test key results (no auth, no objectiveId)",
+      tags: ["OKR AI"],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                objective: { type: "string", minLength: 8, maxLength: 300 },
+                count: { type: "integer", minimum: 1, maximum: 10 },
+                language: { type: "string", enum: ["vi", "en"] },
+                constraints: {
+                  type: "object",
+                  properties: {
+                    due_date: { type: "string", format: "date" },
+                    unit: { type: "string" },
+                  },
+                },
+              },
+              required: ["objective"],
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Generated key results successfully" },
+        400: { description: "Invalid input" },
+      },
+    },
+  },
 };
+
+// Build the final swagger specification after paths are fully defined.
+swaggerSpec = swaggerJsdoc(swaggerOptions);
