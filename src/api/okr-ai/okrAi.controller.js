@@ -13,8 +13,7 @@ export const generateKeyResultsForObjective = async (req, res) => {
 
   const result = await okrAiService.generateKeyResultsForObjective({
     objectiveId: parsedObjectiveId,
-    companyId: req.user?.company_id,
-    userId: req.user?.id,
+    user: req.user,
     input,
   });
 

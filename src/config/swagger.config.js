@@ -61,7 +61,7 @@ const swaggerOptions = {
 
 // IMPORTANT: swaggerSpec must be created AFTER we finish mutating swaggerOptions.definition.paths
 // (the file currently overrides paths later for AdminCompany documentation).
-let swaggerSpec;
+let swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 export const setupSwagger = (app) => {
   const swaggerUiOptions = {

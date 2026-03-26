@@ -18,7 +18,6 @@ const prisma = basePrisma.$extends({
         const store = requestContext.getStore();
         const company_id = store?.company_id || '';
         const role = store?.role || ''; 
-        console.log(`Setting context for company_id: ${company_id}, role: ${role}`);
 
         const [_, result] = await basePrisma.$transaction([
           basePrisma.$executeRawUnsafe(`

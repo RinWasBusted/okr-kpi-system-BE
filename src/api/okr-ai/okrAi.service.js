@@ -2,6 +2,9 @@ import prisma from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
 import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
+import { canViewObjective } from "../../utils/okr.js";
+import { getUnitPath } from "../../utils/path.js";
+import { UserRole } from "@prisma/client";
 
 const AI_ENV = {
   provider: process.env.AI_PROVIDER || "openai",
@@ -30,7 +33,7 @@ const LlmResponseSchema = z.object({
   overall_feedback: z.string().min(1).max(900),
 });
 
-function buildPrompt({ objective, cycle, unit, existingKeyResults, input }) {
+function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObjectives, input }) {
   const lang = input.language === "en" ? "English" : "Vietnamese";
   const dueDateHint = input.constraints?.due_date || cycle?.end_date || null;
   const unitHint = input.constraints?.unit || null;
@@ -58,6 +61,12 @@ function buildPrompt({ objective, cycle, unit, existingKeyResults, input }) {
       unit: kr.unit,
       target_value: kr.target_value,
       due_date: kr.due_date,
+    })),
+    related_objectives: (visibleObjectives || []).map((obj) => ({
+      id: obj.id,
+      title: obj.title,
+      status: obj.status,
+      progress_percentage: obj.progress_percentage,
     })),
     generation_hints: {
       count: input.count,
@@ -210,11 +219,51 @@ function normalizeWeights(suggestions) {
   return suggestions.map((s) => ({ ...s, weight: Math.round((s.weight / sum) * 1000) / 1000 }));
 }
 
-export async function generateKeyResultsForObjective({ objectiveId, companyId, input }) {
-  if (!companyId) throw new AppError("Unauthorized", 401);
+// Get list of objective IDs visible to user (for context filtering)
+const getVisibleObjectiveIdsForUser = async (user) => {
+  if (user.role === UserRole.ADMIN_COMPANY) return null;
+
+  const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
+
+  if (!userPath) {
+    const rows = await prisma.$queryRaw`
+      SELECT id
+      FROM "Objectives"
+      WHERE (
+          visibility = 'PUBLIC'
+          OR (visibility = 'PRIVATE' AND owner_id = ${user.id})
+        )
+    `;
+    return rows.map((row) => row.id);
+  }
+
+  const rows = await prisma.$queryRaw`
+    SELECT id
+    FROM "Objectives"
+    WHERE (
+        visibility = 'PUBLIC'
+        OR (
+            visibility = 'INTERNAL'
+            AND (access_path <@ ${userPath}::ltree OR access_path @> ${userPath}::ltree)
+        )
+        OR (
+            visibility = 'PRIVATE'
+            AND (
+                owner_id = ${user.id}
+                OR (access_path <@ ${userPath}::ltree AND access_path <> ${userPath}::ltree)
+            )
+        )
+      )
+  `;
+
+  return rows.map((row) => row.id);
+};
+
+export async function generateKeyResultsForObjective({ objectiveId, user, input }) {
+  if (!user) throw new AppError("Unauthorized", 401);
 
   const objective = await prisma.objectives.findFirst({
-    where: { id: objectiveId, company_id: companyId },
+    where: { id: objectiveId },
     select: {
       id: true,
       title: true,
@@ -223,29 +272,62 @@ export async function generateKeyResultsForObjective({ objectiveId, companyId, i
       progress_percentage: true,
       cycle_id: true,
       unit_id: true,
+      owner_id: true,
     },
   });
 
   if (!objective) throw new AppError("Objective not found", 404);
 
-  const [cycle, unit, existingKeyResults] = await Promise.all([
+  // Check if user can view this objective
+  const canView = await canViewObjective(user, objective);
+  if (!canView) {
+    throw new AppError("You do not have permission to view this objective", 403);
+  }
+
+  // Get visible objective IDs for context filtering
+  const visibleObjectiveIds = await getVisibleObjectiveIdsForUser(user);
+
+  const [cycle, unit, existingKeyResults, allVisibleObjectives] = await Promise.all([
     prisma.cycles.findFirst({
-      where: { id: objective.cycle_id, company_id: companyId },
+      where: { id: objective.cycle_id },
       select: { id: true, name: true, start_date: true, end_date: true },
     }),
     prisma.units.findFirst({
-      where: { id: objective.unit_id, company_id: companyId },
+      where: { id: objective.unit_id },
       select: { id: true, name: true },
     }),
     prisma.keyResults.findMany({
-      where: { objective_id: objective.id, company_id: companyId },
+      where: { objective_id: objective.id },
       select: { id: true, title: true, unit: true, target_value: true, due_date: true },
       orderBy: { id: "asc" },
       take: 50,
     }),
+    // Fetch other visible objectives for context (filtered by user permissions)
+    (async () => {
+      const where = { id: { not: objectiveId } };
+      if (visibleObjectiveIds) {
+        if (visibleObjectiveIds.length === 0) return [];
+        where.id = { in: [...visibleObjectiveIds, objectiveId] };
+      }
+      const objectives = await prisma.objectives.findMany({
+        where,
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          visibility: true,
+          progress_percentage: true,
+          unit_id: true,
+          owner_id: true,
+        },
+        orderBy: { id: "asc" },
+        take: 100,
+      });
+      return objectives.filter((o) => o.id !== objectiveId);
+    })(),
   ]);
 
-  const prompt = buildPrompt({ objective, cycle, unit, existingKeyResults, input });
+  const prompt = buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObjectives: allVisibleObjectives, input });
 
   // Try once; if the model returns invalid shape, retry with a stricter instruction.
   let parsed;
@@ -273,7 +355,7 @@ export async function generateKeyResultsForObjective({ objectiveId, companyId, i
 }
 
 export async function generateTestKeyResults({ input }) {
-  // Minimal context for test: no objectiveId/companyId/cycle/unit.
+  // Minimal context for test: no objectiveId/cycle/unit.
   const objective = {
     id: 0,
     title: input.objective,
