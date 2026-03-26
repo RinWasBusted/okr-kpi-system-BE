@@ -4,7 +4,7 @@ import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
 import { canViewObjective } from "../../utils/okr.js";
 import { getUnitPath } from "../../utils/path.js";
-import { UserRole } from "@prisma/client";
+import { UserRole, AIPlan } from "@prisma/client";
 
 const AI_ENV = {
   provider: process.env.AI_PROVIDER || "openai",
@@ -13,6 +13,7 @@ const AI_ENV = {
   openaiModel: process.env.OPENAI_MODEL || "gpt-4.1-mini",
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+  payAsYouGoPricePer1M: parseFloat(process.env.AI_PAY_AS_YOU_GO_PRICE_PER_1M || "0.5"),
 };
 
 const LlmKeyResultSchema = z.object({
@@ -32,6 +33,20 @@ const LlmResponseSchema = z.object({
   suggestions: z.array(LlmKeyResultSchema).min(1).max(10),
   overall_feedback: z.string().min(1).max(900),
 });
+
+// function logTokenUsage(provider, model, usage = {}) {
+//   const inputTokens = usage.input_tokens ?? usage.prompt_tokens ?? usage.promptTokenCount ?? null;
+//   const outputTokens = usage.output_tokens ?? usage.completion_tokens ?? usage.candidatesTokenCount ?? null;
+//   const totalTokens = usage.total_tokens ?? usage.totalTokenCount ?? null;
+
+//   console.log("[AI Token Usage]", {
+//     provider,
+//     model,
+//     input_tokens: inputTokens,
+//     output_tokens: outputTokens,
+//     total_tokens: totalTokens,
+//   });
+// }
 
 function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObjectives, input }) {
   const lang = input.language === "en" ? "English" : "Vietnamese";
@@ -153,7 +168,15 @@ async function callOpenAiJson(prompt) {
   } catch {
     throw new AppError("AI provider returned non-JSON content", 502);
   }
-  return json;
+
+  // Extract usage info from OpenAI response
+  const usage = {
+    input_tokens: data?.usage?.prompt_tokens ?? 0,
+    output_tokens: data?.usage?.completion_tokens ?? 0,
+    total_tokens: data?.usage?.total_tokens ?? 0,
+  };
+
+  return { json, usage };
 }
 
 async function callGeminiJson(prompt) {
@@ -184,7 +207,16 @@ async function callGeminiJson(prompt) {
       });
 
       const text = typeof resp?.text === "string" ? resp.text : "";
-      return parseJsonFromText(text, "Gemini");
+      const json = parseJsonFromText(text, "Gemini");
+
+      // Extract usage info from Gemini response (if available)
+      const usage = {
+        input_tokens: resp?.usageMetadata?.promptTokenCount ?? 0,
+        output_tokens: resp?.usageMetadata?.candidatesTokenCount ?? 0,
+        total_tokens: resp?.usageMetadata?.totalTokenCount ?? 0,
+      };
+
+      return { json, usage };
     } catch (err) {
       const status = err?.status ?? err?.code ?? null;
       const message = String(err?.message ?? "");
@@ -211,6 +243,10 @@ async function callLlm(prompt) {
   if (AI_ENV.provider === "openai") return callOpenAiJson(prompt);
   if (AI_ENV.provider === "gemini") return callGeminiJson(prompt);
   throw new AppError(`Unsupported AI_PROVIDER: ${AI_ENV.provider}`, 500);
+}
+
+function calculateCreditCost(totalTokens) {
+  return (totalTokens / 1000000) * AI_ENV.payAsYouGoPricePer1M;
 }
 
 function normalizeWeights(suggestions) {
@@ -261,6 +297,26 @@ const getVisibleObjectiveIdsForUser = async (user) => {
 
 export async function generateKeyResultsForObjective({ objectiveId, user, input }) {
   if (!user) throw new AppError("Unauthorized", 401);
+
+  // Get company for AI usage tracking
+  if (!user.company_id) {
+    throw new AppError("Company not found", 404);
+  }
+
+  const company = await prisma.companies.findUnique({
+    where: { id: user.company_id },
+  });
+
+  if (!company) {
+    throw new AppError("Company not found", 404);
+  }
+
+  // Check AI plan and usage limits
+  if (company.ai_plan === AIPlan.FREE || company.ai_plan === AIPlan.SUBSCRIPTION) {
+    if (company.token_usage >= company.usage_limit) {
+      throw new AppError("AI usage limit exceeded. Please upgrade your plan.", 403);
+    }
+  }
 
   const objective = await prisma.objectives.findFirst({
     where: { id: objectiveId },
@@ -329,29 +385,97 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
 
   const prompt = buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObjectives: allVisibleObjectives, input });
 
-  // Try once; if the model returns invalid shape, retry with a stricter instruction.
-  let parsed;
+  // Create AI usage log with PENDING status
+  const aiUsageLog = await prisma.aIUsageLogs.create({
+    data: {
+      company_id: company.id,
+      user_id: user.id,
+      feature_name: "Suggest Key Results For Objective",
+      model_name: AI_ENV.provider === "openai" ? AI_ENV.openaiModel : AI_ENV.geminiModel,
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      credit_cost: 0,
+      status: "PENDING",
+    },
+  });
+
+  let result;
+  let usage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+
   try {
-    parsed = LlmResponseSchema.parse(await callLlm(prompt));
-  } catch (e) {
-    const retryPrompt = `${prompt}\n\nIMPORTANT: Output must match the JSON shape exactly. Do not add extra keys.`;
-    parsed = LlmResponseSchema.parse(await callLlm(retryPrompt));
+    // Try once; if the model returns invalid shape, retry with a stricter instruction.
+    let parsed;
+    let llmResult;
+    try {
+      llmResult = await callLlm(prompt);
+      parsed = LlmResponseSchema.parse(llmResult.json);
+    } catch (e) {
+      const retryPrompt = `${prompt}\n\nIMPORTANT: Output must match the JSON shape exactly. Do not add extra keys.`;
+      llmResult = await callLlm(retryPrompt);
+      parsed = LlmResponseSchema.parse(llmResult.json);
+    }
+
+    // Get usage from LLM result
+    usage = llmResult.usage || usage;
+
+    const suggestions = normalizeWeights(parsed.suggestions).map((s) => ({
+      title: s.title,
+      target_value: s.target_value,
+      unit: s.unit,
+      weight: s.weight,
+      due_date: s.due_date,
+      evaluation: s.evaluation,
+    }));
+
+    result = {
+      objective: { id: objective.id, title: objective.title },
+      suggestions,
+      overall_feedback: parsed.overall_feedback,
+    };
+
+    // Calculate credit cost for PAY_AS_YOU_GO plan
+    const creditCost = company.ai_plan === AIPlan.PAY_AS_YOU_GO
+      ? calculateCreditCost(usage.total_tokens)
+      : 0;
+
+    // Update AI usage log with SUCCESS status
+    await prisma.aIUsageLogs.update({
+      where: { id: aiUsageLog.id },
+      data: {
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        total_tokens: usage.total_tokens,
+        credit_cost: creditCost,
+        status: "SUCCESS",
+      },
+    });
+
+    // Update company token usage and credit cost
+    const updateData = {
+      token_usage: company.token_usage + usage.total_tokens,
+    };
+
+    if (company.ai_plan === AIPlan.PAY_AS_YOU_GO) {
+      updateData.credit_cost = company.credit_cost + creditCost;
+    }
+
+    await prisma.companies.update({
+      where: { id: company.id },
+      data: updateData,
+    });
+
+    return result;
+  } catch (error) {
+    // Update AI usage log with FAILED status
+    await prisma.aIUsageLogs.update({
+      where: { id: aiUsageLog.id },
+      data: {
+        status: "FAILED",
+      },
+    });
+    throw error;
   }
-
-  const suggestions = normalizeWeights(parsed.suggestions).map((s) => ({
-    title: s.title,
-    target_value: s.target_value,
-    unit: s.unit,
-    weight: s.weight,
-    due_date: s.due_date,
-    evaluation: s.evaluation,
-  }));
-
-  return {
-    objective: { id: objective.id, title: objective.title },
-    suggestions,
-    overall_feedback: parsed.overall_feedback,
-  };
 }
 
 export async function generateTestKeyResults({ input }) {
@@ -373,10 +497,12 @@ export async function generateTestKeyResults({ input }) {
   // Try once; if the model returns invalid shape, retry with a stricter instruction.
   let parsed;
   try {
-    parsed = LlmResponseSchema.parse(await callLlm(prompt));
+    const llmResult = await callLlm(prompt);
+    parsed = LlmResponseSchema.parse(llmResult.json);
   } catch (e) {
     const retryPrompt = `${prompt}\n\nIMPORTANT: Output must match the JSON shape exactly. Do not add extra keys.`;
-    parsed = LlmResponseSchema.parse(await callLlm(retryPrompt));
+    const llmResult = await callLlm(retryPrompt);
+    parsed = LlmResponseSchema.parse(llmResult.json);
   }
 
   const suggestions = normalizeWeights(parsed.suggestions).map((s) => ({

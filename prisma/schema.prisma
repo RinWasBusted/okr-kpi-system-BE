@@ -12,12 +12,23 @@ datasource db {
   provider = "postgresql"
 }
 
+
+enum AIPlan {
+  FREE
+  SUBSCRIPTION
+  PAY_AS_YOU_GO
+}
+
 model Companies {
   id         Int      @id @default(autoincrement())
   name       String
   slug       String   @unique
   logo       String?
   is_active  Boolean  @default(true)
+  ai_plan    AIPlan   @default(FREE)
+  token_usage Int      @default(0)
+  credit_cost Float    @default(0)
+  usage_limit Int     @default(10000) 
   created_at DateTime @default(now())
 
   units            Units[]
@@ -32,6 +43,7 @@ model Companies {
   feedbacks        Feedbacks[]
   evaluations      Evaluations[]
   notifications    Notifications[]
+  ai_usage_logs    AIUsageLogs[]
 }
 
 model Units {
@@ -87,6 +99,7 @@ model Users {
   feedbacks          Feedbacks[]
   evaluations        Evaluations[] @relation("EmployeeEvaluations")
   notifications      Notifications[]
+  ai_usage_logs      AIUsageLogs[]
 
   @@unique([email, company_id])
   @@index([company_id])
@@ -288,6 +301,35 @@ model Notifications {
 
   company   Companies @relation(fields: [company_id], references: [id])
   recipient Users     @relation(fields: [recipient_id], references: [id])
+
+  @@index([company_id])
+}
+
+enum AIUsageStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+  BILLED
+  EXCLUDED
+}
+
+model AIUsageLogs {
+  id        Int      @id @default(autoincrement())
+  company_id Int?
+  user_id   Int?
+  feature_name String
+  model_name String
+  input_tokens Int
+  output_tokens Int
+  total_tokens Int
+  request_id String?
+  credit_cost Float
+  status      AIUsageStatus @default(PENDING)
+  created_at DateTime @default(now())
+
+  company   Companies? @relation(fields: [company_id], references: [id])
+  user      Users?     @relation(fields: [user_id], references: [id])
 
   @@index([company_id])
 }

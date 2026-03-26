@@ -8,6 +8,7 @@ import apiRouter from './api';
 import errorHandler from './middlewares/errorHandler';
 import responseHandler from './middlewares/responseHandler';
 import { setupSwagger } from './config/swagger.config.js';
+import resetTokenUsageJob from './jobs/resetTokenUsage.job.js';
 
 const createApp = async () => {
   const app = express();
@@ -53,6 +54,9 @@ const createApp = async () => {
   } catch (error) {
       console.error('Failed to connect to Redis', error);
   }
+
+  // Initialize scheduled jobs
+  resetTokenUsageJob();
   
   return app;
 };
