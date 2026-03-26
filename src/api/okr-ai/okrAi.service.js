@@ -390,7 +390,7 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
     data: {
       company_id: company.id,
       user_id: user.id,
-      feature_name: "generateKeyResultsForObjective",
+      feature_name: "Suggest Key Results For Objective",
       model_name: AI_ENV.provider === "openai" ? AI_ENV.openaiModel : AI_ENV.geminiModel,
       input_tokens: 0,
       output_tokens: 0,
