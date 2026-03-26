@@ -34,6 +34,12 @@ const swaggerOptions = {
       description: "API docs for OKR-KPI System Backend",
     },
     servers: swaggerServers,
+    tags: [
+      {
+        name: "Admin - Company Admins",
+        description: "Manage company-level admin accounts (AdminCompany)",
+      },
+    ],
     components: {
       securitySchemes: {
         cookieAuth: {
@@ -53,7 +59,9 @@ const swaggerOptions = {
 };
 
 
-const swaggerSpec = swaggerJsdoc(swaggerOptions);
+// IMPORTANT: swaggerSpec must be created AFTER we finish mutating swaggerOptions.definition.paths
+// (the file currently overrides paths later for AdminCompany documentation).
+let swaggerSpec;
 
 export const setupSwagger = (app) => {
   const swaggerUiOptions = {
