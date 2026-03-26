@@ -33,6 +33,20 @@ const LlmResponseSchema = z.object({
   overall_feedback: z.string().min(1).max(900),
 });
 
+// function logTokenUsage(provider, model, usage = {}) {
+//   const inputTokens = usage.input_tokens ?? usage.prompt_tokens ?? usage.promptTokenCount ?? null;
+//   const outputTokens = usage.output_tokens ?? usage.completion_tokens ?? usage.candidatesTokenCount ?? null;
+//   const totalTokens = usage.total_tokens ?? usage.totalTokenCount ?? null;
+
+//   console.log("[AI Token Usage]", {
+//     provider,
+//     model,
+//     input_tokens: inputTokens,
+//     output_tokens: outputTokens,
+//     total_tokens: totalTokens,
+//   });
+// }
+
 function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObjectives, input }) {
   const lang = input.language === "en" ? "English" : "Vietnamese";
   const dueDateHint = input.constraints?.due_date || cycle?.end_date || null;
