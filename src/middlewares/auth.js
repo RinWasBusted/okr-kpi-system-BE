@@ -1,5 +1,5 @@
-import { verifyToken } from '../utils/jwt';
-import requestContext from '../utils/context';
+import { verifyToken } from '../utils/jwt.js';
+import requestContext from '../utils/context.js';
 
 export const authenticate = (req, res, next) => {
     const accessToken = req.cookies.accessToken;

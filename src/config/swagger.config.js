@@ -64,6 +64,12 @@ const swaggerOptions = {
 let swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 export const setupSwagger = (app) => {
+  // Disable Swagger in production
+  if (process.env.NODE_ENV === 'production') {
+    console.log('Swagger API docs disabled in production');
+    return;
+  }
+
   const swaggerUiOptions = {
     swaggerOptions: {
       withCredentials: true,

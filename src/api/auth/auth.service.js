@@ -1,9 +1,9 @@
-import prisma from '../../utils/prisma';
-import { generateToken } from '../../utils/jwt';
-import { hashPassword, comparePassword } from '../../utils/bcrypt';
-import AppError from '../../utils/appError';
-import client from '../../utils/redis';
-import requestContext from '../../utils/context';
+import prisma from '../../utils/prisma.js';
+import { generateToken } from '../../utils/jwt.js';
+import { hashPassword, comparePassword } from '../../utils/bcrypt.js';
+import AppError from '../../utils/appError.js';
+import client from '../../utils/redis.js';
+import requestContext from '../../utils/context.js';
 
 export const loginService = async (email, password, company_slug = '') => {
     let company_id = null;

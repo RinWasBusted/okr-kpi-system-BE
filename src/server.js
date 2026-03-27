@@ -1,12 +1,12 @@
 import express, { request } from 'express';
-import prisma from './utils/prisma';
+import prisma from './utils/prisma.js';
 import { connectRedis } from './utils/redis.js';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import { corsOptions } from './utils/cors.js';
-import apiRouter from './api';
-import errorHandler from './middlewares/errorHandler';
-import responseHandler from './middlewares/responseHandler';
+import apiRouter from './api/index.js';
+import errorHandler from './middlewares/errorHandler.js';
+import responseHandler from './middlewares/responseHandler.js';
 import { setupSwagger } from './config/swagger.config.js';
 import resetTokenUsageJob from './jobs/resetTokenUsage.job.js';
 

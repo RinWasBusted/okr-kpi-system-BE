@@ -5,6 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import { canViewObjective } from "../../utils/okr.js";
 import { getUnitPath } from "../../utils/path.js";
 import { UserRole, AIPlan } from "@prisma/client";
+import 'dotenv/config'
 
 const AI_ENV = {
   provider: process.env.AI_PROVIDER || "openai",
@@ -13,7 +14,7 @@ const AI_ENV = {
   openaiModel: process.env.OPENAI_MODEL || "gpt-4.1-mini",
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-  payAsYouGoPricePer1M: parseFloat(process.env.AI_PAY_AS_YOU_GO_PRICE_PER_1M || "0.5"),
+  payAsYouGoPricePer1M: parseFloat(process.env.AI_PAY_AS_YOU_GO_PRICE_PER_1M_TOKENS || "0.5"),
 };
 
 const LlmKeyResultSchema = z.object({
