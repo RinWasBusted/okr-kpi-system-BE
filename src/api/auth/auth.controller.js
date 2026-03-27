@@ -1,7 +1,7 @@
-import { loginSchema, changePasswordSchema } from "../../schemas/auth.schema";
+import { loginSchema, changePasswordSchema } from "../../schemas/auth.schema.js";
 import client from "../../utils/redis.js";
-import * as authService from "./auth.service";
-import AppError from "../../utils/appError";
+import * as authService from "./auth.service.js";
+import AppError from "../../utils/appError.js";
 
 export const login = async (req, res) => {
     try {

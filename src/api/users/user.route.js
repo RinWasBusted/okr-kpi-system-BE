@@ -3,9 +3,15 @@ import {
     getUsers,
     getUserById,
     createUser,
-    updateUser
+    updateUser,
+    uploadAvatar,
+    deleteAvatar,
+    isOwnerOrAdmin
 } from "./user.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.js";
+import { uploadSingle } from "../../utils/multer.js";
+import { wrapMulter } from "../../utils/wrapMulter.js";
+import requestContext from "../../utils/context.js";
 
 const router = express.Router();
 
@@ -287,7 +293,93 @@ router.get("/", getUsers);
  *                       example: "User not found"
  */
 router.get("/:id", getUserById);
- 
+
+/**
+ * @swagger
+ * /users/{id}/avatar:
+ *   patch:
+ *     summary: Update user avatar
+ *     description: Upload or update user avatar. Can only be done by the user themselves or ADMIN_COMPANY. If no file is sent, the avatar will be deleted.
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: User ID
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *                 description: Avatar image file (jpg, png, gif)
+ *     responses:
+ *       200:
+ *         description: Avatar updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Avatar updated successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       type: object
+ *       400:
+ *         description: Invalid user ID
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Not owner or admin
+ *       404:
+ *         description: User not found
+ */
+router.patch("/:id/avatar", authorize("ADMIN_COMPANY", "EMPLOYEE"), isOwnerOrAdmin, wrapMulter(requestContext, uploadSingle("avatar")), uploadAvatar);
+
+/**
+ * @swagger
+ * /users/{id}/avatar:
+ *   delete:
+ *     summary: Delete user avatar
+ *     description: Delete user avatar. Can only be done by the user themselves or ADMIN_COMPANY.
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: Avatar deleted successfully
+ *       400:
+ *         description: Invalid user ID
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: User not found
+ */
+router.delete("/:id/avatar", authorize("ADMIN_COMPANY", "EMPLOYEE"), isOwnerOrAdmin, deleteAvatar);
+
 /**
  * @swagger
  * /users:
@@ -298,7 +390,7 @@ router.get("/:id", getUserById);
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             required: [full_name, email, password]
@@ -319,6 +411,10 @@ router.get("/:id", getUserById);
  *                 nullable: true
  *                 example: 2
  *                 description: Assign to a unit. Omit or set null to leave unassigned.
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *                 description: Optional avatar image file
  *     responses:
  *       201:
  *         description: User created successfully
@@ -355,7 +451,7 @@ router.get("/:id", getUserById);
  *                         avatar_url:
  *                           type: string
  *                           nullable: true
- *                           example: null
+ *                           example: "okr-kpi-system/users/avatars/image-123"
  *                         unit:
  *                           type: object
  *                           nullable: true
@@ -469,7 +565,7 @@ router.get("/:id", getUserById);
  *                       type: string
  *                       example: "Password must be at least 8 characters"
  */
-router.post("/", createUser);
+router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createUser);
  
 /**
  * @swagger

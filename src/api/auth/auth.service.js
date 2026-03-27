@@ -1,9 +1,9 @@
-import prisma from '../../utils/prisma';
-import { generateToken } from '../../utils/jwt';
-import { hashPassword, comparePassword } from '../../utils/bcrypt';
-import AppError from '../../utils/appError';
-import client from '../../utils/redis';
-import requestContext from '../../utils/context';
+import prisma from '../../utils/prisma.js';
+import { generateToken } from '../../utils/jwt.js';
+import { hashPassword, comparePassword } from '../../utils/bcrypt.js';
+import AppError from '../../utils/appError.js';
+import client from '../../utils/redis.js';
+import requestContext from '../../utils/context.js';
 
 export const loginService = async (email, password, company_slug = '') => {
     let company_id = null;
@@ -45,6 +45,7 @@ export const loginService = async (email, password, company_slug = '') => {
 
         return { user: { id: user.id, full_name: user.full_name, avatar_url: user.avatar_url, email: user.email, job_title: user.job_title, role: user.role, company_id: user.company_id, unit_id: user.unit_id }, accessToken, refreshToken };
     } catch (error) {
+        console.log(error);
         if (error instanceof AppError) {
             throw error;
         }
@@ -82,7 +83,12 @@ export const getCurrentUser = async (userId) => {
                 avatar_url: true,
                 role: true,
                 company_id: true,
-                unit_id: true
+                unit_id: true,
+                company: {
+                    select: {
+                        slug: true
+                    }
+                }
             }
         });
 
@@ -90,7 +96,11 @@ export const getCurrentUser = async (userId) => {
             throw new AppError("User not found", 404);
         }
 
-        return user;
+        return {
+            ...user,
+            company_slug: user.company?.slug || null,
+            company: undefined
+        };
     } catch (error) {
         throw new AppError("Error occurred while fetching user", 500);
     }

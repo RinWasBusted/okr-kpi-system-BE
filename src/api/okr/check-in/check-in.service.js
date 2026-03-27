@@ -6,7 +6,7 @@ import {
     canViewObjective,
     ensureCycleUnlocked,
     recalculateObjectiveProgress,
-} from "../okr.utils.js";
+} from "../../../utils/okr.js";
 
 const checkInSelect = {
     id: true,

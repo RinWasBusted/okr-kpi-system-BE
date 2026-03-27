@@ -67,15 +67,8 @@ const getUnitRowById = async (tx, unitId) => {
 
 export const listUnits = async ({ page, per_page }) => {
     return withContext(async (tx) => {
-        const offset = (page - 1) * per_page;
-
-        const totalRows = await tx.$queryRaw`
-            SELECT COUNT(*)::int AS total
-            FROM "Units"
-        `;
-        const total = totalRows[0]?.total ?? 0;
-
-        const units = await tx.$queryRaw`
+        // Get all units (no pagination for tree building)
+        const allUnits = await tx.$queryRaw`
             SELECT
                 u.id,
                 u.name,
@@ -97,10 +90,41 @@ export const listUnits = async ({ page, per_page }) => {
                 m.id,
                 m.full_name
             ORDER BY u.id ASC
-            OFFSET ${offset} LIMIT ${per_page}
         `;
 
-        return { total, data: units.map(formatUnitRow) };
+        // Build tree structure
+        const unitsMap = new Map();
+        const formattedUnits = allUnits.map((unit) => ({
+            ...formatUnitRow(unit),
+            sub_units: [],
+        }));
+
+        // Create map for quick lookup
+        formattedUnits.forEach((unit) => {
+            unitsMap.set(unit.id, unit);
+        });
+
+        // Build parent-child relationships
+        const rootUnits = [];
+        formattedUnits.forEach((unit) => {
+            if (unit.parent_id === null) {
+                rootUnits.push(unit);
+            } else {
+                const parent = unitsMap.get(unit.parent_id);
+                if (parent) {
+                    parent.sub_units.push(unit);
+                }
+            }
+        });
+
+        // Apply pagination to root units
+        const offset = (page - 1) * per_page;
+        const paginatedRoots = rootUnits.slice(offset, offset + per_page);
+
+        return {
+            total: rootUnits.length,
+            data: paginatedRoots,
+        };
     });
 };
 
@@ -241,5 +265,63 @@ export const deleteUnit = async (unitId) => {
         }
 
         await tx.$executeRaw`DELETE FROM "Units" WHERE id = ${unitId}`;
+    });
+};
+
+// ─── Detail ───────────────────────────────────────────────────────────────────
+
+export const getUnitDetail = async (unitId) => {
+    return withContext(async (tx) => {
+        const rows = await tx.$queryRaw`
+            SELECT
+                u.id,
+                u.name,
+                u.parent_id,
+                u.created_at,
+                m.id AS manager_id,
+                m.full_name AS manager_full_name,
+                m.email AS manager_email,
+                m.avatar_url,
+                m.job_title
+            FROM "Units" u
+            LEFT JOIN "Users" m ON m.id = u.manager_id
+            WHERE u.id = ${unitId}
+        `;
+
+        if (rows.length === 0) throw new AppError("Unit not found", 404);
+        const unit = rows[0];
+
+        // Get total KPI assignments for this unit
+        const kpiResult = await tx.$queryRaw`
+            SELECT COUNT(*) AS total
+            FROM "KPIAssignments"
+            WHERE unit_id = ${unitId} AND deleted_at IS NULL
+        `;
+        const total_kpi = Number(kpiResult[0]?.total ?? 0);
+
+        // Get total objectives for this unit
+        const objectiveResult = await tx.$queryRaw`
+            SELECT COUNT(*) AS total
+            FROM "Objectives"
+            WHERE unit_id = ${unitId} AND deleted_at IS NULL
+        `;
+        const total_objective = Number(objectiveResult[0]?.total ?? 0);
+
+        return {
+            id: unit.id,
+            name: unit.name,
+            parent_id: unit.parent_id ?? null,
+            manager: unit.manager_id
+                ? {
+                    id: unit.manager_id,
+                    full_name: unit.manager_full_name,
+                    email: unit.manager_email,
+                    avatar_url: unit.avatar_url,
+                    job_title: unit.job_title,
+                  }
+                : null,
+            total_kpi,
+            total_objective,
+        };
     });
 };

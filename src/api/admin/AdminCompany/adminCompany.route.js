@@ -4,7 +4,12 @@ import {
   createCompanyAdmin,
   updateCompanyAdmin,
   deactivateCompanyAdmin,
+  uploadAvatar,
+  deleteAvatar,
 } from "./adminCompany.controller.js";
+import { uploadSingle } from "../../../utils/multer.js";
+import { wrapMulter } from "../../../utils/wrapMulter.js";
+import requestContext from "../../../utils/context.js";
 
 const router = express.Router({ mergeParams: true });
 
@@ -73,6 +78,10 @@ const router = express.Router({ mergeParams: true });
  *                         type: string
  *                         format: email
  *                         example: "admin@acme.com"
+ *                       avatar_url:
+ *                         type: string
+ *                         nullable: true
+ *                         example: null
  *                       is_active:
  *                         type: boolean
  *                         example: true
@@ -131,7 +140,7 @@ router.get("/", getCompanyAdmins);
  * /admin/companies/{company_id}/admins:
  *   post:
  *     summary: Create company admin
- *     description: Create a new AdminCompany account for a company.
+ *     description: Create a new AdminCompany account for a company. Optionally upload an avatar image.
  *     tags: [Admin - Company Admins]
  *     parameters:
  *       - in: path
@@ -143,7 +152,7 @@ router.get("/", getCompanyAdmins);
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             required: [full_name, email, password]
@@ -159,6 +168,10 @@ router.get("/", getCompanyAdmins);
  *                 type: string
  *                 minLength: 8
  *                 example: "password123"
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *                 description: Optional avatar image file
  *     responses:
  *       201:
  *         description: Admin created successfully
@@ -185,6 +198,9 @@ router.get("/", getCompanyAdmins);
  *                           type: string
  *                         email:
  *                           type: string
+ *                         avatar_url:
+ *                           type: string
+ *                           nullable: true
  *                         is_active:
  *                           type: boolean
  *                         created_at:
@@ -230,7 +246,7 @@ router.get("/", getCompanyAdmins);
  *                   type: string
  *                   example: "Email already exists"
  */
-router.post("/", createCompanyAdmin);
+router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createCompanyAdmin);
 
 /**
  * @swagger
@@ -327,6 +343,76 @@ router.post("/", createCompanyAdmin);
  *                   example: "Email already exists"
  */
 router.put("/:admin_id", updateCompanyAdmin);
+
+/**
+ * @swagger
+ * /admin/companies/{company_id}/admins/{admin_id}/avatar:
+ *   patch:
+ *     summary: Upload or update admin avatar
+ *     description: Upload or update the avatar for a company admin. Send empty request (no file) to delete current avatar.
+ *     tags: [Admin - Company Admins]
+ *     parameters:
+ *       - in: path
+ *         name: company_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Company ID
+ *       - in: path
+ *         name: admin_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Admin ID
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *                 description: Avatar image file
+ *     responses:
+ *       200:
+ *         description: Avatar updated successfully
+ *       400:
+ *         description: Invalid parameters
+ *       404:
+ *         description: Company or admin not found
+ */
+router.patch("/:admin_id/avatar", wrapMulter(requestContext, uploadSingle("avatar")), uploadAvatar);
+
+/**
+ * @swagger
+ * /admin/companies/{company_id}/admins/{admin_id}/avatar:
+ *   delete:
+ *     summary: Delete admin avatar
+ *     description: Remove the avatar from a company admin.
+ *     tags: [Admin - Company Admins]
+ *     parameters:
+ *       - in: path
+ *         name: company_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Company ID
+ *       - in: path
+ *         name: admin_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Admin ID
+ *     responses:
+ *       200:
+ *         description: Avatar deleted successfully
+ *       400:
+ *         description: Invalid parameters
+ *       404:
+ *         description: Admin not found
+ */
+router.delete("/:admin_id/avatar", deleteAvatar);
 
 /**
  * @swagger

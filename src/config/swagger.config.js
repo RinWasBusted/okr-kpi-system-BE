@@ -34,6 +34,12 @@ const swaggerOptions = {
       description: "API docs for OKR-KPI System Backend",
     },
     servers: swaggerServers,
+    tags: [
+      {
+        name: "Admin - Company Admins",
+        description: "Manage company-level admin accounts (AdminCompany)",
+      },
+    ],
     components: {
       securitySchemes: {
         cookieAuth: {
@@ -53,9 +59,17 @@ const swaggerOptions = {
 };
 
 
-const swaggerSpec = swaggerJsdoc(swaggerOptions);
+// IMPORTANT: swaggerSpec must be created AFTER we finish mutating swaggerOptions.definition.paths
+// (the file currently overrides paths later for AdminCompany documentation).
+let swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 export const setupSwagger = (app) => {
+  // Disable Swagger in production
+  if (process.env.NODE_ENV === 'production') {
+    console.log('Swagger API docs disabled in production');
+    return;
+  }
+
   const swaggerUiOptions = {
     swaggerOptions: {
       withCredentials: true,

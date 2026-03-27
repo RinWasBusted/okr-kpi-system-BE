@@ -1,5 +1,6 @@
 import * as adminCompanyService from "./adminCompany.service.js";
 import AppError from "../../../utils/appError.js";
+import { uploadImageToCloudinary } from "../../../utils/cloudinary.js";
 
 const parseBoolean = (value) => {
   if (value === undefined || value === null) return undefined;
@@ -78,10 +79,22 @@ export const createCompanyAdmin = async (req, res) => {
       throw new AppError("Email already exists", 409);
     }
 
+    let avatarPublicId = null;
+    // Upload avatar if file is provided
+    if (req.file) {
+      const uploadResult = await uploadImageToCloudinary(
+        req.file.buffer,
+        req.file.originalname,
+        "okr-kpi-system/users/avatars"
+      );
+      avatarPublicId = uploadResult.public_id;
+    }
+
     const admin = await adminCompanyService.createCompanyAdmin(companyId, {
       full_name,
       email,
       password,
+      avatar_url: avatarPublicId,
     });
 
     res.success("Company admin created successfully", 201, { admin });
@@ -169,6 +182,72 @@ export const deactivateCompanyAdmin = async (req, res) => {
     const deactivated = await adminCompanyService.deactivateCompanyAdmin(adminId);
 
     res.success("Company admin deactivated successfully", 200, { admin: deactivated });
+  } catch (error) {
+    throw error;
+  }
+};
+
+// PATCH /:admin_id/avatar - Upload or update avatar
+export const uploadAvatar = async (req, res) => {
+  try {
+    const companyId = Number(req.params.company_id);
+    const adminId = Number(req.params.admin_id);
+
+    if (!Number.isInteger(companyId) || companyId <= 0 || !Number.isInteger(adminId) || adminId <= 0) {
+      throw new AppError("Invalid parameters", 400);
+    }
+
+    // Check if company and admin exist
+    const company = await adminCompanyService.findCompanyById(companyId);
+    if (!company) {
+      throw new AppError("Company not found", 404);
+    }
+
+    const admin = await adminCompanyService.findCompanyAdminById(companyId, adminId);
+    if (!admin) {
+      throw new AppError("Admin not found", 404);
+    }
+
+    // If no file provided, delete avatar
+    if (!req.file) {
+      const updated = await adminCompanyService.deleteAdminAvatar(adminId);
+      return res.success("Avatar deleted successfully", 200, { admin: updated });
+    }
+
+    // Upload new avatar to Cloudinary
+    const uploadResult = await uploadImageToCloudinary(
+      req.file.buffer,
+      req.file.originalname,
+      "okr-kpi-system/users/avatars"
+    );
+
+    const updated = await adminCompanyService.updateAdminAvatar(adminId, uploadResult.public_id);
+
+    res.success("Avatar updated successfully", 200, { admin: updated });
+  } catch (error) {
+    throw error;
+  }
+};
+
+// DELETE /:admin_id/avatar - Delete avatar
+export const deleteAvatar = async (req, res) => {
+  try {
+    const companyId = Number(req.params.company_id);
+    const adminId = Number(req.params.admin_id);
+
+    if (!Number.isInteger(companyId) || companyId <= 0 || !Number.isInteger(adminId) || adminId <= 0) {
+      throw new AppError("Invalid parameters", 400);
+    }
+
+    // Check if admin exists
+    const admin = await adminCompanyService.findCompanyAdminById(companyId, adminId);
+    if (!admin) {
+      throw new AppError("Admin not found", 404);
+    }
+
+    const updated = await adminCompanyService.deleteAdminAvatar(adminId);
+
+    res.success("Avatar deleted successfully", 200, { admin: updated });
   } catch (error) {
     throw error;
   }

@@ -270,6 +270,10 @@ router.patch("/change-password", authenticate, changePassword);
  *                         company_id:
  *                           type: integer
  *                           example: 1
+ *                         company_slug:
+ *                           type: string
+ *                           nullable: true
+ *                           example: "acme-corp"
  *                         unit_id:
  *                           type: integer
  *                           nullable: true

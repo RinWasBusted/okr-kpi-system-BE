@@ -1,4 +1,4 @@
-import { createApp } from './server';
+import { createApp } from './server.js';
 
 const PORT = process.env.PORT || 3000;
 const app = await createApp();

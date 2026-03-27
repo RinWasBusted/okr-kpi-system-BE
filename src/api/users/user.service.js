@@ -2,6 +2,7 @@ import prisma from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
 import { hashPassword } from "../../utils/bcrypt.js";
 import { UserRole } from "@prisma/client";
+import { deleteImageFromCloudinary, getCloudinaryUrlFromPublicId } from "../../utils/cloudinary.js";
 
 const userSelect = {
     id: true,
@@ -24,7 +25,7 @@ const formatUser = (user) => ({
     full_name: user.full_name,
     email: user.email,
     job_title: user.job_title ?? null,
-    avatar_url: user.avatar_url ?? null,
+    avatar_url: getCloudinaryUrlFromPublicId(user.avatar_url),
     unit: user.unit ?? null,
     is_active: user.is_active,
     created_at: user.created_at,
@@ -76,7 +77,7 @@ export const findUserById = async (userId) => {
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
-export const createUser = async (companyId, { full_name, email, password, unit_id }) => {
+export const createUser = async (companyId, { full_name, email, password, unit_id, avatar_url }) => {
     // email is @unique globally in schema — check globally to give a clean error
     // instead of letting Prisma throw a constraint violation
     const existing = await prisma.users.findFirst({ where: { email } });
@@ -100,6 +101,7 @@ export const createUser = async (companyId, { full_name, email, password, unit_i
             role: UserRole.EMPLOYEE,
             unit_id: unit_id ?? null,
             is_active: true,
+            avatar_url: avatar_url ?? null,
         },
         select: userSelect,
     });
@@ -131,6 +133,52 @@ export const updateUser = async (userId, { full_name, unit_id, password, is_acti
     const updated = await prisma.users.update({
         where: { id: userId },
         data: updates,
+        select: userSelect,
+    });
+
+    return formatUser(updated);
+};
+
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+
+export const updateUserAvatar = async (userId, publicId) => {
+    const existing = await prisma.users.findFirst({
+        where: { id: userId },
+        select: { id: true, avatar_url: true },
+    });
+
+    if (!existing) throw new AppError("User not found", 404);
+
+    // Delete old avatar from Cloudinary if exists
+    if (existing.avatar_url) {
+        await deleteImageFromCloudinary(existing.avatar_url);
+    }
+
+    const updated = await prisma.users.update({
+        where: { id: userId },
+        data: { avatar_url: publicId },
+        select: userSelect,
+    });
+
+    return formatUser(updated);
+};
+
+export const deleteUserAvatar = async (userId) => {
+    const existing = await prisma.users.findFirst({
+        where: { id: userId },
+        select: { id: true, avatar_url: true },
+    });
+
+    if (!existing) throw new AppError("User not found", 404);
+
+    // Delete avatar from Cloudinary if exists
+    if (existing.avatar_url) {
+        await deleteImageFromCloudinary(existing.avatar_url);
+    }
+
+    const updated = await prisma.users.update({
+        where: { id: userId },
+        data: { avatar_url: null },
         select: userSelect,
     });
 
