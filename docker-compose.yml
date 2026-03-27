@@ -14,7 +14,7 @@ services:
       PORT: 3000
       BASE_URL: ${BASE_URL:-http://localhost}
       DEBUG: ${DEBUG:-false}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       CORS_CREDENTIALS: ${CORS_CREDENTIALS:-true}
 
       ADMIN_EMAIL: ${ADMIN_EMAIL}
