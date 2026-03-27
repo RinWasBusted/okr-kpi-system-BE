@@ -221,6 +221,10 @@ const resolveVisibility = (visibility) => visibility ?? "INTERNAL";
 const determineObjectiveStatus = async (user, targetUnitId, ownerId) => {
     if (user.role === UserRole.ADMIN_COMPANY) return "Active";
 
+    if (!targetUnitId && !ownerId) {
+        throw new AppError("You do not have permission to create this objective", 403);
+    }
+
     if (ownerId && ownerId === user.id) return "Draft";
 
     if (!user.unit_id || !targetUnitId) {
@@ -321,12 +325,28 @@ export const createObjective = async (user, payload) => {
     }
 
     let unitId = payload.unit_id ?? owner?.unit_id ?? null;
-    if (!unitId) throw new AppError("unit_id is required", 422);
 
-    await ensureUnitExists(unitId);
+    const isCompanyWide = !unitId && !payload.owner_id;
 
-    if (owner && owner.unit_id && owner.unit_id !== unitId) {
-        throw new AppError("owner_id does not belong to unit_id", 422);
+    if (isCompanyWide) {
+        // Only AdminCompany can create a company-wide objective
+        if (user.role !== UserRole.ADMIN_COMPANY) {
+            throw new AppError("Only admins can create company-wide objectives", 403);
+        }
+        // Company-wide objectives must be PUBLIC — other visibilities make no sense
+        // without a unit scope
+        if (payload.visibility && payload.visibility !== "PUBLIC") {
+            throw new AppError("Company-wide objectives must have PUBLIC visibility", 422);
+        }
+    } else {
+        // Unit-scoped or personal objective — unit_id is required
+        if (!unitId) throw new AppError("unit_id is required", 422);
+
+        await ensureUnitExists(unitId);
+
+        if (owner && owner.unit_id && owner.unit_id !== unitId) {
+            throw new AppError("owner_id does not belong to unit_id", 422);
+        }
     }
 
     if (payload.parent_objective_id) {
@@ -343,8 +363,14 @@ export const createObjective = async (user, payload) => {
     }
 
     const status = await determineObjectiveStatus(user, unitId, payload.owner_id ?? null);
-    const accessPath = await getUnitPath(unitId);
-    if (!accessPath) throw new AppError("Unit not found", 404);
+    
+    let accessPath;
+    if (unitId) {
+        accessPath = await getUnitPath(unitId);
+        if (!accessPath) throw new AppError("Unit not found", 404);
+    } else {
+        accessPath = "company";
+    }
 
     const nextIdRows = await prisma.$queryRaw`
         SELECT nextval(pg_get_serial_sequence('"Objectives"', 'id'))::int AS id
