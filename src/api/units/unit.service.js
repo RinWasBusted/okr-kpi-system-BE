@@ -29,7 +29,7 @@ const formatUnitRow = (row) => ({
 
 const getUnitCore = async (tx, unitId) => {
     const rows = await tx.$queryRaw`
-        SELECT id, parent_id, path::text AS path
+        SELECT id, parent_id, manager_id, path::text AS path
         FROM "Units"
         WHERE id = ${unitId}
     `;
@@ -211,6 +211,9 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
         const parentProvided = parent_id !== undefined;
         const managerProvided = manager_id !== undefined;
 
+        const oldManagerId = existing.manager_id ?? null;
+        const newManagerId = managerProvided ? (manager_id ?? null) : oldManagerId;
+
         await tx.$executeRaw`
             UPDATE "Units"
             SET
@@ -219,6 +222,19 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
                 manager_id = CASE WHEN ${managerProvided} THEN ${manager_id ?? null} ELSE manager_id END
             WHERE id = ${unitId}
         `;
+
+        if (managerProvided && newManagerId !== oldManagerId) {
+            if (oldManagerId !== null) {
+                await tx.$executeRaw`
+                    UPDATE "Users" SET unit_id = null WHERE id = ${oldManagerId}
+                `;
+            }
+            if (newManagerId !== null) {
+                await tx.$executeRaw`
+                    UPDATE "Users" SET unit_id = ${unitId} WHERE id = ${newManagerId}
+                `;
+            }
+        }
 
         const parentChanged =
             parentProvided && (parent_id ?? null) !== (existing.parent_id ?? null);

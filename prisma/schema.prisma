@@ -194,7 +194,7 @@ model Objectives {
   company_id          Int
   title               String
   cycle_id            Int
-  unit_id             Int
+  unit_id             Int?
   owner_id            Int?
   parent_objective_id Int?
   visibility          Visibility
@@ -207,7 +207,7 @@ model Objectives {
 
   company          Companies   @relation(fields: [company_id], references: [id])
   cycle            Cycles      @relation(fields: [cycle_id], references: [id])
-  unit             Units       @relation(fields: [unit_id], references: [id])
+  unit             Units?       @relation(fields: [unit_id], references: [id])
   owner            Users?      @relation(fields: [owner_id], references: [id])
   approver         Users?      @relation("ObjectiveApprover", fields: [approved_by], references: [id])
   parent_objective Objectives? @relation("ObjectiveHierarchy", fields: [parent_objective_id], references: [id])
