@@ -34,7 +34,7 @@ const router = express.Router();
  *                 type: string
  *                 minLength: 6
  *                 example: "password123"
- *              company_slug:
+ *               company_slug:
  *                 type: string
  *                 description: Company slug for multi-tenant applications. If provided, the system will attempt to find the user within the specified company.
  *                 example: "acme-corp"
