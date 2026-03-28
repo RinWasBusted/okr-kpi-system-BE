@@ -8,8 +8,10 @@ import okrRoutes from "./okr/index.js";
 import kpiRoutes from "./kpi/index.js";
 import okrAiRoutes from "./okr-ai/okrAi.route.js";
 import aiUsageRoutes from "./ai-usage/ai-usage.route.js";
+import healthRoutes from "./health/health.route.js";
 const router = express.Router();
 
+router.use("/health", healthRoutes);
 router.use("/admin", adminRoutes);
 router.use("/auth", authRoutes);
 router.use("/units", unitRoutes);
