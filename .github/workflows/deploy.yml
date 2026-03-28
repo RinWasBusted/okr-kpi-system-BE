@@ -41,5 +41,6 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd ~/okr-kpi-system/okr-kpi-system-be/
-            docker compose pull
-            docker compose up -d --remove-orphans
+            docker image pull tylerpham2708/okr-kpi-system-server:latest
+            docker stack deploy -c docker-compose.yml okr_kpi_system_server
+            docker image prune -f
