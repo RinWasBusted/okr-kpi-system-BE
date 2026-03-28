@@ -3,14 +3,23 @@ version: '3.8'
 services:
   # OKR KPI Backend API
   app:
-    image: tylerpham2708/okr-kpi-system-server:v1.0
+    image: tylerpham2708/okr-kpi-system-server:latest
 
     ports:
-      - "127.0.0.1:3000-3002:3000"
+      - "3000:3000"
 
     deploy:
-      mode: replicated
       replicas: 3
+      update_config:
+        parallelism: 1
+        order: start-first
+        failure_action: rollback 
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 60s
 
     environment:
       # Node environment
@@ -45,9 +54,12 @@ services:
       JWT_SECRET: ${JWT_SECRET}
 
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    restart: unless-stopped
+
+networks:
+  okr-kpi-system-network:
+    driver: overlay
