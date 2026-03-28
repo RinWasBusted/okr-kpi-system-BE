@@ -3,11 +3,15 @@ version: '3.8'
 services:
   # OKR KPI Backend API
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: okr-kpi-system-server:latest
-    container_name: okr_kpi_system_server
+    image: tylerpham2708/okr-kpi-system-server:v1.0
+
+    ports:
+      - "127.0.0.1:3000-3002:3000"
+
+    deploy:
+      mode: replicated
+      replicas: 3
+
     environment:
       # Node environment
       NODE_ENV: production
@@ -40,8 +44,6 @@ services:
       # JWT
       JWT_SECRET: ${JWT_SECRET}
 
-    ports:
-      - "3000:3000"
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
