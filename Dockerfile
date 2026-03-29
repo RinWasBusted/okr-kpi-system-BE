@@ -10,6 +10,8 @@ COPY . .
 
 RUN npx prisma generate
 
+RUN apk add --no-cache curl
+
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \

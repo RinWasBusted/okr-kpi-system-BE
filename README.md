@@ -93,6 +93,9 @@ okr-kpi-system-BE/
 - `npm run dev` - Run development server with auto-reload
 - `npm run seed` - Seed database
 - `npx prisma studio` - Open Prisma Studio to manage database
+- `docker compose -f docker-compose.dev.yml up -d` - Create database container for development.
+- `npx prisma migrate reset` - Using migrate for database reset.
+- `npm run seed` - Seeding database and setting policies
 - `npx prisma migrate dev` - Create and run migrations
 - `npx prisma generate` - Generate Prisma Client
 

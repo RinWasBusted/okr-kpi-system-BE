@@ -67,7 +67,7 @@ const router = express.Router();
  *                 message:
  *                   type: string
  */
-router.get("/health", async (req, res) => {
+router.get("/", async (req, res) => {
   const startTime = process.uptime() * 1000;
   let status = "healthy";
   const services = {
@@ -130,7 +130,7 @@ router.get("/health", async (req, res) => {
  *                   type: string
  *                   example: "alive"
  */
-router.get("/health/live", (req, res) => {
+router.get("/live", (req, res) => {
   res.status(200).json({ status: "alive" });
 });
 
@@ -163,7 +163,7 @@ router.get("/health/live", (req, res) => {
  *                   type: string
  *                   example: "not_ready"
  */
-router.get("/health/ready", async (req, res) => {
+router.get("/ready", async (req, res) => {
   try {
     await Promise.all([
       prisma.$queryRaw`SELECT 1`,
