@@ -9,7 +9,6 @@ const main = async () => {
 
   // Create a database user and set policies
   await prisma.$executeRawUnsafe(`
-    CREATE ROLE app_user LOGIN PASSWORD 'okreadysecret';
         -- =========================================================================
     -- PHẦN 1: CÁC BẢNG QUẢN TRỊ (Giữ nguyên vì đã có quyền ADMIN)
     -- =========================================================================

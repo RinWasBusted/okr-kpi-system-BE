@@ -42,5 +42,5 @@ jobs:
           script: |
             cd ~/okr-kpi-system/okr-kpi-system-be/
             docker image pull tylerpham2708/okr-kpi-system-server:latest
-            docker stack deploy -c docker-compose.yml okr_kpi_system_server
+            env $(grep -v '^#' .env | xargs) docker stack deploy -c docker-compose.yml okr_kpi_system_server
             docker image prune -f
