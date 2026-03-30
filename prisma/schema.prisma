@@ -234,6 +234,7 @@ model KeyResults {
   company   Companies  @relation(fields: [company_id], references: [id])
   objective Objectives @relation(fields: [objective_id], references: [id])
   check_ins CheckIns[]
+  feedbacks Feedbacks[] 
 
   @@index([company_id])
 }
@@ -256,20 +257,50 @@ model CheckIns {
   @@index([company_id])
 }
 
+enum FeedbackType {
+  PRAISE
+  CONCERN
+  SUGGESTION
+  QUESTION
+  BLOCKER
+}
+
+enum FeedbackSentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+  MIXED
+  UNKNOWN
+}
+
+enum FeedbackStatus {
+  ACTIVE
+  RESOLVED
+  FLAGGED
+}
+
 model Feedbacks {
   id           Int      @id @default(autoincrement())
   company_id   Int
   objective_id Int
+  kr_tag_id    Int?
   user_id      Int
+  parent_id    Int?
   content      String   @db.Text
-  type         String
+  type         FeedbackType
+  sentiment    FeedbackSentiment @default(UNKNOWN)
+  status       FeedbackStatus @default(ACTIVE)
   created_at   DateTime @default(now())
 
   company   Companies  @relation(fields: [company_id], references: [id])
   objective Objectives @relation(fields: [objective_id], references: [id])
+  key_result KeyResults? @relation(fields: [kr_tag_id], references: [id])
   user      Users      @relation(fields: [user_id], references: [id])
+  parent     Feedbacks?  @relation("FeedbackThread", fields: [parent_id], references: [id])
+  replies    Feedbacks[] @relation("FeedbackThread")
 
   @@index([company_id])
+  @@index([objective_id])
 }
 
 model Evaluations {
