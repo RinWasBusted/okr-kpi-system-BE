@@ -595,11 +595,6 @@ export const deleteObjective = async (user, objectiveId) => {
     const now = new Date();
 
     await prisma.$transaction([
-        
-        prisma.feedbacks.deleteMany({
-            where: { objective_id: objectiveId, parent_id: { not: null } },
-        }),
-        
         prisma.feedbacks.deleteMany({
             where: { objective_id: objectiveId },
         }),
