@@ -30,7 +30,7 @@ router.use(authenticate);
  *     tags: [Feedbacks]
  *     parameters:
  *       - in: path
- *         name: objective_id
+ *         name: objectiveId
  *         required: true
  *         schema:
  *           type: integer
