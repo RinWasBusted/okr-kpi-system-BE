@@ -76,7 +76,7 @@ export const updateCompanyAdmin = async (adminId, updates) =>
     where: { id: adminId },
     data: updates,
     select: adminSelect,
-  });
+  }).then(formatAdmin);
 
 export const countActiveCompanyAdmins = async (companyId) =>
   prisma.users.count({
@@ -88,7 +88,7 @@ export const deactivateCompanyAdmin = async (adminId) =>
     where: { id: adminId },
     data: { is_active: false },
     select: adminSelect,
-  });
+  }).then(formatAdmin);
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ export const updateAdminAvatar = async (adminId, publicId) => {
     select: adminSelect,
   });
 
-  return updated;
+  return formatAdmin(updated);
 };
 
 export const deleteAdminAvatar = async (adminId) => {
@@ -133,5 +133,5 @@ export const deleteAdminAvatar = async (adminId) => {
     select: adminSelect,
   });
 
-  return updated;
+  return formatAdmin(updated);
 };

@@ -7,7 +7,7 @@
     "start": "NODE_ENV=production node src/index.js",
     "dev": "cross-env NODE_ENV=development tsx watch src/index.js",
     "seed": "prisma db seed",
-    "studio": "dotenv -e .env -- bash -c 'DATABASE_URL=$DATABASE_ADMIN_URL npx prisma studio",
+    "studio": "dotenv -e .env -- bash -c 'DATABASE_URL=$DATABASE_ADMIN_URL npx prisma studio'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -16,8 +16,8 @@
   "type": "module",
   "dependencies": {
     "@google/genai": "^1.46.0",
-    "@prisma/adapter-pg": "^7.4.1",
-    "@prisma/client": "^7.4.1",
+    "@prisma/adapter-pg": "^7.6.0",
+    "@prisma/client": "^7.6.0",
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.9.0",
     "cookie-parser": "^1.4.7",

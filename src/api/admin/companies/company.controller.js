@@ -56,14 +56,38 @@ export const updateCompany = async (req, res) => {
         const { id } = req.params;
         const { name, slug, is_active, ai_plan, token_usage, credit_cost, usage_limit } = req.body;
 
+        let parsedTokenUsage;
+        if (token_usage !== undefined) {
+            parsedTokenUsage = parseInt(token_usage);
+            if (isNaN(parsedTokenUsage) || parsedTokenUsage < 0) {
+                throw new AppError("token_usage must be a non-negative integer", 422);
+            }
+        }
+
+        let parsedCreditCost;
+        if (credit_cost !== undefined) {
+            parsedCreditCost = parseFloat(credit_cost);
+            if (!Number.isFinite(parsedCreditCost) || parsedCreditCost < 0) {
+                throw new AppError("credit_cost must be a non-negative number", 422);
+            }
+        }
+
+        let parsedUsageLimit;
+        if (usage_limit !== undefined) {
+            parsedUsageLimit = parseInt(usage_limit);
+            if (isNaN(parsedUsageLimit) || parsedUsageLimit < 0) {
+                throw new AppError("usage_limit must be a non-negative integer", 422);
+            }
+        }
+
         const company = await companyService.updateCompany(parseInt(id), {
             name,
             slug,
             is_active,
             ai_plan,
-            token_usage: token_usage !== undefined ? parseInt(token_usage) : undefined,
-            credit_cost: credit_cost !== undefined ? parseFloat(credit_cost) : undefined,
-            usage_limit: usage_limit !== undefined ? parseInt(usage_limit) : undefined,
+            token_usage: parsedTokenUsage,
+            credit_cost: parsedCreditCost,
+            usage_limit: parsedUsageLimit,
         });
 
         res.success("Company updated successfully", 200, { company });

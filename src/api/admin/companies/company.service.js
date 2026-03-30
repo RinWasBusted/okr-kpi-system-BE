@@ -1,5 +1,5 @@
 import prisma from "../../../utils/prisma.js";
-import { UserRole, Prisma } from "@prisma/client";
+import { UserRole, Prisma, AIPlan } from "@prisma/client";
 import AppError from "../../../utils/appError.js";
 import { deleteImageFromCloudinary, getCloudinaryUrlFromPublicId } from "../../../utils/cloudinary.js";
 
@@ -123,6 +123,22 @@ export const updateCompany = async (id, { name, slug, is_active, ai_plan, token_
         if (existing) {
             throw new AppError("Slug already exists on this platform", 409);
         }
+    }
+
+    if (ai_plan !== undefined && !Object.values(AIPlan).includes(ai_plan)) {
+        throw new AppError(`Invalid ai_plan. Must be one of: ${Object.values(AIPlan).join(", ")}`, 422);
+    }
+
+    if (token_usage !== undefined && (!Number.isFinite(token_usage) || token_usage < 0)) {
+        throw new AppError("token_usage must be a non-negative number", 422);
+    }
+
+    if (credit_cost !== undefined && (!Number.isFinite(credit_cost) || credit_cost < 0)) {
+        throw new AppError("credit_cost must be a non-negative number", 422);
+    }
+
+    if (usage_limit !== undefined && (!Number.isFinite(usage_limit) || usage_limit < 0)) {
+        throw new AppError("usage_limit must be a non-negative number", 422);
     }
 
     try {

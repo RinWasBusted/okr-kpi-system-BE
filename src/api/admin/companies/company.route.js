@@ -638,12 +638,6 @@ router.delete("/:id", deactivateCompany);
  *                     employee_count:
  *                       type: integer
  *                       example: 50
- *                     active_cycles:
- *                       type: integer
- *                       example: 3
- *                     total_objectives:
- *                       type: integer
- *                       example: 120
  *                     ai_plan:
  *                       type: string
  *                       enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
