@@ -430,6 +430,24 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(crea
  *                 type: integer
  *                 example: 10000
  *                 description: Maximum token usage limit
+ *               ai_plan:
+ *                 type: string
+ *                 enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
+ *                 example: "SUBSCRIPTION"
+ *                 description: AI plan type for the company
+ *               token_usage:
+ *                 type: integer
+ *                 example: 1500
+ *                 description: Current token usage count
+ *               credit_cost:
+ *                 type: number
+ *                 format: float
+ *                 example: 0.05
+ *                 description: Cost per token credit
+ *               usage_limit:
+ *                 type: integer
+ *                 example: 10000
+ *                 description: Maximum token usage limit
  *     responses:
  *       200:
  *         description: Company updated successfully
@@ -652,6 +670,16 @@ router.delete("/:id", deactivateCompany);
  *                     employee_count:
  *                       type: integer
  *                       example: 50
+ *                     ai_plan:
+ *                       type: string
+ *                       enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
+ *                       example: "FREE"
+ *                     token_usage:
+ *                       type: integer
+ *                       example: 3
+ *                     total_objectives:
+ *                       type: integer
+ *                       example: 120
  *                     ai_plan:
  *                       type: string
  *                       enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]

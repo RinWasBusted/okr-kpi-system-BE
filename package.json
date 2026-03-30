@@ -7,7 +7,7 @@
     "start": "NODE_ENV=production node src/index.js",
     "dev": "cross-env NODE_ENV=development tsx watch src/index.js",
     "seed": "prisma db seed",
-    "studio": "dotenv -e .env -- bash -c 'DATABASE_URL=$DATABASE_ADMIN_URL npx prisma studio'",
+    "studio": "dotenv -e .env -- bash -c 'DATABASE_URL=$DATABASE_ADMIN_URL npx prisma studio",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
