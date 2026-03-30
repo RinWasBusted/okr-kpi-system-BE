@@ -291,6 +291,7 @@ model Feedbacks {
   sentiment    FeedbackSentiment @default(UNKNOWN)
   status       FeedbackStatus @default(ACTIVE)
   created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
 
   company   Companies  @relation(fields: [company_id], references: [id])
   objective Objectives @relation(fields: [objective_id], references: [id])
