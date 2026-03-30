@@ -110,7 +110,7 @@ router.get("/objectives/:objectiveId/feedbacks", listFeedbacks);
  *         name: objectiveId
  *         required: true
  *         schema:
- *           type: integerj
+ *           type: integer
  *     requestBody:
  *       required: true
  *       content:
