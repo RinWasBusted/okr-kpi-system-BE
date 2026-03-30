@@ -249,11 +249,6 @@ export const deleteKeyResult = async (user, keyResultId) => {
     }
 
     await prisma.$transaction([
-        prisma.feedbacks.updateMany({
-            where: { kr_tag_id: keyResultId },
-            data: { kr_tag_id: null },
-        }),
-        
         prisma.checkIns.deleteMany({ where: { key_result_id: keyResultId } }),
         prisma.keyResults.delete({ where: { id: keyResultId } }),
     ]);
