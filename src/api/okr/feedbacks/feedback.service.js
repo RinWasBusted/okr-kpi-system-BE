@@ -1,48 +1,11 @@
 import prisma from "../../../utils/prisma.js";
 import AppError from "../../../utils/appError.js";
 import { UserRole } from "@prisma/client";
-import { getObjectiveAccessPath, getUnitPath } from "../../../utils/path.js";
+import { canViewObjective } from "../../../utils/okr.js";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-const isDescendantOrEqual = (candidate, ancestor) => {
-    if (!candidate || !ancestor) return false;
-    return candidate === ancestor || candidate.startsWith(`${ancestor}.`);
-};
-
-const isAncestorOrEqual = (candidate, descendant) => {
-    if (!candidate || !descendant) return false;
-    return descendant === candidate || descendant.startsWith(`${candidate}.`);
-};
-
-const canViewObjective = async (user, objective) => {
-    if (!objective) return false;
-    if (user.role === UserRole.ADMIN_COMPANY) return true;
-    if (objective.visibility === "PUBLIC") return true;
-
-    const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
-    const objectivePath =
-        objective.access_path ?? (objective.id ? await getObjectiveAccessPath(objective.id) : null);
-
-    if (objective.visibility === "INTERNAL") {
-        if (!objectivePath || !userPath) return false;
-        return (
-            isAncestorOrEqual(objectivePath, userPath) ||
-            isDescendantOrEqual(objectivePath, userPath)
-        );
-    }
-
-    if (objective.visibility === "PRIVATE") {
-        if (objective.owner_id === user.id) return true;
-        if (!objectivePath || !userPath) return false;
-        return objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath);
-    }
-
-    return false;
-};
-
 const canMutateFeedback = (user, feedback) => {
     return user.role === UserRole.ADMIN_COMPANY || feedback.user_id === user.id;
 };
