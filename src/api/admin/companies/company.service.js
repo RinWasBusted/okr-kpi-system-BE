@@ -71,6 +71,7 @@ export const getCompanies = async (filters, pagination) => {
         admin_count: company._count.users,
         employee_count: employeeCountMap[company.id] ?? 0,
         created_at: company.created_at,
+        
     }));
     const meta = {
         total,
