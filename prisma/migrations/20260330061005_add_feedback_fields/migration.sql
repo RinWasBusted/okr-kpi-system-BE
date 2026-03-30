@@ -28,4 +28,4 @@ CREATE INDEX "Feedbacks_objective_id_idx" ON "Feedbacks"("objective_id");
 ALTER TABLE "Feedbacks" ADD CONSTRAINT "Feedbacks_kr_tag_id_fkey" FOREIGN KEY ("kr_tag_id") REFERENCES "KeyResults"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Feedbacks" ADD CONSTRAINT "Feedbacks_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "Feedbacks"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Feedbacks" ADD CONSTRAINT "Feedbacks_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "Feedbacks"("id") ON DELETE CASCADE ON UPDATE CASCADE;
