@@ -296,7 +296,7 @@ model Feedbacks {
   objective Objectives @relation(fields: [objective_id], references: [id])
   key_result KeyResults? @relation(fields: [kr_tag_id], references: [id])
   user      Users      @relation(fields: [user_id], references: [id])
-  parent     Feedbacks?  @relation("FeedbackThread", fields: [parent_id], references: [id])
+  parent     Feedbacks?  @relation("FeedbackThread", fields: [parent_id], references: [id], onDelete: Cascade)
   replies    Feedbacks[] @relation("FeedbackThread")
 
   @@index([company_id])
