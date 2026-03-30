@@ -18,8 +18,20 @@ ALTER TABLE "Feedbacks" ADD COLUMN     "kr_tag_id" INTEGER,
 ADD COLUMN     "parent_id" INTEGER,
 ADD COLUMN     "sentiment" "FeedbackSentiment" NOT NULL DEFAULT 'UNKNOWN',
 ADD COLUMN     "status" "FeedbackStatus" NOT NULL DEFAULT 'ACTIVE',
-DROP COLUMN "type",
-ADD COLUMN     "type" "FeedbackType" NOT NULL;
+ALTER COLUMN "type" TYPE "FeedbackType"
+USING (
+  CASE
+    WHEN "type" = 'PRAISE' THEN 'PRAISE'::"FeedbackType"
+    WHEN "type" = 'CONCERN' THEN 'CONCERN'::"FeedbackType"
+    WHEN "type" = 'SUGGESTION' THEN 'SUGGESTION'::"FeedbackType"
+    WHEN "type" = 'QUESTION' THEN 'QUESTION'::"FeedbackType"
+    WHEN "type" = 'BLOCKER' THEN 'BLOCKER'::"FeedbackType"
+    -- Legacy value mapping, e.g. previous 'rejection' value
+    WHEN "type" = 'rejection' THEN 'CONCERN'::"FeedbackType"
+    -- Fallback for any unexpected existing values
+    ELSE 'CONCERN'::"FeedbackType"
+  END
+);
 
 -- CreateIndex
 CREATE INDEX "Feedbacks_objective_id_idx" ON "Feedbacks"("objective_id");
