@@ -112,6 +112,7 @@ router.post("/objectives", createObjective);
  * /objectives/{id}:
  *   put:
  *     summary: Update an objective
+ *     description: Allowed when status is Draft, Rejected, or Active. For Active, title/parent/visibility can change without resetting to Draft (supports iteration after feedback).
  *     tags: [Objectives]
  *     parameters:
  *       - in: path

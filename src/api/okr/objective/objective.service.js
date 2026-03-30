@@ -424,9 +424,12 @@ export const updateObjective = async (user, objectiveId, updates) => {
         throw new AppError("You do not have permission to update this objective", 403);
     }
 
-    if (!['Draft', 'Rejected'].includes(objective.status)) {
+    const editableStatuses = ["Draft", "Rejected", "Active"];
+    if (!editableStatuses.includes(objective.status)) {
         throw new AppError("Objective cannot be updated in its current status", 400);
     }
+
+    const keepActiveState = objective.status === "Active";
 
     if (updates.parent_objective_id !== undefined && updates.parent_objective_id !== null) {
         if (updates.parent_objective_id === objectiveId) {
@@ -443,17 +446,22 @@ export const updateObjective = async (user, objectiveId, updates) => {
         throw new AppError("owner_id is required for PRIVATE objectives", 422);
     }
 
+    const data = {
+        ...(updates.title !== undefined && { title: updates.title }),
+        ...(updates.parent_objective_id !== undefined && {
+            parent_objective_id: updates.parent_objective_id,
+        }),
+        ...(updates.visibility !== undefined && { visibility: updates.visibility }),
+    };
+
+    if (!keepActiveState) {
+        data.status = "Draft";
+        data.approved_by = null;
+    }
+
     const updated = await prisma.objectives.update({
         where: { id: objectiveId },
-        data: {
-            ...(updates.title !== undefined && { title: updates.title }),
-            ...(updates.parent_objective_id !== undefined && {
-                parent_objective_id: updates.parent_objective_id,
-            }),
-            ...(updates.visibility !== undefined && { visibility: updates.visibility }),
-            status: "Draft",
-            approved_by: null,
-        },
+        data,
         select: objectiveBaseSelect,
     });
 
@@ -549,7 +557,9 @@ export const rejectObjective = async (user, objectiveId, comment) => {
                 objective_id: objectiveId,
                 user_id: user.id,
                 content: comment,
-                type: "rejection",
+                type: "CONCERN",
+                sentiment: "NEGATIVE",
+                status: "ACTIVE",
             },
         });
     }
@@ -585,6 +595,10 @@ export const deleteObjective = async (user, objectiveId) => {
     const now = new Date();
 
     await prisma.$transaction([
+        prisma.feedbacks.deleteMany({
+            where: { objective_id: objectiveId },
+        }),
+
         prisma.keyResults.updateMany({
             where: { objective_id: objectiveId },
             data: { deleted_at: now },
