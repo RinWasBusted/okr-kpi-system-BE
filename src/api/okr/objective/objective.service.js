@@ -557,7 +557,9 @@ export const rejectObjective = async (user, objectiveId, comment) => {
                 objective_id: objectiveId,
                 user_id: user.id,
                 content: comment,
-                type: "rejection",
+                type: "CONCERN",
+                sentiment: "NEGATIVE",
+                status: "ACTIVE",
             },
         });
     }
