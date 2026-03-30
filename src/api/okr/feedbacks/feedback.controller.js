@@ -154,7 +154,15 @@ export const updateFeedback = async (req, res) => {
         if (type !== undefined) updates.type = parseFeedbackType(type);
         if (sentiment !== undefined) updates.sentiment = parseSentiment(sentiment);
         if (status !== undefined) updates.status = parseFeedbackStatus(status);
-        if (kr_tag_id !== undefined) updates.kr_tag_id = parseOptionalId(kr_tag_id) ?? null;
+        if (kr_tag_id !== undefined) {
+            const parsedKrTagId = parseOptionalId(kr_tag_id);
+            // If a value was provided but cannot be parsed as a valid ID,
+            // and it's not an explicit "clear" (null or empty string), reject it.
+            if (parsedKrTagId === undefined && kr_tag_id !== null && kr_tag_id !== "") {
+                throw new AppError("Invalid kr_tag_id", 422);
+            }
+            updates.kr_tag_id = parsedKrTagId ?? null;
+        }
 
         if (Object.keys(updates).length === 0) {
             throw new AppError("No fields provided to update", 400);
