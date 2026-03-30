@@ -1,7 +1,7 @@
 import prisma from "../../../utils/prisma.js";
 import { UserRole, Prisma } from "@prisma/client";
 import AppError from "../../../utils/appError.js";
-import { deleteImageFromCloudinary } from "../../../utils/cloudinary.js";
+import { deleteImageFromCloudinary, getCloudinaryUrlFromPublicId } from "../../../utils/cloudinary.js";
 
 export const getCompanies = async (filters, pagination) => {
     const { is_active, search } = filters;
@@ -29,6 +29,7 @@ export const getCompanies = async (filters, pagination) => {
                 logo: true,
                 is_active: true,
                 created_at: true,
+                token_usage: true,
                 _count: {
                     select: {
                         users: {
@@ -64,7 +65,8 @@ export const getCompanies = async (filters, pagination) => {
         id: company.id,
         name: company.name,
         slug: company.slug,
-        logo: company.logo,
+        logo_url: getCloudinaryUrlFromPublicId(company.logo),
+        token_usage: company.token_usage,
         is_active: company.is_active,
         admin_count: company._count.users,
         employee_count: employeeCountMap[company.id] ?? 0,
@@ -109,7 +111,7 @@ export const createCompany = async ({ name, slug, logo }) => {
     }
 };
 
-export const updateCompany = async (id, { name, slug, is_active }) => {
+export const updateCompany = async (id, { name, slug, is_active, ai_plan, token_usage, credit_cost, usage_limit }) => {
     const company = await prisma.companies.findUnique({ where: { id } });
 
     if (!company) {
@@ -130,6 +132,10 @@ export const updateCompany = async (id, { name, slug, is_active }) => {
                 ...(name !== undefined && { name }),
                 ...(slug !== undefined && { slug }),
                 ...(is_active !== undefined && { is_active }),
+                ...(ai_plan !== undefined && { ai_plan }),
+                ...(token_usage !== undefined && { token_usage }),
+                ...(credit_cost !== undefined && { credit_cost }),
+                ...(usage_limit !== undefined && { usage_limit }),
             },
             select: {
                 id: true,
@@ -137,6 +143,10 @@ export const updateCompany = async (id, { name, slug, is_active }) => {
                 slug: true,
                 logo: true,
                 is_active: true,
+                ai_plan: true,
+                token_usage: true,
+                credit_cost: true,
+                usage_limit: true,
                 created_at: true,
             },
         });
@@ -228,36 +238,88 @@ export const deactivateCompany = async (id) => {
 };
 
 export const getCompanyStats = async (id) => {
-    const company = await prisma.companies.findUnique({ where: { id } });
+    const company = await prisma.companies.findUnique({
+        where: { id },
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            logo: true,
+            is_active: true,
+            ai_plan: true,
+            token_usage: true,
+            credit_cost: true,
+            usage_limit: true,
+            created_at: true,
+        },
+    });
 
     if (!company) {
         throw new AppError("Company not found", 404);
     }
 
-    const [admin_count, employee_count, active_cycles, total_objectives, total_kpi_assignments, okr_progress] =
-        await Promise.all([
-            prisma.users.count({ where: { company_id: id, role: UserRole.ADMIN_COMPANY } }),
-            prisma.users.count({ where: { company_id: id, role: UserRole.EMPLOYEE } }),
-            prisma.cycles.count({ where: { company_id: id, is_locked: false } }),
-            prisma.objectives.count({ where: { company_id: id } }),
-            prisma.kPIAssignments.count({ where: { company_id: id } }),
-            prisma.objectives.aggregate({
-                where: { company_id: id, status: "Active" },
-                _avg: { progress_percentage: true },
-            }),
-        ]);
+    const [admin_count, employee_count] = await Promise.all([
+        prisma.users.count({ where: { company_id: id, role: UserRole.ADMIN_COMPANY } }),
+        prisma.users.count({ where: { company_id: id, role: UserRole.EMPLOYEE } }),
+    ]);
 
     return {
         id: company.id,
         name: company.name,
         slug: company.slug,
+        logo: company.logo,
+        logo_url: getCloudinaryUrlFromPublicId(company.logo),
         is_active: company.is_active,
-        created_at: company.created_at,
+        ai_plan: company.ai_plan,
+        token_usage: company.token_usage,
+        credit_cost: company.credit_cost,
+        usage_limit: company.usage_limit,
         admin_count,
         employee_count,
-        active_cycles,
-        total_objectives,
-        avg_okr_progress: okr_progress._avg.progress_percentage ?? 0,
-        total_kpi_assignments,
+        created_at: company.created_at,
+    };
+};
+
+// Get company details for ADMIN_COMPANY (from JWT token)
+export const getMyCompanyDetails = async (companyId) => {
+    const company = await prisma.companies.findUnique({
+        where: { id: companyId },
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            logo: true,
+            is_active: true,
+            ai_plan: true,
+            token_usage: true,
+            credit_cost: true,
+            usage_limit: true,
+            created_at: true,
+        },
+    });
+
+    if (!company) {
+        throw new AppError("Company not found", 404);
+    }
+
+    const [admin_count, employee_count] = await Promise.all([
+        prisma.users.count({ where: { company_id: companyId, role: UserRole.ADMIN_COMPANY } }),
+        prisma.users.count({ where: { company_id: companyId, role: UserRole.EMPLOYEE } }),
+    ]);
+
+    return {
+        id: company.id,
+        name: company.name,
+        slug: company.slug,
+        logo: company.logo,
+        logo_url: getCloudinaryUrlFromPublicId(company.logo),
+        is_active: company.is_active,
+        ai_plan: company.ai_plan,
+        token_usage: company.token_usage,
+        credit_cost: company.credit_cost,
+        usage_limit: company.usage_limit,
+        admin_count,
+        employee_count,
+        created_at: company.created_at,
     };
 };

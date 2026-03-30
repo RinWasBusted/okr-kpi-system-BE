@@ -18,8 +18,7 @@ const formatAdmin = (admin) => ({
     id: admin.id,
     full_name: admin.full_name,
     email: admin.email,
-    avatar_url: admin.avatar_url ?? null,
-    avatar_full_url: getCloudinaryUrlFromPublicId(admin.avatar_url),
+    avatar_url: getCloudinaryUrlFromPublicId(admin.avatar_url),
     is_active: admin.is_active,
     created_at: admin.created_at,
 });

@@ -54,9 +54,17 @@ export const createCompany = async (req, res) => {
 export const updateCompany = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, slug, is_active } = req.body;
+        const { name, slug, is_active, ai_plan, token_usage, credit_cost, usage_limit } = req.body;
 
-        const company = await companyService.updateCompany(parseInt(id), { name, slug, is_active });
+        const company = await companyService.updateCompany(parseInt(id), {
+            name,
+            slug,
+            is_active,
+            ai_plan,
+            token_usage: token_usage !== undefined ? parseInt(token_usage) : undefined,
+            credit_cost: credit_cost !== undefined ? parseFloat(credit_cost) : undefined,
+            usage_limit: usage_limit !== undefined ? parseInt(usage_limit) : undefined,
+        });
 
         res.success("Company updated successfully", 200, { company });
     } catch (error) {
@@ -131,6 +139,24 @@ export const deleteLogo = async (req, res) => {
         const company = await companyService.deleteCompanyLogo(companyId);
 
         res.success("Logo deleted successfully", 200, company);
+    } catch (error) {
+        throw error;
+    }
+};
+
+// GET /admin/companies/me - Get current ADMIN_COMPANY's company details
+export const getMyCompany = async (req, res) => {
+    try {
+        // Get company_id from authenticated user's token (req.user is set by authenticate middleware)
+        const companyId = req.user?.company_id;
+
+        if (!companyId) {
+            throw new AppError("Company ID not found in token", 400);
+        }
+
+        const company = await companyService.getMyCompanyDetails(companyId);
+
+        res.success("Company retrieved successfully", 200, company);
     } catch (error) {
         throw error;
     }

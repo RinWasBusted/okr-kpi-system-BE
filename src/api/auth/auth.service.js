@@ -8,7 +8,7 @@ import requestContext from '../../utils/context.js';
 export const loginService = async (email, password, company_slug = '') => {
     let company_id = null;
     if( company_slug !== '' ){
-        const company = await requestContext.run({ company_id: '', role: 'ADMIN' }, 
+        const company = await requestContext.run({ company_id: '', role: 'ADMIN' },
             async () => await prisma.companies.findUnique({ where: { slug: company_slug } })
         );
         if(!company){

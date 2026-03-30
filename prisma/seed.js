@@ -95,6 +95,7 @@ const main = async () => {
       email: "admin@phamhoangthai.site",
       password: hashedPassword,
       role: "ADMIN",
+      company_id: null
     }
   });
 
