@@ -144,7 +144,7 @@ export const createUnit = async (companyId, { name, parent_id, manager_id }) => 
             const manager = await tx.$queryRaw`
                 SELECT id
                 FROM "Users"
-                WHERE id = ${manager_id} AND role = ${UserRole.EMPLOYEE}
+                WHERE id = ${manager_id} 
                 LIMIT 1
             `;
             if (manager.length === 0) throw new AppError("Manager not found in this company", 404);
