@@ -41,7 +41,6 @@ model Companies {
   key_results      KeyResults[]
   check_ins        CheckIns[]
   feedbacks        Feedbacks[]
-  evaluations      Evaluations[]
   notifications    Notifications[]
   ai_usage_logs    AIUsageLogs[]
 }
@@ -64,7 +63,6 @@ model Units {
   kpi_dictionaries KPIDictionaries[]
   kpi_assignments  KPIAssignments[]
   objectives       Objectives[]
-  evaluations      Evaluations[]
 
   @@index([company_id])
 }
@@ -98,7 +96,6 @@ model Users {
   approved_objectives Objectives[] @relation("ObjectiveApprover")
   check_ins          CheckIns[]
   feedbacks          Feedbacks[]
-  evaluations        Evaluations[] @relation("EmployeeEvaluations")
   notifications      Notifications[]
   ai_usage_logs      AIUsageLogs[]
 
@@ -117,7 +114,6 @@ model Cycles {
   company         Companies @relation(fields: [company_id], references: [id])
   kpi_assignments KPIAssignments[]
   objectives      Objectives[]
-  evaluations     Evaluations[]
 
   @@index([company_id])
 }
