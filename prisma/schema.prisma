@@ -305,23 +305,6 @@ model Feedbacks {
   @@index([objective_id])
 }
 
-model Evaluations {
-  id          Int    @id @default(autoincrement())
-  company_id  Int
-  employee_id Int
-  unit_id     Int
-  cycle_id    Int
-  rank        String
-  comment     String?
-
-  company  Companies @relation(fields: [company_id], references: [id])
-  employee Users     @relation("EmployeeEvaluations", fields: [employee_id], references: [id])
-  unit     Units     @relation(fields: [unit_id], references: [id])
-  cycle    Cycles    @relation(fields: [cycle_id], references: [id])
-
-  @@index([company_id])
-}
-
 model Notifications {
   id           Int      @id @default(autoincrement())
   company_id   Int
