@@ -79,7 +79,6 @@ model Users {
   full_name       String
   email           String
   password        String
-  phone           String?
   avatar_url      String?
   job_title       String?
   role            UserRole
