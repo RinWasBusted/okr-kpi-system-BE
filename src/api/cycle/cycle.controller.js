@@ -86,6 +86,23 @@ export const createCycle = async (req, res) => {
     }
 };
 
+// GET /cycles/:id
+export const getCycleById = async (req, res) => {
+    try {
+        const companyId = req.user.company_id;
+        if (!companyId) throw new AppError("Company context is required", 403);
+
+        const cycleId = parsePositiveInt(req.params.id, null);
+        if (!cycleId) throw new AppError("Invalid cycle ID", 400);
+
+        const cycle = await cycleService.getCycleDetail(companyId, cycleId);
+
+        res.success("Cycle retrieved successfully", 200, { cycle });
+    } catch (error) {
+        throw error;
+    }
+};
+
 // PUT /cycles/:id
 export const updateCycle = async (req, res) => {
     try {

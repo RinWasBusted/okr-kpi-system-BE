@@ -1,6 +1,7 @@
 import express from "express";
 import {
     getCycles,
+    getCycleById,
     createCycle,
     updateCycle,
     lockCycle,
@@ -24,7 +25,7 @@ router.use(authenticate);
  * /cycles:
  *   get:
  *     summary: Get list of cycles
- *     description: Returns a paginated list of cycles. Requires `accessToken` cookie and `ADMIN_COMPANY` role.
+ *     description: Returns a paginated list of cycles with open cycles count. Requires `accessToken` cookie and `ADMIN_COMPANY` role.
  *     tags: [Cycles]
  *     parameters:
  *       - in: query
@@ -53,6 +54,51 @@ router.use(authenticate);
  *     responses:
  *       200:
  *         description: Cycles retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cycles:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           name:
+ *                             type: string
+ *                           start_date:
+ *                             type: string
+ *                             format: date
+ *                           end_date:
+ *                             type: string
+ *                             format: date
+ *                           is_locked:
+ *                             type: boolean
+ *                           days_remaining:
+ *                             type: integer
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     open_cycles_count:
+ *                       type: integer
+ *                       description: Number of unlocked cycles
+ *                     page:
+ *                       type: integer
+ *                     per_page:
+ *                       type: integer
+ *                     last_page:
+ *                       type: integer
  */
 router.get("/", getCycles);
 
@@ -89,6 +135,70 @@ router.get("/", getCycles);
  *         description: Validation error (DATE_OVERLAP or invalid dates)
  */
 router.post("/", authorize("ADMIN_COMPANY"), createCycle);
+
+/**
+ * @swagger
+ * /cycles/{id}:
+ *   get:
+ *     summary: Get cycle detail
+ *     description: Get detailed information of a cycle including statistics. Requires `accessToken` cookie.
+ *     tags: [Cycles]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Cycle ID
+ *     responses:
+ *       200:
+ *         description: Cycle retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cycle:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         name:
+ *                           type: string
+ *                         start_date:
+ *                           type: string
+ *                           format: date-time
+ *                         end_date:
+ *                           type: string
+ *                           format: date-time
+ *                         is_locked:
+ *                           type: boolean
+ *                         days_remaining:
+ *                           type: integer
+ *                         statistics:
+ *                           type: object
+ *                           properties:
+ *                             total_objectives:
+ *                               type: integer
+ *                             total_kpis:
+ *                               type: integer
+ *                             avg_objective_progress:
+ *                               type: number
+ *                               description: Average progress of all objectives (0-100)
+ *                             avg_kpi_progress:
+ *                               type: number
+ *                               description: Average progress of all KPIs (0-100)
+ *       404:
+ *         description: Cycle not found
+ */
+router.get("/:id", getCycleById);
 
 /**
  * @swagger
