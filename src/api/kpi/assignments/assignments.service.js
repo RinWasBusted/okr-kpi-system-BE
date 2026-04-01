@@ -47,7 +47,7 @@ const assignmentSelect = {
 };
 
 const formatAssignment = async (assignment) => {
-    const [dictionary, owner, unit, parentAssignment, latestRecord] = await Promise.all([
+    const [dictionary, owner, unit, parentAssignment, latestRecord, cycle] = await Promise.all([
         prisma.kPIDictionaries.findUnique({
             where: { id: assignment.kpi_dictionary_id },
             select: { id: true, name: true, unit: true, evaluation_method: true },
@@ -75,6 +75,12 @@ const formatAssignment = async (assignment) => {
             orderBy: { created_at: "desc" },
             select: { status: true, trend: true },
         }),
+        assignment.cycle_id
+            ? prisma.cycles.findUnique({
+                  where: { id: assignment.cycle_id },
+                  select: { id: true, name: true, start_date: true, end_date: true },
+              })
+            : null,
     ]);
 
     return {
@@ -86,6 +92,7 @@ const formatAssignment = async (assignment) => {
         visibility: assignment.visibility,
         owner: owner,
         unit: unit,
+        cycle: cycle,
         parent_assignment: parentAssignment,
         latest_record: latestRecord,
     };
