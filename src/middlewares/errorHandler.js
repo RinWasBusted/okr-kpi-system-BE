@@ -6,6 +6,8 @@ const errorHandler = (err, req, res, next) => {
     let message = err.message || "Internal Server Error";
     let details = undefined;
 
+    console.log(err);
+
     if (err instanceof z.ZodError) {
         statusCode = 422;
         code = "VALIDATION_ERROR";

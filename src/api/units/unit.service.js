@@ -189,7 +189,7 @@ export const listUnits = async ({ page, per_page, mode = "tree" }, currentUser =
 // ─── Create ───────────────────────────────────────────────────────────────────
 
 export const createUnit = async (companyId, { name, parent_id, manager_id }) => {
-    return withContext(async (tx) => {
+    return prisma.$transaction(async (tx) => {
         let parentPath = null;
 
         if (parent_id !== undefined && parent_id !== null) {
@@ -238,7 +238,7 @@ export const createUnit = async (companyId, { name, parent_id, manager_id }) => 
 // ─── Update ───────────────────────────────────────────────────────────────────
 
 export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
-    return withContext(async (tx) => {
+    return prisma.$transaction(async (tx) => {
         const existing = await getUnitCore(tx, unitId);
         if (!existing) throw new AppError("Unit not found", 404);
 
@@ -338,7 +338,7 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
 export const deleteUnit = async (unitId) => {
-    return withContext(async (tx) => {
+    return prisma.$transaction(async (tx) => {
         const rows = await tx.$queryRaw`
             SELECT
                 u.id,
@@ -392,8 +392,8 @@ export const getUnitInfo = async (unitId) => {
 
 // ─── Detail ───────────────────────────────────────────────────────────────────
 
-export const getUnitDetail = async (unitId, currentUser = null) => {
-    return withContext(async (tx) => {
+export const getUnitDetail = async (unitId) => {
+    return prisma.$transaction(async (tx) => {
         const rows = await tx.$queryRaw`
             SELECT
                 u.id,
