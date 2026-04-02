@@ -76,7 +76,6 @@ export const getCurrentUser = async (userId) => {
                 id: true,
                 full_name: true,
                 email: true,
-                phone: true,
                 avatar_url: true,
                 role: true,
                 company_id: true,
