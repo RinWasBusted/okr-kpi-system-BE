@@ -10,6 +10,7 @@ const userSelect = {
     email: true,
     job_title: true,
     avatar_url: true,
+    role: true,
     is_active: true,
     created_at: true,
     unit: {
@@ -26,6 +27,7 @@ const formatUser = (user) => ({
     email: user.email,
     job_title: user.job_title ?? null,
     avatar_url: getCloudinaryUrlFromPublicId(user.avatar_url),
+    role: user.role,
     unit: user.unit ?? null,
     is_active: user.is_active,
     created_at: user.created_at,
@@ -35,6 +37,8 @@ const formatUser = (user) => ({
 
 export const listUsers = async ({ unit_id, search, page, per_page }) => {
     const where = {
+        // Exclude system admin (ADMIN role) - only show ADMIN_COMPANY and EMPLOYEE
+        role: { not: UserRole.ADMIN },
         ...(unit_id !== undefined && { unit_id }),
         ...(search && {
             OR: [
