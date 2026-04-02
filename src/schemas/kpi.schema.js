@@ -1,0 +1,112 @@
+import { z } from "zod";
+
+const LIMITS = {
+    name: { min: 1, max: 255 },
+    unit: { min: 1, max: 50 },
+    evaluation_method: { min: 1, max: 50 },
+    title: { min: 1, max: 255 },
+};
+
+// KPI Dictionary schemas
+export const createKPIDictionarySchema = z.object({
+    name: z
+        .string()
+        .min(LIMITS.name.min, "name is required")
+        .max(LIMITS.name.max, `name must not exceed ${LIMITS.name.max} characters`),
+    unit: z
+        .string()
+        .min(LIMITS.unit.min, "unit is required")
+        .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`),
+    evaluation_method: z.enum(["Positive", "Negative", "Stabilizing"]),
+});
+
+export const updateKPIDictionarySchema = z.object({
+    name: z
+        .string()
+        .min(LIMITS.name.min, "name cannot be empty")
+        .max(LIMITS.name.max, `name must not exceed ${LIMITS.name.max} characters`)
+        .optional(),
+    unit: z
+        .string()
+        .min(LIMITS.unit.min, "unit cannot be empty")
+        .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`)
+        .optional(),
+    evaluation_method: z.enum(["Positive", "Negative", "Stabilizing"]).optional(),
+}).refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field must be provided to update",
+});
+
+// KPI Assignment schemas
+export const createKPIAssignmentSchema = z.object({
+    kpi_dictionary_id: z.number().int().positive("kpi_dictionary_id is required"),
+    cycle_id: z.number().int().positive("cycle_id is required"),
+    target_value: z.number().positive("target_value must be positive"),
+    current_value: z.number().min(0).default(0),
+    unit_id: z.number().int().positive().nullable().optional(),
+    owner_id: z.number().int().positive().nullable().optional(),
+    parent_assignment_id: z.number().int().positive().nullable().optional(),
+    visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
+}).refine(
+    (data) => (data.unit_id && !data.owner_id) || (!data.unit_id && data.owner_id),
+    {
+        message: "Either unit_id or owner_id must be provided, but not both",
+    }
+);
+
+export const updateKPIAssignmentSchema = z.object({
+    cycle_id: z.number().int().positive().optional(),
+    target_value: z.number().positive().optional(),
+    current_value: z.number().min(0).optional(),
+    visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
+}).refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field must be provided to update",
+});
+
+// Key Result schemas
+export const createKeyResultSchema = z.object({
+    title: z
+        .string()
+        .min(LIMITS.title.min, "title is required")
+        .max(LIMITS.title.max, `title must not exceed ${LIMITS.title.max} characters`),
+    target_value: z.number().positive("target_value must be positive"),
+    current_value: z.number().min(0).default(0),
+    unit: z
+        .string()
+        .min(LIMITS.unit.min, "unit is required")
+        .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`),
+    weight: z.number().min(0).max(100).default(100),
+    due_date: z.string().datetime().optional(),
+});
+
+export const updateKeyResultSchema = z.object({
+    title: z
+        .string()
+        .min(LIMITS.title.min, "title cannot be empty")
+        .max(LIMITS.title.max, `title must not exceed ${LIMITS.title.max} characters`)
+        .optional(),
+    target_value: z.number().positive().optional(),
+    unit: z
+        .string()
+        .min(LIMITS.unit.min)
+        .max(LIMITS.unit.max)
+        .optional(),
+    weight: z.number().min(0).max(100).optional(),
+    due_date: z.string().datetime().optional(),
+}).refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field must be provided to update",
+});
+
+// KPI Record schemas
+export const createKPIRecordSchema = z.object({
+    period_start: z.string().datetime(),
+    period_end: z.string().datetime(),
+    actual_value: z.number().min(0),
+    status: z.string().min(1).max(50),
+    trend: z.string().min(1).max(50),
+});
+
+// CheckIn schemas
+export const createCheckInSchema = z.object({
+    achieved_value: z.number(),
+    comment: z.string().max(1000).optional(),
+});

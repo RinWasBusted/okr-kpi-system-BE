@@ -1,6 +1,8 @@
 import express from "express";
 import { createCheckIn, getCheckIns } from "./check-in.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
+import { validate } from "../../../middlewares/validate.js";
+import { createCheckInSchema } from "../../../schemas/kpi.schema.js";
 
 const router = express.Router();
 
@@ -34,17 +36,19 @@ router.use(authenticate);
  *             type: object
  *             required:
  *               - achieved_value
- *               - evidence_url
  *             properties:
  *               achieved_value:
  *                 type: number
- *                 description: The achieved value for this check-in
+ *                 description: The achieved value for this check-in (required)
  *               evidence_url:
  *                 type: string
- *                 description: URL to evidence of achievement
+ *                 format: uri
+ *                 maxLength: 2048
+ *                 description: URL to evidence of achievement (optional, max 2048 characters)
  *               comment:
  *                 type: string
- *                 description: Optional comment about the check-in
+ *                 maxLength: 1000
+ *                 description: Optional comment about the check-in (max 1000 characters)
  *     responses:
  *       200:
  *         description: Check-in created successfully
@@ -89,7 +93,7 @@ router.use(authenticate);
  *       422:
  *         description: Validation error (missing or invalid fields)
  */
-router.post("/key-results/:kr_id/check-ins", createCheckIn);
+router.post("/key-results/:kr_id/check-ins", validate(createCheckInSchema), createCheckIn);
 
 /**
  * @swagger

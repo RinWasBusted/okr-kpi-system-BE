@@ -3,6 +3,7 @@ import AppError from "../../utils/appError.js";
 import { hashPassword } from "../../utils/bcrypt.js";
 import { UserRole } from "@prisma/client";
 import { deleteImageFromCloudinary, getCloudinaryImageUrl } from "../../utils/cloudinary.js";
+import { updateAccessPathForUserOwnedItems } from "../../utils/path.js";
 
 const userSelect = {
     id: true,
@@ -123,6 +124,8 @@ export const updateUser = async (userId, { full_name, unit_id, password, is_acti
     });
     if (!existing) throw new AppError("User not found", 404);
 
+    const unitIdChanged = unit_id !== undefined && unit_id !== existing.unit_id;
+
     if (unit_id !== undefined && unit_id !== null) {
         const unit = await prisma.units.findFirst({
             where: { id: unit_id },
@@ -136,10 +139,20 @@ export const updateUser = async (userId, { full_name, unit_id, password, is_acti
     if (is_active !== undefined) updates.is_active = is_active;
     if (password !== undefined) updates.password = await hashPassword(password);
 
-    const updated = await prisma.users.update({
-        where: { id: userId },
-        data: updates,
-        select: userSelect,
+    // Use transaction to ensure consistency between user update and access_path updates
+    const updated = await prisma.$transaction(async (tx) => {
+        const user = await tx.users.update({
+            where: { id: userId },
+            data: updates,
+            select: userSelect,
+        });
+
+        // Update access_path for user's owned objectives and assignments when unit changes
+        if (unitIdChanged) {
+            await updateAccessPathForUserOwnedItems(tx, userId, unit_id ?? null);
+        }
+
+        return user;
     });
 
     return formatUser(updated);

@@ -98,6 +98,84 @@ export const isUnitManager = async (userId, unitId) => {
     return unit?.manager_id === userId;
 };
 
+/**
+ * Update access_path for Objectives belonging to a specific unit
+ * @param {Object} tx - Prisma transaction
+ * @param {number} unitId - The unit ID
+ * @param {string} newPath - The new path for the unit
+ * @returns {Promise<void>}
+ */
+export const updateObjectivesAccessPathForUnit = async (tx, unitId, newPath) => {
+    await tx.$executeRaw`
+        UPDATE "Objectives"
+        SET access_path = ${newPath}::ltree
+        WHERE unit_id = ${unitId} AND deleted_at IS NULL
+    `;
+};
+
+/**
+ * Update access_path for KPIAssignments belonging to a specific unit
+ * @param {Object} tx - Prisma transaction
+ * @param {number} unitId - The unit ID
+ * @param {string} newPath - The new path for the unit
+ * @returns {Promise<void>}
+ */
+export const updateKPIAssignmentsAccessPathForUnit = async (tx, unitId, newPath) => {
+    await tx.$executeRaw`
+        UPDATE "KPIAssignments"
+        SET access_path = ${newPath}::ltree
+        WHERE unit_id = ${unitId} AND deleted_at IS NULL
+    `;
+};
+
+/**
+ * Update access_path for all objectives and assignments owned by a user
+ * @param {Object} tx - Prisma transaction or prisma client
+ * @param {number} userId - The user ID
+ * @param {number|null} newUnitId - The new unit ID (null if removed from unit)
+ * @returns {Promise<void>}
+ */
+export const updateAccessPathForUserOwnedItems = async (tx, userId, newUnitId) => {
+    if (newUnitId) {
+        // Get the new unit's path
+        const rows = await tx.$queryRaw`
+            SELECT path::text AS path
+            FROM "Units"
+            WHERE id = ${newUnitId}
+        `;
+        const newUnitPath = rows[0]?.path;
+
+        if (newUnitPath) {
+            // Update Objectives owned by user (only those with unit_id = null, i.e., personal objectives)
+            await tx.$executeRaw`
+                UPDATE "Objectives"
+                SET access_path = ${newUnitPath}::ltree
+                WHERE owner_id = ${userId} AND unit_id IS NULL AND deleted_at IS NULL
+            `;
+
+            // Update KPIAssignments owned by user (only those with unit_id = null)
+            await tx.$executeRaw`
+                UPDATE "KPIAssignments"
+                SET access_path = ${newUnitPath}::ltree
+                WHERE owner_id = ${userId} AND unit_id IS NULL AND deleted_at IS NULL
+            `;
+        }
+    } else {
+        // User removed from unit - set access_path to 'company' for personal items
+        await tx.$executeRaw`
+            UPDATE "Objectives"
+            SET access_path = 'company'::ltree
+            WHERE owner_id = ${userId} AND unit_id IS NULL AND deleted_at IS NULL
+        `;
+
+        await tx.$executeRaw`
+            UPDATE "KPIAssignments"
+            SET access_path = 'company'::ltree
+            WHERE owner_id = ${userId} AND unit_id IS NULL AND deleted_at IS NULL
+        `;
+    }
+};
+
 export default {
     getUnitPath,
     getObjectiveAccessPath,
@@ -106,4 +184,7 @@ export default {
     isAncestorUnit,
     getUnitContext,
     isUnitManager,
+    updateObjectivesAccessPathForUnit,
+    updateKPIAssignmentsAccessPathForUnit,
+    updateAccessPathForUserOwnedItems,
 };

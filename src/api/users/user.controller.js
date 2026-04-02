@@ -94,19 +94,6 @@ export const createUser = async (req, res) => {
 
         const { full_name, email, password, unit_id } = req.body;
 
-        if (!full_name || typeof full_name !== "string" || full_name.trim() === "") {
-            throw new AppError("full_name is required", 422);
-        }
-        if (!email || typeof email !== "string") {
-            throw new AppError("email is required", 422);
-        }
-        if (!password || typeof password !== "string") {
-            throw new AppError("password is required", 422);
-        }
-        if (password.length < 8) {
-            throw new AppError("Password must be at least 8 characters", 422);
-        }
-
         let avatarPublicId = null;
         // Upload avatar if file is provided
         if (req.file) {
@@ -147,9 +134,6 @@ export const updateUser = async (req, res) => {
         const updates = {};
 
         if (full_name !== undefined) {
-            if (typeof full_name !== "string" || full_name.trim() === "") {
-                throw new AppError("full_name must be a non-empty string", 422);
-            }
             updates.full_name = full_name.trim();
         }
 
@@ -158,20 +142,11 @@ export const updateUser = async (req, res) => {
         }
 
         if (password !== undefined) {
-            if (typeof password !== "string" || password.length < 8) {
-                throw new AppError("Password must be at least 8 characters", 422);
-            }
             updates.password = password;
         }
 
         if (is_active !== undefined) {
-            const parsed = parseBoolean(is_active);
-            if (parsed === undefined) throw new AppError("is_active must be a boolean", 422);
-            updates.is_active = parsed;
-        }
-
-        if (Object.keys(updates).length === 0) {
-            throw new AppError("No fields provided to update", 400);
+            updates.is_active = is_active;
         }
 
         const user = await userService.updateUser(userId, updates);

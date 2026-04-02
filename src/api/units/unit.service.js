@@ -3,6 +3,12 @@ import AppError from "../../utils/appError.js";
 import { UserRole } from "@prisma/client";
 import requestContext from "../../utils/context.js";
 import { getCloudinaryImageUrl } from "../../utils/cloudinary.js";
+import {
+    getUnitPath,
+    updateObjectivesAccessPathForUnit,
+    updateKPIAssignmentsAccessPathForUnit,
+    updateAccessPathForUserOwnedItems,
+} from "../../utils/path.js";
 
 const withContext = async (fn) => {
     const store = requestContext.getStore();
@@ -277,11 +283,15 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
                 await tx.$executeRaw`
                     UPDATE "Users" SET unit_id = null WHERE id = ${oldManagerId}
                 `;
+                // Update access_path for old manager's owned items (now without unit)
+                await updateAccessPathForUserOwnedItems(tx, oldManagerId, null);
             }
             if (newManagerId !== null) {
                 await tx.$executeRaw`
                     UPDATE "Users" SET unit_id = ${unitId} WHERE id = ${newManagerId}
                 `;
+                // Update access_path for new manager's owned items (now with this unit)
+                await updateAccessPathForUserOwnedItems(tx, newManagerId, unitId);
             }
         }
 
@@ -300,6 +310,19 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
                 END
                 WHERE path <@ ${oldPath}::ltree
             `;
+
+            // Update access_path for Objectives and KPIAssignments of affected units
+            // Get all affected units (the updated unit and its descendants)
+            const affectedUnits = await tx.$queryRaw`
+                SELECT id, path::text AS path
+                FROM "Units"
+                WHERE path <@ ${newPath}::ltree
+            `;
+
+            for (const unit of affectedUnits) {
+                await updateObjectivesAccessPathForUnit(tx, unit.id, unit.path);
+                await updateKPIAssignmentsAccessPathForUnit(tx, unit.id, unit.path);
+            }
         }
 
         const unitRow = await getUnitRowById(tx, unitId);

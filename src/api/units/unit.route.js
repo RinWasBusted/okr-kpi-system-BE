@@ -8,6 +8,8 @@ import {
     getUnitInfo
 } from "./unit.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.js";
+import { validate } from "../../middlewares/validate.js";
+import { createUnitSchema, updateUnitSchema, listUnitsQuerySchema } from "../../schemas/unit.schema.js";
 
 const router = express.Router();
 
@@ -39,7 +41,8 @@ router.use(authenticate);
  *         schema:
  *           type: integer
  *           default: 100
- *         description: Records per page
+ *           maximum: 100
+ *         description: Records per page (max 100)
  *       - in: query
  *         name: mode
  *         schema:
@@ -154,7 +157,7 @@ router.use(authenticate);
  *                       type: string
  *                       example: "Access token is missing"
  */
-router.get("/", getUnits);
+router.get("/", validate(listUnitsQuerySchema, "query"), getUnits);
 
 /**
  * @swagger
@@ -373,6 +376,8 @@ router.get("/:id/detail", getUnitDetail);
  *             properties:
  *               name:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "Frontend Team"
  *               parent_id:
  *                 type: integer
@@ -511,7 +516,7 @@ router.get("/:id/detail", getUnitDetail);
  *                       type: string
  *                       example: "name is required"
  */
-router.post("/", createUnit);
+router.post("/", authorize("ADMIN_COMPANY"), validate(createUnitSchema), createUnit);
 
 /**
  * @swagger
@@ -536,6 +541,8 @@ router.post("/", createUnit);
  *             properties:
  *               name:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "Backend Team"
  *               parent_id:
  *                 type: integer
@@ -667,7 +674,7 @@ router.post("/", createUnit);
  *                       type: string
  *                       example: "Unit not found"
  */
-router.put("/:id", updateUnit);
+router.put("/:id", authorize("ADMIN_COMPANY"), validate(updateUnitSchema), updateUnit);
 
 /**
  * @swagger
@@ -763,6 +770,6 @@ router.put("/:id", updateUnit);
  *                       type: string
  *                       example: "Unit not found"
  */
-router.delete("/:id", deleteUnit);
+router.delete("/:id", authorize("ADMIN_COMPANY"), deleteUnit);
 
 export default router;
