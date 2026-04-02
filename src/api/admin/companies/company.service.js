@@ -341,7 +341,7 @@ export const getMyCompanyDetails = async (companyId) => {
         name: company.name,
         slug: company.slug,
         logo: company.logo,
-        logo_url: getCloudinaryImageUrl(company.logo, 80, 80, "fill"),
+        logo_url: company.logo ? getCloudinaryImageUrl(company.logo, 80, 80, "fill") : null,
         is_active: company.is_active,
         ai_plan: company.ai_plan,
         token_usage: company.token_usage,
