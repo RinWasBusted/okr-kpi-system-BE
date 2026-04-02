@@ -24,13 +24,15 @@ export const getUnits = async (req, res) => {
 
         const page = parsePositiveInt(req.query.page, 1);
         const per_page = parsePositiveInt(req.query.per_page, 100);
+        const mode = req.query.mode === "list" ? "list" : "tree"; // "tree" | "list"
 
-        const { total, data } = await unitService.listUnits({ page, per_page });
+        const { total, data } = await unitService.listUnits({ page, per_page, mode });
 
         res.success("Units retrieved successfully", 200, data, {
             page,
             per_page,
             total,
+            mode,
         });
     } catch (error) {
         throw error;
@@ -110,6 +112,25 @@ export const deleteUnit = async (req, res) => {
         await unitService.deleteUnit(unitId);
 
         res.status(204).send();
+    } catch (error) {
+        throw error;
+    }
+};
+
+// GET /units/:id/info
+export const getUnitInfo = async (req, res) => {
+    try {
+        const companyId = req.user.company_id;
+        if (!companyId) throw new AppError("Company context is required", 403);
+
+        const unitId = Number(req.params.id);
+        if (!Number.isInteger(unitId) || unitId <= 0) {
+            throw new AppError("Invalid unit ID", 400);
+        }
+
+        const unit = await unitService.getUnitInfo(unitId);
+
+        res.success("Unit info retrieved successfully", 200, unit);
     } catch (error) {
         throw error;
     }

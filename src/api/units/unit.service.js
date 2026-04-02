@@ -15,17 +15,29 @@ const withContext = async (fn) => {
     });
 };
 
-const formatUnitRow = (row) => ({
-    id: row.id,
-    name: row.name,
-    parent_id: row.parent_id ?? null,
-    path: row.path,
-    manager: row.manager_id
-        ? { id: row.manager_id, full_name: row.manager_full_name }
-        : null,
-    member_count: Number(row.member_count ?? 0),
-    created_at: row.created_at,
-});
+const formatUnitRow = (row, includeStats = false) => {
+    const base = {
+        id: row.id,
+        name: row.name,
+        parent_id: row.parent_id ?? null,
+        path: row.path,
+        manager: row.manager_id
+            ? { id: row.manager_id, full_name: row.manager_full_name }
+            : null,
+        member_count: Number(row.member_count ?? 0),
+        created_at: row.created_at,
+    };
+
+    if (includeStats) {
+        base.okr_count = Number(row.okr_count ?? 0);
+        base.kpi_count = Number(row.kpi_count ?? 0);
+        base.manager_name = row.manager_full_name ?? null;
+        base.okr_progress = row.okr_progress !== null ? Number(row.okr_progress) : null;
+        base.kpi_health = row.kpi_health !== null ? Number(row.kpi_health) : null;
+    }
+
+    return base;
+};
 
 const getUnitCore = async (tx, unitId) => {
     const rows = await tx.$queryRaw`
@@ -65,9 +77,9 @@ const getUnitRowById = async (tx, unitId) => {
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-export const listUnits = async ({ page, per_page }) => {
+export const listUnits = async ({ page, per_page, mode = "tree" }) => {
     return withContext(async (tx) => {
-        // Get all units (no pagination for tree building)
+        // Get all units with stats
         const allUnits = await tx.$queryRaw`
             SELECT
                 u.id,
@@ -77,10 +89,16 @@ export const listUnits = async ({ page, per_page }) => {
                 u.created_at,
                 m.id AS manager_id,
                 m.full_name AS manager_full_name,
-                COUNT(uu.id) AS member_count
+                COUNT(DISTINCT uu.id) AS member_count,
+                COUNT(DISTINCT o.id) AS okr_count,
+                COUNT(DISTINCT ka.id) AS kpi_count,
+                ROUND(AVG(o.progress_percentage)::numeric, 2) AS okr_progress,
+                ROUND(AVG(ka.progress_percentage)::numeric, 2) AS kpi_health
             FROM "Units" u
             LEFT JOIN "Users" m ON m.id = u.manager_id
             LEFT JOIN "Users" uu ON uu.unit_id = u.id
+            LEFT JOIN "Objectives" o ON o.unit_id = u.id AND o.deleted_at IS NULL
+            LEFT JOIN "KPIAssignments" ka ON ka.unit_id = u.id AND ka.deleted_at IS NULL
             GROUP BY
                 u.id,
                 u.name,
@@ -92,10 +110,22 @@ export const listUnits = async ({ page, per_page }) => {
             ORDER BY u.id ASC
         `;
 
-        // Build tree structure
+        // Flat list mode: return all units as flat list with pagination
+        if (mode === "list") {
+            const total = allUnits.length;
+            const offset = (page - 1) * per_page;
+            const paginatedUnits = allUnits.slice(offset, offset + per_page);
+
+            return {
+                total,
+                data: paginatedUnits.map((unit) => formatUnitRow(unit, true)),
+            };
+        }
+
+        // Tree mode: build tree structure (default behavior)
         const unitsMap = new Map();
         const formattedUnits = allUnits.map((unit) => ({
-            ...formatUnitRow(unit),
+            ...formatUnitRow(unit, true),
             sub_units: [],
         }));
 
@@ -281,6 +311,35 @@ export const deleteUnit = async (unitId) => {
         }
 
         await tx.$executeRaw`DELETE FROM "Units" WHERE id = ${unitId}`;
+    });
+};
+
+// ─── Info (lightweight) ───────────────────────────────────────────────────────
+
+export const getUnitInfo = async (unitId) => {
+    return withContext(async (tx) => {
+        const rows = await tx.$queryRaw`
+            SELECT
+                u.id,
+                u.name AS unit_name,
+                m.full_name AS manager_name,
+                m.job_title AS manager_job_title,
+                m.email AS manager_email
+            FROM "Units" u
+            LEFT JOIN "Users" m ON m.id = u.manager_id
+            WHERE u.id = ${unitId}
+        `;
+
+        if (rows.length === 0) throw new AppError("Unit not found", 404);
+
+        const unit = rows[0];
+        return {
+            unit_id: unit.id,
+            unit_name: unit.unit_name,
+            manager_name: unit.manager_name ?? null,
+            manager_job_title: unit.manager_job_title ?? null,
+            manager_email: unit.manager_email ?? null,
+        };
     });
 };
 
