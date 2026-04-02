@@ -54,9 +54,41 @@ export const createCompany = async (req, res) => {
 export const updateCompany = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, slug, is_active } = req.body;
+        const { name, slug, is_active, ai_plan, token_usage, credit_cost, usage_limit } = req.body;
 
-        const company = await companyService.updateCompany(parseInt(id), { name, slug, is_active });
+        let parsedTokenUsage;
+        if (token_usage !== undefined) {
+            parsedTokenUsage = parseInt(token_usage);
+            if (isNaN(parsedTokenUsage) || parsedTokenUsage < 0) {
+                throw new AppError("token_usage must be a non-negative integer", 422);
+            }
+        }
+
+        let parsedCreditCost;
+        if (credit_cost !== undefined) {
+            parsedCreditCost = parseFloat(credit_cost);
+            if (!Number.isFinite(parsedCreditCost) || parsedCreditCost < 0) {
+                throw new AppError("credit_cost must be a non-negative number", 422);
+            }
+        }
+
+        let parsedUsageLimit;
+        if (usage_limit !== undefined) {
+            parsedUsageLimit = parseInt(usage_limit);
+            if (isNaN(parsedUsageLimit) || parsedUsageLimit < 0) {
+                throw new AppError("usage_limit must be a non-negative integer", 422);
+            }
+        }
+
+        const company = await companyService.updateCompany(parseInt(id), {
+            name,
+            slug,
+            is_active,
+            ai_plan,
+            token_usage: parsedTokenUsage,
+            credit_cost: parsedCreditCost,
+            usage_limit: parsedUsageLimit,
+        });
 
         res.success("Company updated successfully", 200, { company });
     } catch (error) {
@@ -131,6 +163,24 @@ export const deleteLogo = async (req, res) => {
         const company = await companyService.deleteCompanyLogo(companyId);
 
         res.success("Logo deleted successfully", 200, company);
+    } catch (error) {
+        throw error;
+    }
+};
+
+// GET /admin/companies/me - Get current ADMIN_COMPANY's company details
+export const getMyCompany = async (req, res) => {
+    try {
+        // Get company_id from authenticated user's token (req.user is set by authenticate middleware)
+        const companyId = req.user?.company_id;
+
+        if (!companyId) {
+            throw new AppError("Company ID not found in token", 400);
+        }
+
+        const company = await companyService.getMyCompanyDetails(companyId);
+
+        res.success("Company retrieved successfully", 200, company);
     } catch (error) {
         throw error;
     }

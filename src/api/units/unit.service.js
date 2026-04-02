@@ -2,6 +2,7 @@ import prisma from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
 import { UserRole } from "@prisma/client";
 import requestContext from "../../utils/context.js";
+import { getCloudinaryImageUrl } from "../../utils/cloudinary.js";
 
 const withContext = async (fn) => {
     const store = requestContext.getStore();
@@ -15,17 +16,29 @@ const withContext = async (fn) => {
     });
 };
 
-const formatUnitRow = (row) => ({
-    id: row.id,
-    name: row.name,
-    parent_id: row.parent_id ?? null,
-    path: row.path,
-    manager: row.manager_id
-        ? { id: row.manager_id, full_name: row.manager_full_name }
-        : null,
-    member_count: Number(row.member_count ?? 0),
-    created_at: row.created_at,
-});
+const formatUnitRow = (row, includeStats = false) => {
+    const base = {
+        id: row.id,
+        name: row.name,
+        parent_id: row.parent_id ?? null,
+        path: row.path,
+        manager: row.manager_id
+            ? { id: row.manager_id, full_name: row.manager_full_name }
+            : null,
+        member_count: Number(row.member_count ?? 0),
+        created_at: row.created_at,
+    };
+
+    if (includeStats) {
+        base.okr_count = Number(row.okr_count ?? 0);
+        base.kpi_count = Number(row.kpi_count ?? 0);
+        base.manager_name = row.manager_full_name ?? null;
+        base.okr_progress = row.okr_progress !== null ? Number(row.okr_progress) : null;
+        base.kpi_health = row.kpi_health !== null ? Number(row.kpi_health) : null;
+    }
+
+    return base;
+};
 
 const getUnitCore = async (tx, unitId) => {
     const rows = await tx.$queryRaw`
@@ -65,10 +78,34 @@ const getUnitRowById = async (tx, unitId) => {
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-export const listUnits = async ({ page, per_page }) => {
+export const listUnits = async ({ page, per_page, mode = "tree" }) => {
     return withContext(async (tx) => {
-        // Get all units (no pagination for tree building)
+        // Get all units with stats using pre-aggregated CTEs to avoid JOIN fan-out
         const allUnits = await tx.$queryRaw`
+            WITH obj_stats AS (
+                SELECT
+                    unit_id,
+                    COUNT(id) AS okr_count,
+                    ROUND(AVG(progress_percentage)::numeric, 2) AS okr_progress
+                FROM "Objectives"
+                WHERE deleted_at IS NULL
+                GROUP BY unit_id
+            ),
+            kpi_stats AS (
+                SELECT
+                    unit_id,
+                    COUNT(id) AS kpi_count,
+                    ROUND(AVG(progress_percentage)::numeric, 2) AS kpi_health
+                FROM "KPIAssignments"
+                WHERE deleted_at IS NULL
+                GROUP BY unit_id
+            ),
+            member_stats AS (
+                SELECT unit_id, COUNT(id) AS member_count
+                FROM "Users"
+                WHERE deleted_at IS NULL
+                GROUP BY unit_id
+            )
             SELECT
                 u.id,
                 u.name,
@@ -77,25 +114,35 @@ export const listUnits = async ({ page, per_page }) => {
                 u.created_at,
                 m.id AS manager_id,
                 m.full_name AS manager_full_name,
-                COUNT(uu.id) AS member_count
+                COALESCE(ms.member_count, 0) AS member_count,
+                COALESCE(os.okr_count, 0) AS okr_count,
+                COALESCE(ks.kpi_count, 0) AS kpi_count,
+                COALESCE(os.okr_progress, 0) AS okr_progress,
+                COALESCE(ks.kpi_health, 0) AS kpi_health
             FROM "Units" u
             LEFT JOIN "Users" m ON m.id = u.manager_id
-            LEFT JOIN "Users" uu ON uu.unit_id = u.id
-            GROUP BY
-                u.id,
-                u.name,
-                u.parent_id,
-                u.path,
-                u.created_at,
-                m.id,
-                m.full_name
+            LEFT JOIN member_stats ms ON ms.unit_id = u.id
+            LEFT JOIN obj_stats os ON os.unit_id = u.id
+            LEFT JOIN kpi_stats ks ON ks.unit_id = u.id
             ORDER BY u.id ASC
         `;
 
-        // Build tree structure
+        // Flat list mode: return all units as flat list with pagination
+        if (mode === "list") {
+            const total = allUnits.length;
+            const offset = (page - 1) * per_page;
+            const paginatedUnits = allUnits.slice(offset, offset + per_page);
+
+            return {
+                total,
+                data: paginatedUnits.map((unit) => formatUnitRow(unit, true)),
+            };
+        }
+
+        // Tree mode: build tree structure (default behavior)
         const unitsMap = new Map();
         const formattedUnits = allUnits.map((unit) => ({
-            ...formatUnitRow(unit),
+            ...formatUnitRow(unit, true),
             sub_units: [],
         }));
 
@@ -144,10 +191,11 @@ export const createUnit = async (companyId, { name, parent_id, manager_id }) => 
             const manager = await tx.$queryRaw`
                 SELECT id
                 FROM "Users"
-                WHERE id = ${manager_id} AND role = ${UserRole.EMPLOYEE}
+                WHERE id = ${manager_id}
+                  AND role != ${UserRole.ADMIN}::"UserRole"
                 LIMIT 1
             `;
-            if (manager.length === 0) throw new AppError("Manager not found in this company", 404);
+            if (manager.length === 0) throw new AppError("Manager not found or is not eligible to be assigned as a unit manager", 404);
         }
 
         const nextIdRows = await tx.$queryRaw`
@@ -201,10 +249,11 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
             const manager = await tx.$queryRaw`
                 SELECT id
                 FROM "Users"
-                WHERE id = ${manager_id} AND role = ${UserRole.EMPLOYEE}
+                WHERE id = ${manager_id}
+                  AND role != ${UserRole.ADMIN}::"UserRole"
                 LIMIT 1
             `;
-            if (manager.length === 0) throw new AppError("Manager not found in this company", 404);
+            if (manager.length === 0) throw new AppError("Manager not found or is not eligible to be assigned as a unit manager", 404);
         }
 
         const nameProvided = name !== undefined && name !== null;
@@ -284,6 +333,35 @@ export const deleteUnit = async (unitId) => {
     });
 };
 
+// ─── Info (lightweight) ───────────────────────────────────────────────────────
+
+export const getUnitInfo = async (unitId) => {
+    return withContext(async (tx) => {
+        const rows = await tx.$queryRaw`
+            SELECT
+                u.id,
+                u.name AS unit_name,
+                m.full_name AS manager_name,
+                m.job_title AS manager_job_title,
+                m.email AS manager_email
+            FROM "Units" u
+            LEFT JOIN "Users" m ON m.id = u.manager_id
+            WHERE u.id = ${unitId}
+        `;
+
+        if (rows.length === 0) throw new AppError("Unit not found", 404);
+
+        const unit = rows[0];
+        return {
+            unit_id: unit.id,
+            unit_name: unit.unit_name,
+            manager_name: unit.manager_name ?? null,
+            manager_job_title: unit.manager_job_title ?? null,
+            manager_email: unit.manager_email ?? null,
+        };
+    });
+};
+
 // ─── Detail ───────────────────────────────────────────────────────────────────
 
 export const getUnitDetail = async (unitId) => {
@@ -332,7 +410,9 @@ export const getUnitDetail = async (unitId) => {
                     id: unit.manager_id,
                     full_name: unit.manager_full_name,
                     email: unit.manager_email,
-                    avatar_url: unit.avatar_url,
+                    avatar_url: unit.avatar_url
+                        ? getCloudinaryImageUrl(unit.avatar_url, 50, 50, "fill")
+                        : null,
                     job_title: unit.job_title,
                   }
                 : null,

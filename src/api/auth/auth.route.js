@@ -270,7 +270,8 @@ router.patch("/change-password", authenticate, changePassword);
  *                         avatar_url:
  *                           type: string
  *                           nullable: true
- *                           example: "https://example.com/avatar.jpg"
+ *                           description: "Cloudinary URL 50x50 pixels"
+ *                           example: "https://res.cloudinary.com/demo/image/upload/c_fill,h_50,w_50/avatar.jpg"
  *                         company_id:
  *                           type: integer
  *                           example: 1
@@ -285,11 +286,8 @@ router.patch("/change-password", authenticate, changePassword);
  *                         created_at:
  *                           type: string
  *                           format: date-time
+ *                           description: "Create date (can't be changed)"
  *                           example: "2026-01-01T00:00:00.000Z"
- *                         updated_at:
- *                           type: string
- *                           format: date-time
- *                           example: "2026-03-18T10:30:00.000Z"
  *       401:
  *         description: Access token missing or invalid
  *         content:

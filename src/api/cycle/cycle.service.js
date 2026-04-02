@@ -57,8 +57,9 @@ export const listCycles = async ({ companyId, is_locked, year, page, per_page })
         where.start_date = { gte: start, lte: end };
     }
 
-    const [total, cycles] = await Promise.all([
+    const [total, openCyclesCount, cycles] = await Promise.all([
         prisma.cycles.count({ where }),
+        prisma.cycles.count({ where: { company_id: companyId, is_locked: false } }),
         prisma.cycles.findMany({
             where,
             skip: (page - 1) * per_page,
@@ -76,6 +77,7 @@ export const listCycles = async ({ companyId, is_locked, year, page, per_page })
 
     return {
         total,
+        open_cycles_count: openCyclesCount,
         data,
         last_page: Math.ceil(total / per_page),
     };
@@ -138,6 +140,56 @@ export const updateCycle = async (companyId, cycleId, { name, start_date, end_da
     });
 
     return formatCycle(updated);
+};
+
+// ─── Get Detail ───────────────────────────────────────────────────────────────
+
+export const getCycleDetail = async (companyId, cycleId) => {
+    const cycle = await prisma.cycles.findFirst({
+        where: { id: cycleId, company_id: companyId },
+        select: cycleSelect,
+    });
+
+    if (!cycle) {
+        throw new AppError("Cycle not found", 404);
+    }
+
+    // Get objectives statistics
+    const objectivesStats = await prisma.objectives.aggregate({
+        where: {
+            company_id: companyId,
+            cycle_id: cycleId,
+            deleted_at: null,
+        },
+        _count: { id: true },
+        _avg: { progress_percentage: true },
+    });
+
+    // Get KPI assignments statistics
+    const kpiStats = await prisma.kPIAssignments.aggregate({
+        where: {
+            company_id: companyId,
+            cycle_id: cycleId,
+            deleted_at: null,
+        },
+        _count: { id: true },
+        _avg: { progress_percentage: true },
+    });
+
+    const today = new Date();
+
+    return {
+        ...formatCycle(cycle),
+        days_remaining: daysBetweenUtc(cycle.end_date, today),
+        start_date: cycle.start_date,
+        end_date: cycle.end_date,
+        statistics: {
+            total_objectives: objectivesStats._count.id,
+            total_kpis: kpiStats._count.id,
+            avg_objective_progress: objectivesStats._avg.progress_percentage || 0,
+            avg_kpi_progress: kpiStats._avg.progress_percentage || 0,
+        },
+    };
 };
 
 // ─── Lock ─────────────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import {
     getCompanyStats,
     uploadLogo,
     deleteLogo,
+    getMyCompany,
 } from "./company.controller.js";
 import adminCompanyRoutes from "../AdminCompany/adminCompany.route.js";
 import { authenticate, authorize } from "../../../middlewares/auth.js";
@@ -15,6 +16,109 @@ import { wrapMulter } from "../../../utils/wrapMulter.js";
 import requestContext from "../../../utils/context.js";
 
 const router = express.Router();
+
+/**
+ * @swagger
+ * /admin/companies/me:
+ *   get:
+ *     summary: Get current ADMIN_COMPANY's company details
+ *     description: Returns detailed information about the company of the currently authenticated ADMIN_COMPANY user. Company ID is extracted from the access token. Requires ADMIN_COMPANY role.
+ *     tags: [Admin - Companies]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Company retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Company retrieved successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     name:
+ *                       type: string
+ *                       example: "Acme Corp"
+ *                     slug:
+ *                       type: string
+ *                       example: "acme-corp"
+ *                     logo:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "okr-kpi-system/companies/logos/123456"
+ *                     logo_url:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "https://res.cloudinary.com/.../image.jpg"
+ *                     is_active:
+ *                       type: boolean
+ *                       example: true
+ *                     ai_plan:
+ *                       type: string
+ *                       enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
+ *                       example: "FREE"
+ *                     token_usage:
+ *                       type: integer
+ *                       example: 1500
+ *                     credit_cost:
+ *                       type: number
+ *                       format: float
+ *                       example: 0.05
+ *                     usage_limit:
+ *                       type: integer
+ *                       example: 10000
+ *                     admin_count:
+ *                       type: integer
+ *                       example: 2
+ *                     employee_count:
+ *                       type: integer
+ *                       example: 50
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2026-01-01T00:00:00.000Z"
+ *       400:
+ *         description: Company ID not found in token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Company ID not found in token"
+ *       401:
+ *         description: Unauthenticated
+ *       403:
+ *         description: Forbidden - requires ADMIN_COMPANY role
+ *       404:
+ *         description: Company not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Company not found"
+ */
+router.get("/me", authenticate, authorize("ADMIN_COMPANY"), getMyCompany);
 
 router.use(authenticate, authorize("ADMIN"));
 router.use("/:company_id/admins", adminCompanyRoutes);
@@ -294,6 +398,24 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), createCompany
  *                 type: boolean
  *                 example: false
  *                 description: "false = lock the entire company, all users will lose login access"
+ *               ai_plan:
+ *                 type: string
+ *                 enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
+ *                 example: "SUBSCRIPTION"
+ *                 description: AI plan type for the company
+ *               token_usage:
+ *                 type: integer
+ *                 example: 1500
+ *                 description: Current token usage count
+ *               credit_cost:
+ *                 type: number
+ *                 format: float
+ *                 example: 0.05
+ *                 description: Cost per token credit
+ *               usage_limit:
+ *                 type: integer
+ *                 example: 10000
+ *                 description: Maximum token usage limit
  *     responses:
  *       200:
  *         description: Company updated successfully
@@ -323,6 +445,19 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), createCompany
  *                         is_active:
  *                           type: boolean
  *                           example: false
+ *                         ai_plan:
+ *                           type: string
+ *                           example: "SUBSCRIPTION"
+ *                         token_usage:
+ *                           type: integer
+ *                           example: 1500
+ *                         credit_cost:
+ *                           type: number
+ *                           format: float
+ *                           example: 0.05
+ *                         usage_limit:
+ *                           type: integer
+ *                           example: 10000
  *                         created_at:
  *                           type: string
  *                           format: date-time
@@ -447,8 +582,8 @@ router.delete("/:id", deactivateCompany);
  * @swagger
  * /admin/companies/{id}/stats:
  *   get:
- *     summary: Get company overview stats with details
- *     description: Returns company information along with aggregated statistics.
+ *     summary: Get company details with AI usage info
+ *     description: Returns company information including AI plan, token usage, credit cost, and usage limit.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -485,6 +620,14 @@ router.delete("/:id", deactivateCompany);
  *                     is_active:
  *                       type: boolean
  *                       example: true
+ *                     logo:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "okr-kpi-system/companies/logos/123456"
+ *                     logo_url:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "https://res.cloudinary.com/.../image.jpg"
  *                     created_at:
  *                       type: string
  *                       format: date-time
@@ -495,19 +638,20 @@ router.delete("/:id", deactivateCompany);
  *                     employee_count:
  *                       type: integer
  *                       example: 50
- *                     active_cycles:
+ *                     ai_plan:
+ *                       type: string
+ *                       enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
+ *                       example: "FREE"
+ *                     token_usage:
  *                       type: integer
- *                       example: 3
- *                     total_objectives:
- *                       type: integer
- *                       example: 120
- *                     avg_okr_progress:
+ *                       example: 1500
+ *                     credit_cost:
  *                       type: number
  *                       format: float
- *                       example: 67.5
- *                     total_kpi_assignments:
+ *                       example: 0.05
+ *                     usage_limit:
  *                       type: integer
- *                       example: 80
+ *                       example: 10000
  *       404:
  *         description: Company not found
  *         content:

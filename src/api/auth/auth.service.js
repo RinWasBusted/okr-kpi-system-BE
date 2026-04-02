@@ -4,11 +4,12 @@ import { hashPassword, comparePassword } from '../../utils/bcrypt.js';
 import AppError from '../../utils/appError.js';
 import client from '../../utils/redis.js';
 import requestContext from '../../utils/context.js';
+import { getCloudinaryImageUrl } from '../../utils/cloudinary.js';
 
 export const loginService = async (email, password, company_slug = '') => {
     let company_id = null;
     if( company_slug !== '' ){
-        const company = await requestContext.run({ company_id: '', role: 'ADMIN' }, 
+        const company = await requestContext.run({ company_id: '', role: 'ADMIN' },
             async () => await prisma.companies.findUnique({ where: { slug: company_slug } })
         );
         if(!company){
@@ -23,12 +24,8 @@ export const loginService = async (email, password, company_slug = '') => {
             where: { email }
         });
 
-        if (!user) {
-            throw new AppError("User not found", 404);
-        }
-
-        if (!await comparePassword(password, user.password)) {
-            throw new AppError("Invalid credentials", 401);
+        if (!user || !(await comparePassword(password, user.password))) {
+            throw new AppError("Invalid email or password", 401);
         }
 
         const tokenPayload = {
@@ -45,7 +42,6 @@ export const loginService = async (email, password, company_slug = '') => {
 
         return { user: { id: user.id, full_name: user.full_name, avatar_url: user.avatar_url, email: user.email, job_title: user.job_title, role: user.role, company_id: user.company_id, unit_id: user.unit_id }, accessToken, refreshToken };
     } catch (error) {
-        console.log(error);
         if (error instanceof AppError) {
             throw error;
         }
@@ -84,6 +80,7 @@ export const getCurrentUser = async (userId) => {
                 role: true,
                 company_id: true,
                 unit_id: true,
+                created_at: true,
                 company: {
                     select: {
                         slug: true
@@ -96,8 +93,14 @@ export const getCurrentUser = async (userId) => {
             throw new AppError("User not found", 404);
         }
 
+        // Transform avatar_url to Cloudinary URL with 50x50 pixels
+        const avatarUrl = user.avatar_url
+            ? getCloudinaryImageUrl(user.avatar_url, 50, 50, "fill")
+            : null;
+
         return {
             ...user,
+            avatar_url: avatarUrl,
             company_slug: user.company?.slug || null,
             company: undefined
         };

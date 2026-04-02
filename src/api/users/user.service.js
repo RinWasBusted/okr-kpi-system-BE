@@ -2,7 +2,7 @@ import prisma from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
 import { hashPassword } from "../../utils/bcrypt.js";
 import { UserRole } from "@prisma/client";
-import { deleteImageFromCloudinary, getCloudinaryUrlFromPublicId } from "../../utils/cloudinary.js";
+import { deleteImageFromCloudinary, getCloudinaryImageUrl } from "../../utils/cloudinary.js";
 
 const userSelect = {
     id: true,
@@ -10,6 +10,7 @@ const userSelect = {
     email: true,
     job_title: true,
     avatar_url: true,
+    role: true,
     is_active: true,
     created_at: true,
     unit: {
@@ -25,7 +26,10 @@ const formatUser = (user) => ({
     full_name: user.full_name,
     email: user.email,
     job_title: user.job_title ?? null,
-    avatar_url: getCloudinaryUrlFromPublicId(user.avatar_url),
+    avatar_url: user.avatar_url
+        ? getCloudinaryImageUrl(user.avatar_url, 50, 50, "fill")
+        : null,
+    role: user.role,
     unit: user.unit ?? null,
     is_active: user.is_active,
     created_at: user.created_at,
@@ -35,6 +39,8 @@ const formatUser = (user) => ({
 
 export const listUsers = async ({ unit_id, search, page, per_page }) => {
     const where = {
+        // Exclude system admin (ADMIN role) - only show ADMIN_COMPANY and EMPLOYEE
+        role: { not: UserRole.ADMIN },
         ...(unit_id !== undefined && { unit_id }),
         ...(search && {
             OR: [

@@ -92,6 +92,10 @@ router.use(authenticate, authorize("ADMIN_COMPANY"));
  *                         type: string
  *                         nullable: true
  *                         example: null
+ *                       role:
+ *                         type: string
+ *                         enum: [ADMIN_COMPANY, EMPLOYEE]
+ *                         example: "EMPLOYEE"
  *                       unit:
  *                         type: object
  *                         nullable: true
@@ -217,6 +221,10 @@ router.get("/", getUsers);
  *                           type: string
  *                           nullable: true
  *                           example: null
+ *                         role:
+ *                           type: string
+ *                           enum: [ADMIN_COMPANY, EMPLOYEE]
+ *                           example: "EMPLOYEE"
  *                         unit:
  *                           type: object
  *                           nullable: true
@@ -452,6 +460,9 @@ router.delete("/:id/avatar", authorize("ADMIN_COMPANY", "EMPLOYEE"), isOwnerOrAd
  *                           type: string
  *                           nullable: true
  *                           example: "okr-kpi-system/users/avatars/image-123"
+ *                         role:
+ *                           type: string
+ *                           example: "EMPLOYEE"
  *                         unit:
  *                           type: object
  *                           nullable: true
@@ -642,6 +653,9 @@ router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createUser)
  *                           type: string
  *                           nullable: true
  *                           example: null
+ *                         role:
+ *                           type: string
+ *                           example: "EMPLOYEE"
  *                         unit:
  *                           type: object
  *                           nullable: true

@@ -50,8 +50,7 @@ const main = async () => {
         FOR table_name IN 
             SELECT unnest(ARRAY[
                 'Units', 'Cycles', 'KPIDictionaries', 'KPIAssignments', 'KPIRecords', 
-                'Objectives', 'KeyResults', 'CheckIns', 'Feedbacks', 
-                'Evaluations', 'Notifications', 'AIUsageLogs'
+                'Objectives', 'KeyResults', 'CheckIns', 'Feedbacks', 'Notifications', 'AIUsageLogs'
             ])
         LOOP
             EXECUTE format('ALTER TABLE "%s" ENABLE ROW LEVEL SECURITY;', table_name);
@@ -95,6 +94,7 @@ const main = async () => {
       email: "admin@phamhoangthai.site",
       password: hashedPassword,
       role: "ADMIN",
+      company_id: null
     }
   });
 

@@ -1,6 +1,6 @@
 import prisma from "../../../utils/prisma.js";
 import { hashPassword } from "../../../utils/bcrypt.js";
-import { deleteImageFromCloudinary, getCloudinaryUrlFromPublicId } from "../../../utils/cloudinary.js";
+import { deleteImageFromCloudinary, getCloudinaryImageUrl } from "../../../utils/cloudinary.js";
 import AppError from "../../../utils/appError.js";
 
 const COMPANY_ADMIN_ROLE = "ADMIN_COMPANY";
@@ -18,8 +18,9 @@ const formatAdmin = (admin) => ({
     id: admin.id,
     full_name: admin.full_name,
     email: admin.email,
-    avatar_url: admin.avatar_url ?? null,
-    avatar_full_url: getCloudinaryUrlFromPublicId(admin.avatar_url),
+    avatar_url: admin.avatar_url
+        ? getCloudinaryImageUrl(admin.avatar_url, 50, 50, "fill")
+        : null,
     is_active: admin.is_active,
     created_at: admin.created_at,
 });
@@ -77,7 +78,7 @@ export const updateCompanyAdmin = async (adminId, updates) =>
     where: { id: adminId },
     data: updates,
     select: adminSelect,
-  });
+  }).then(formatAdmin);
 
 export const countActiveCompanyAdmins = async (companyId) =>
   prisma.users.count({
@@ -89,7 +90,7 @@ export const deactivateCompanyAdmin = async (adminId) =>
     where: { id: adminId },
     data: { is_active: false },
     select: adminSelect,
-  });
+  }).then(formatAdmin);
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
@@ -112,7 +113,7 @@ export const updateAdminAvatar = async (adminId, publicId) => {
     select: adminSelect,
   });
 
-  return updated;
+  return formatAdmin(updated);
 };
 
 export const deleteAdminAvatar = async (adminId) => {
@@ -134,5 +135,5 @@ export const deleteAdminAvatar = async (adminId) => {
     select: adminSelect,
   });
 
-  return updated;
+  return formatAdmin(updated);
 };
