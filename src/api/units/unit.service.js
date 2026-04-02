@@ -80,8 +80,32 @@ const getUnitRowById = async (tx, unitId) => {
 
 export const listUnits = async ({ page, per_page, mode = "tree" }) => {
     return withContext(async (tx) => {
-        // Get all units with stats
+        // Get all units with stats using pre-aggregated CTEs to avoid JOIN fan-out
         const allUnits = await tx.$queryRaw`
+            WITH obj_stats AS (
+                SELECT
+                    unit_id,
+                    COUNT(id) AS okr_count,
+                    ROUND(AVG(progress_percentage)::numeric, 2) AS okr_progress
+                FROM "Objectives"
+                WHERE deleted_at IS NULL
+                GROUP BY unit_id
+            ),
+            kpi_stats AS (
+                SELECT
+                    unit_id,
+                    COUNT(id) AS kpi_count,
+                    ROUND(AVG(progress_percentage)::numeric, 2) AS kpi_health
+                FROM "KPIAssignments"
+                WHERE deleted_at IS NULL
+                GROUP BY unit_id
+            ),
+            member_stats AS (
+                SELECT unit_id, COUNT(id) AS member_count
+                FROM "Users"
+                WHERE deleted_at IS NULL
+                GROUP BY unit_id
+            )
             SELECT
                 u.id,
                 u.name,
@@ -90,24 +114,16 @@ export const listUnits = async ({ page, per_page, mode = "tree" }) => {
                 u.created_at,
                 m.id AS manager_id,
                 m.full_name AS manager_full_name,
-                COUNT(DISTINCT uu.id) AS member_count,
-                COUNT(DISTINCT o.id) AS okr_count,
-                COUNT(DISTINCT ka.id) AS kpi_count,
-                ROUND(AVG(o.progress_percentage)::numeric, 2) AS okr_progress,
-                ROUND(AVG(ka.progress_percentage)::numeric, 2) AS kpi_health
+                COALESCE(ms.member_count, 0) AS member_count,
+                COALESCE(os.okr_count, 0) AS okr_count,
+                COALESCE(ks.kpi_count, 0) AS kpi_count,
+                COALESCE(os.okr_progress, 0) AS okr_progress,
+                COALESCE(ks.kpi_health, 0) AS kpi_health
             FROM "Units" u
             LEFT JOIN "Users" m ON m.id = u.manager_id
-            LEFT JOIN "Users" uu ON uu.unit_id = u.id
-            LEFT JOIN "Objectives" o ON o.unit_id = u.id AND o.deleted_at IS NULL
-            LEFT JOIN "KPIAssignments" ka ON ka.unit_id = u.id AND ka.deleted_at IS NULL
-            GROUP BY
-                u.id,
-                u.name,
-                u.parent_id,
-                u.path,
-                u.created_at,
-                m.id,
-                m.full_name
+            LEFT JOIN member_stats ms ON ms.unit_id = u.id
+            LEFT JOIN obj_stats os ON os.unit_id = u.id
+            LEFT JOIN kpi_stats ks ON ks.unit_id = u.id
             ORDER BY u.id ASC
         `;
 

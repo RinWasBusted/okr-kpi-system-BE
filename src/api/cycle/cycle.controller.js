@@ -34,7 +34,7 @@ export const getCycles = async (req, res) => {
         const is_locked = parseBoolean(req.query.is_locked);
         const year = req.query.year ? parsePositiveInt(req.query.year, undefined) : undefined;
 
-        const { total, data, last_page } = await cycleService.listCycles({
+        const { total, open_cycles_count, data, last_page } = await cycleService.listCycles({
             companyId,
             is_locked,
             year,
@@ -44,6 +44,7 @@ export const getCycles = async (req, res) => {
 
         res.success("Cycles retrieved successfully", 200, data, {
             total,
+            open_cycles_count,
             page,
             per_page,
             last_page,
