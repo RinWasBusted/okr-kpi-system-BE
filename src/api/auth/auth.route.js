@@ -263,10 +263,6 @@ router.patch("/change-password", authenticate, changePassword);
  *                           type: string
  *                           format: email
  *                           example: "user@example.com"
- *                         phone:
- *                           type: string
- *                           nullable: true
- *                           example: "0987654321"
  *                         role:
  *                           type: string
  *                           enum: [admin, manager, employee]
