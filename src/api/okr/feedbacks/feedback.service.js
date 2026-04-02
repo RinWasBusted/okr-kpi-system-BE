@@ -2,6 +2,7 @@ import prisma from "../../../utils/prisma.js";
 import AppError from "../../../utils/appError.js";
 import { UserRole } from "@prisma/client";
 import { canViewObjective } from "../../../utils/okr.js";
+import { getCloudinaryImageUrl } from "../../../utils/cloudinary.js";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -47,7 +48,14 @@ const formatFeedback = (fb) => ({
     status: fb.status,
     created_at: fb.created_at,
     updated_at: fb.updated_at ?? null,
-    user: fb.user ?? null,
+    user: fb.user
+        ? {
+            ...fb.user,
+            avatar_url: fb.user.avatar_url
+                ? getCloudinaryImageUrl(fb.user.avatar_url, 50, 50, "fill")
+                : null,
+          }
+        : null,
     reply_count: fb._count?.replies ?? 0,
 });
 

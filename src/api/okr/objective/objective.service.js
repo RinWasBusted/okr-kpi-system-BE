@@ -7,6 +7,7 @@ import {
     recalculateObjectiveProgress,
     calculateKeyResultProgress,
 } from "../../../utils/okr.js";
+import { getCloudinaryImageUrl } from "../../../utils/cloudinary.js";
 import { daysBetweenUtc } from "../../../utils/date.js";
 import {
     getObjectiveAccessPath,
@@ -112,6 +113,15 @@ const formatKeyResult = (kr, now) => ({
 
 const formatObjective = (objective, includeKeyResults = false) => {
     const now = new Date();
+    const formatUserAvatar = (user) => {
+        if (!user) return null;
+        return {
+            ...user,
+            avatar_url: user.avatar_url
+                ? getCloudinaryImageUrl(user.avatar_url, 50, 50, "fill")
+                : null,
+        };
+    };
     return {
         id: objective.id,
         title: objective.title,
@@ -123,10 +133,10 @@ const formatObjective = (objective, includeKeyResults = false) => {
         owner_id: objective.owner_id,
         parent_objective_id: objective.parent_objective_id,
         created_at: objective.created_at,
-        owner: objective.owner ?? null,
+        owner: formatUserAvatar(objective.owner),
         unit: objective.unit ?? null,
         parent_objective: objective.parent_objective ?? null,
-        approved_by: objective.approver ?? null,
+        approved_by: formatUserAvatar(objective.approver),
         ...(includeKeyResults && {
             key_results: (objective.key_results || []).map((kr) => formatKeyResult(kr, now)),
         }),

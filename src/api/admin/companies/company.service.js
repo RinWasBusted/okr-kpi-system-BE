@@ -1,7 +1,7 @@
 import prisma from "../../../utils/prisma.js";
 import { UserRole, Prisma, AIPlan } from "@prisma/client";
 import AppError from "../../../utils/appError.js";
-import { deleteImageFromCloudinary, getCloudinaryUrlFromPublicId } from "../../../utils/cloudinary.js";
+import { deleteImageFromCloudinary, getCloudinaryImageUrl } from "../../../utils/cloudinary.js";
 
 export const ensureCompanyExists = async (id) => {
     const company = await prisma.companies.findUnique({
@@ -78,7 +78,7 @@ export const getCompanies = async (filters, pagination) => {
         id: company.id,
         name: company.name,
         slug: company.slug,
-        logo_url: getCloudinaryUrlFromPublicId(company.logo),
+        logo_url: getCloudinaryImageUrl(company.logo, 80, 80, "fill"),
         token_usage: company.token_usage,
         is_active: company.is_active,
         admin_count: company._count.users,
@@ -297,7 +297,7 @@ export const getCompanyStats = async (id) => {
         name: company.name,
         slug: company.slug,
         logo: company.logo,
-        logo_url: getCloudinaryUrlFromPublicId(company.logo),
+        logo_url: getCloudinaryImageUrl(company.logo, 80, 80, "fill"),
         is_active: company.is_active,
         ai_plan: company.ai_plan,
         token_usage: company.token_usage,
@@ -341,7 +341,7 @@ export const getMyCompanyDetails = async (companyId) => {
         name: company.name,
         slug: company.slug,
         logo: company.logo,
-        logo_url: getCloudinaryUrlFromPublicId(company.logo),
+        logo_url: getCloudinaryImageUrl(company.logo, 80, 80, "fill"),
         is_active: company.is_active,
         ai_plan: company.ai_plan,
         token_usage: company.token_usage,

@@ -2,7 +2,7 @@ import prisma from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
 import { hashPassword } from "../../utils/bcrypt.js";
 import { UserRole } from "@prisma/client";
-import { deleteImageFromCloudinary, getCloudinaryUrlFromPublicId } from "../../utils/cloudinary.js";
+import { deleteImageFromCloudinary, getCloudinaryImageUrl } from "../../utils/cloudinary.js";
 
 const userSelect = {
     id: true,
@@ -26,7 +26,9 @@ const formatUser = (user) => ({
     full_name: user.full_name,
     email: user.email,
     job_title: user.job_title ?? null,
-    avatar_url: getCloudinaryUrlFromPublicId(user.avatar_url),
+    avatar_url: user.avatar_url
+        ? getCloudinaryImageUrl(user.avatar_url, 50, 50, "fill")
+        : null,
     role: user.role,
     unit: user.unit ?? null,
     is_active: user.is_active,

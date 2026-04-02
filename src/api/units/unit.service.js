@@ -2,6 +2,7 @@ import prisma from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
 import { UserRole } from "@prisma/client";
 import requestContext from "../../utils/context.js";
+import { getCloudinaryImageUrl } from "../../utils/cloudinary.js";
 
 const withContext = async (fn) => {
     const store = requestContext.getStore();
@@ -391,7 +392,9 @@ export const getUnitDetail = async (unitId) => {
                     id: unit.manager_id,
                     full_name: unit.manager_full_name,
                     email: unit.manager_email,
-                    avatar_url: unit.avatar_url,
+                    avatar_url: unit.avatar_url
+                        ? getCloudinaryImageUrl(unit.avatar_url, 50, 50, "fill")
+                        : null,
                     job_title: unit.job_title,
                   }
                 : null,

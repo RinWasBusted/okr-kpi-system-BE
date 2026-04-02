@@ -1,6 +1,6 @@
 import prisma from "../../../utils/prisma.js";
 import { hashPassword } from "../../../utils/bcrypt.js";
-import { deleteImageFromCloudinary, getCloudinaryUrlFromPublicId } from "../../../utils/cloudinary.js";
+import { deleteImageFromCloudinary, getCloudinaryImageUrl } from "../../../utils/cloudinary.js";
 import AppError from "../../../utils/appError.js";
 
 const COMPANY_ADMIN_ROLE = "ADMIN_COMPANY";
@@ -18,7 +18,9 @@ const formatAdmin = (admin) => ({
     id: admin.id,
     full_name: admin.full_name,
     email: admin.email,
-    avatar_url: getCloudinaryUrlFromPublicId(admin.avatar_url),
+    avatar_url: admin.avatar_url
+        ? getCloudinaryImageUrl(admin.avatar_url, 50, 50, "fill")
+        : null,
     is_active: admin.is_active,
     created_at: admin.created_at,
 });
