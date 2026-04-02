@@ -64,23 +64,20 @@ router.use(authenticate);
  *                 message:
  *                   type: string
  *                 data:
- *                   type: object
- *                   properties:
- *                     cycles:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: integer
- *                           name:
- *                             type: string
- *                           start_date:
- *                             type: string
- *                             format: date
- *                           end_date:
- *                             type: string
- *                             format: date
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       start_date:
+ *                         type: string
+ *                         format: date
+ *                       end_date:
+ *                         type: string
+ *                         format: date
  *                           is_locked:
  *                             type: boolean
  *                           days_remaining:
