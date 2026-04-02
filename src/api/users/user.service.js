@@ -66,7 +66,7 @@ export const listUsers = async ({ unit_id, search, page, per_page }) => {
 
 export const findUserById = async (userId) => {
     const user = await prisma.users.findFirst({
-        where: { id: userId, role: UserRole.EMPLOYEE },
+        where: { id: userId },
         select: userSelect,
     });
 
@@ -144,7 +144,7 @@ export const updateUser = async (userId, { full_name, unit_id, password, is_acti
 export const updateUserAvatar = async (userId, publicId) => {
     const existing = await prisma.users.findFirst({
         where: { id: userId },
-        select: { id: true, avatar_url: true },
+        select: { id: true },
     });
 
     if (!existing) throw new AppError("User not found", 404);
