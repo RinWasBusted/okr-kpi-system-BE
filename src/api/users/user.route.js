@@ -238,7 +238,7 @@ router.get("/", getUsers);
  *                         is_active:
  *                           type: boolean
  *                           example: true
- *                           created_at:
+ *                         created_at:
  *                           type: string
  *                           format: date-time
  *                           example: "2026-01-01T00:00:00.000Z"
