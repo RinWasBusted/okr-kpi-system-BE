@@ -78,10 +78,10 @@ router.use(authenticate);
  *                       end_date:
  *                         type: string
  *                         format: date
- *                           is_locked:
- *                             type: boolean
- *                           days_remaining:
- *                             type: integer
+ *                       is_locked:
+ *                         type: boolean
+ *                       days_remaining:
+ *                         type: integer
  *                 meta:
  *                   type: object
  *                   properties:
