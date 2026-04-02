@@ -3,6 +3,19 @@ import { UserRole, Prisma, AIPlan } from "@prisma/client";
 import AppError from "../../../utils/appError.js";
 import { deleteImageFromCloudinary, getCloudinaryUrlFromPublicId } from "../../../utils/cloudinary.js";
 
+export const ensureCompanyExists = async (id) => {
+    const company = await prisma.companies.findUnique({
+        where: { id },
+        select: { id: true },
+    });
+
+    if (!company) {
+        throw new AppError("Company not found", 404);
+    }
+
+    return company;
+};
+
 export const getCompanies = async (filters, pagination) => {
     const { is_active, search } = filters;
     const { page, per_page } = pagination;
