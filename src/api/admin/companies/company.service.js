@@ -78,7 +78,7 @@ export const getCompanies = async (filters, pagination) => {
         id: company.id,
         name: company.name,
         slug: company.slug,
-        logo_url: getCloudinaryImageUrl(company.logo, 80, 80, "fill"),
+        logo_url: company.logo ? getCloudinaryImageUrl(company.logo, 80, 80, "fill") : null,
         token_usage: company.token_usage,
         is_active: company.is_active,
         admin_count: company._count.users,
