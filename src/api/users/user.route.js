@@ -348,7 +348,7 @@ router.get("/:id", getUserById);
  *       404:
  *         description: User not found
  */
-router.patch("/:id/avatar", authorize("ADMIN_COMPANY", "EMPLOYEE"), isOwnerOrAdmin, wrapMulter(requestContext, uploadSingle("avatar")), uploadAvatar);
+router.patch("/:id/avatar", isOwnerOrAdmin, wrapMulter(requestContext, uploadSingle("avatar")), uploadAvatar);
 
 /**
  * @swagger
