@@ -9,6 +9,13 @@ import {
     createReply,
 } from "./feedback.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
+import { validate } from "../../../middlewares/validate.js";
+import {
+    createFeedbackSchema,
+    updateFeedbackSchema,
+    createReplySchema,
+    listFeedbacksQuerySchema,
+} from "../../../schemas/feedback.schema.js";
 
 const router = express.Router();
 
@@ -26,7 +33,7 @@ router.use(authenticate);
  * /objectives/{objectiveId}/feedbacks:
  *   get:
  *     summary: List feedbacks for an objective
- *     description: Returns top-level feedbacks only. 
+ *     description: Returns top-level feedbacks only.
  *     tags: [Feedbacks]
  *     parameters:
  *       - in: path
@@ -79,7 +86,37 @@ router.use(authenticate);
  *                 data:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/Feedback'
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       objective_id:
+ *                         type: integer
+ *                       user_id:
+ *                         type: integer
+ *                       content:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                         enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER]
+ *                       sentiment:
+ *                         type: string
+ *                         enum: [POSITIVE, NEUTRAL, NEGATIVE, MIXED, UNKNOWN]
+ *                       status:
+ *                         type: string
+ *                         enum: [ACTIVE, RESOLVED, FLAGGED]
+ *                       kr_tag_id:
+ *                         type: integer
+ *                         nullable: true
+ *                       parent_feedback_id:
+ *                         type: integer
+ *                         nullable: true
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
  *                 meta:
  *                   type: object
  *                   properties:
@@ -96,7 +133,7 @@ router.use(authenticate);
  *       404:
  *         description: Objective not found
  */
-router.get("/objectives/:objectiveId/feedbacks", listFeedbacks);
+router.get("/objectives/:objectiveId/feedbacks", validate(listFeedbacksQuerySchema, "query"), listFeedbacks);
 
 /**
  * @swagger
@@ -121,9 +158,13 @@ router.get("/objectives/:objectiveId/feedbacks", listFeedbacks);
  *             properties:
  *               content:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 5000
+ *                 description: Feedback content (1-5000 characters, required)
  *               type:
  *                 type: string
  *                 enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER]
+ *                 description: Type of feedback
  *               kr_tag_id:
  *                 type: integer
  *                 nullable: true
@@ -142,7 +183,34 @@ router.get("/objectives/:objectiveId/feedbacks", listFeedbacks);
  *                   type: object
  *                   properties:
  *                     feedback:
- *                       $ref: '#/components/schemas/Feedback'
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         objective_id:
+ *                           type: integer
+ *                         user_id:
+ *                           type: integer
+ *                         content:
+ *                           type: string
+ *                         type:
+ *                           type: string
+ *                         sentiment:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                         kr_tag_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         parent_feedback_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         created_at:
+ *                           type: string
+ *                           format: date-time
+ *                         updated_at:
+ *                           type: string
+ *                           format: date-time
  *       403:
  *         description: No permission to view this objective
  *       404:
@@ -150,7 +218,7 @@ router.get("/objectives/:objectiveId/feedbacks", listFeedbacks);
  *       422:
  *         description: Validation error or kr_tag_id does not belong to this objective
  */
-router.post("/objectives/:objectiveId/feedbacks", createFeedback);
+router.post("/objectives/:objectiveId/feedbacks", validate(createFeedbackSchema), createFeedback);
 
 /**
  * @swagger
@@ -183,7 +251,34 @@ router.post("/objectives/:objectiveId/feedbacks", createFeedback);
  *                   type: object
  *                   properties:
  *                     feedback:
- *                       $ref: '#/components/schemas/Feedback'
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         objective_id:
+ *                           type: integer
+ *                         user_id:
+ *                           type: integer
+ *                         content:
+ *                           type: string
+ *                         type:
+ *                           type: string
+ *                         sentiment:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                         kr_tag_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         parent_feedback_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         created_at:
+ *                           type: string
+ *                           format: date-time
+ *                         updated_at:
+ *                           type: string
+ *                           format: date-time
  *       403:
  *         description: No permission
  *       404:
@@ -217,9 +312,13 @@ router.get("/objectives/:objectiveId/feedbacks/:feedbackId", getFeedback);
  *             properties:
  *               content:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 5000
+ *                 description: Feedback content (1-5000 characters, optional for partial update)
  *               type:
  *                 type: string
  *                 enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER]
+ *                 description: Type of feedback
  *               sentiment:
  *                 type: string
  *                 enum: [POSITIVE, NEUTRAL, NEGATIVE, MIXED, UNKNOWN]
@@ -242,7 +341,7 @@ router.get("/objectives/:objectiveId/feedbacks/:feedbackId", getFeedback);
  *       422:
  *         description: Validation error
  */
-router.patch("/objectives/:objectiveId/feedbacks/:feedbackId", updateFeedback);
+router.patch("/objectives/:objectiveId/feedbacks/:feedbackId", validate(updateFeedbackSchema), updateFeedback);
 
 /**
  * @swagger
@@ -315,7 +414,34 @@ router.delete("/objectives/:objectiveId/feedbacks/:feedbackId", deleteFeedback);
  *                 data:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/Feedback'
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       objective_id:
+ *                         type: integer
+ *                       user_id:
+ *                         type: integer
+ *                       content:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                       sentiment:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       kr_tag_id:
+ *                         type: integer
+ *                         nullable: true
+ *                       parent_feedback_id:
+ *                         type: integer
+ *                         nullable: true
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
  *       400:
  *         description: Trying to get replies of a reply
  *       404:
@@ -349,9 +475,13 @@ router.get("/feedbacks/:id/replies", listReplies);
  *             properties:
  *               content:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 5000
+ *                 description: Reply content (1-5000 characters, required)
  *               type:
  *                 type: string
  *                 enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER]
+ *                 description: Type of reply
  *     responses:
  *       201:
  *         description: Reply created successfully
@@ -366,7 +496,34 @@ router.get("/feedbacks/:id/replies", listReplies);
  *                   type: object
  *                   properties:
  *                     feedback:
- *                       $ref: '#/components/schemas/Feedback'
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         objective_id:
+ *                           type: integer
+ *                         user_id:
+ *                           type: integer
+ *                         content:
+ *                           type: string
+ *                         type:
+ *                           type: string
+ *                         sentiment:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                         kr_tag_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         parent_feedback_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         created_at:
+ *                           type: string
+ *                           format: date-time
+ *                         updated_at:
+ *                           type: string
+ *                           format: date-time
  *       400:
  *         description: Cannot reply to a reply
  *       403:
@@ -376,6 +533,6 @@ router.get("/feedbacks/:id/replies", listReplies);
  *       422:
  *         description: Validation error
  */
-router.post("/feedbacks/:id/replies", createReply);
+router.post("/feedbacks/:id/replies", validate(createReplySchema), createReply);
 
 export default router;

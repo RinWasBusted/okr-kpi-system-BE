@@ -14,6 +14,11 @@ import { authenticate, authorize } from "../../../middlewares/auth.js";
 import { uploadSingle } from "../../../utils/multer.js";
 import { wrapMulter } from "../../../utils/wrapMulter.js";
 import requestContext from "../../../utils/context.js";
+import { validate } from "../../../middlewares/validate.js";
+import {
+    createCompanySchema,
+    updateCompanySchema,
+} from "../../../schemas/company.schema.js";
 
 const router = express.Router();
 
@@ -149,6 +154,7 @@ router.use("/:company_id/admins", adminCompanyRoutes);
  *         name: search
  *         schema:
  *           type: string
+ *           maxLength: 255
  *         description: Search by name or slug (partial match)
  *       - in: query
  *         name: page
@@ -261,9 +267,13 @@ router.get("/", getCompanies);
  *             properties:
  *               name:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "Acme Corp"
  *               slug:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "acme-corp"
  *                 description: Unique identifier slug across the platform. Used during login.
  *               file:
@@ -361,7 +371,7 @@ router.get("/", getCompanies);
  *                   type: string
  *                   example: "name and slug are required"
  */
-router.post("/", wrapMulter(requestContext, uploadSingle("file")), createCompany);
+router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(createCompanySchema), createCompany);
 
 /**
  * @swagger
@@ -388,10 +398,14 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), createCompany
  *             properties:
  *               name:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "Acme Corporation"
  *                 description: New company name
  *               slug:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "acme-corporation"
  *                 description: New slug. Must be unique across the platform.
  *               is_active:
@@ -515,7 +529,7 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), createCompany
  *                   type: string
  *                   example: "Access denied"
  */
-router.put("/:id", updateCompany);
+router.put("/:id", validate(updateCompanySchema), updateCompany);
 
 /**
  * @swagger

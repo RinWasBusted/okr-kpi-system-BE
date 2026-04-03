@@ -9,6 +9,12 @@ import {
     deleteObjective,
 } from "./objective.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
+import { validate } from "../../../middlewares/validate.js";
+import {
+    createObjectiveSchema,
+    updateObjectiveSchema,
+    listObjectivesQuerySchema,
+} from "../../../schemas/objective.schema.js";
 
 const router = express.Router();
 
@@ -44,7 +50,14 @@ router.use(authenticate);
  *         name: status
  *         schema:
  *           type: string
+ *           enum: [Draft, Active, Pending_Approval, Rejected, Completed]
  *           example: Active
+ *       - in: query
+ *         name: progress_status
+ *         schema:
+ *           type: string
+ *           enum: [NOT_STARTED, DANGER, WARNING, ON_TRACK, COMPLETED]
+ *           description: Filter by progress percentage
  *       - in: query
  *         name: visibility
  *         schema:
@@ -72,7 +85,7 @@ router.use(authenticate);
  *       200:
  *         description: Objectives retrieved successfully
  */
-router.get("/objectives", getObjectives);
+router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjectives);
 
 /**
  * @swagger
@@ -90,6 +103,10 @@ router.get("/objectives", getObjectives);
  *             properties:
  *               title:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
+ *                 example: "Increase customer satisfaction"
+ *                 description: Objective title (1-255 characters)
  *               cycle_id:
  *                 type: integer
  *               unit_id:
@@ -100,12 +117,13 @@ router.get("/objectives", getObjectives);
  *                 type: integer
  *               visibility:
  *                 type: string
+ *                 enum: [PUBLIC, INTERNAL, PRIVATE]
  *                 example: INTERNAL
  *     responses:
  *       201:
  *         description: Objective created successfully
  */
-router.post("/objectives", createObjective);
+router.post("/objectives", validate(createObjectiveSchema), createObjective);
 
 /**
  * @swagger
@@ -128,17 +146,20 @@ router.post("/objectives", createObjective);
  *             properties:
  *               title:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
+ *                 description: Objective title (1-255 characters)
  *               parent_objective_id:
  *                 type: integer
  *                 nullable: true
  *               visibility:
  *                 type: string
- *                 enum: [PUBLIC, PRIVATE, COMPANY]
+ *                 enum: [PUBLIC, INTERNAL, PRIVATE]
  *     responses:
  *       200:
  *         description: Objective updated successfully
  */
-router.put("/objectives/:id", updateObjective);
+router.put("/objectives/:id", validate(updateObjectiveSchema), updateObjective);
 
 /**
  * @swagger
@@ -178,6 +199,9 @@ router.post("/objectives/:id/submit", submitObjective);
  *             properties:
  *               title:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
+ *                 description: Objective title (1-255 characters)
  *               parent_objective_id:
  *                 type: integer
  *                 nullable: true
@@ -210,7 +234,8 @@ router.post("/objectives/:id/approve", approveObjective);
  *             properties:
  *               comment:
  *                 type: string
- *                 description: Reason for rejection
+ *                 maxLength: 1000
+ *                 description: Reason for rejection (max 1000 characters)
  *     responses:
  *       200:
  *         description: Objective rejected successfully

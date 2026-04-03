@@ -3,6 +3,7 @@ import AppError from "../../utils/appError.js";
 import { hashPassword } from "../../utils/bcrypt.js";
 import { UserRole } from "@prisma/client";
 import { deleteImageFromCloudinary, getCloudinaryImageUrl } from "../../utils/cloudinary.js";
+import { updateAccessPathForUserOwnedItems } from "../../utils/path.js";
 
 const userSelect = {
     id: true,
@@ -21,27 +22,62 @@ const userSelect = {
     },
 };
 
-const formatUser = (user) => ({
-    id: user.id,
-    full_name: user.full_name,
-    email: user.email,
-    job_title: user.job_title ?? null,
-    avatar_url: user.avatar_url
-        ? getCloudinaryImageUrl(user.avatar_url, 50, 50, "fill")
-        : null,
-    role: user.role,
-    unit: user.unit ?? null,
-    is_active: user.is_active,
-    created_at: user.created_at,
-});
+// Helper function to get all descendant unit IDs including the parent
+const getDescendantUnitIds = async (unitId) => {
+    const rows = await prisma.$queryRaw`
+        SELECT path::text AS path
+        FROM "Units"
+        WHERE id = ${unitId}
+    `;
+    const unitPath = rows[0]?.path;
+    if (!unitPath) return [unitId];
+
+    // Use ltree <@ operator for correct descendant matching
+    const descendants = await prisma.$queryRaw`
+        SELECT id
+        FROM "Units"
+        WHERE path <@ ${unitPath}::ltree
+    `;
+
+    return descendants.map((u) => u.id);
+};
+
+const formatUser = (user, currentUser = null) => {
+    const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
+    const isOwner = currentUser?.id === user.id;
+
+    return {
+        id: user.id,
+        full_name: user.full_name,
+        email: user.email,
+        job_title: user.job_title ?? null,
+        avatar_url: user.avatar_url
+            ? getCloudinaryImageUrl(user.avatar_url, 50, 50, "fill")
+            : null,
+        role: user.role,
+        unit: user.unit ?? null,
+        is_active: user.is_active,
+        created_at: user.created_at,
+        editable: isAdmin || isOwner,
+        deletable: isAdmin,
+    };
+};
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-export const listUsers = async ({ unit_id, search, page, per_page }) => {
+export const listUsers = async ({ unit_id, search, page, per_page }, currentUser = null) => {
+    let unitFilter = {};
+
+    if (unit_id !== undefined) {
+        // Get all descendant unit IDs including the parent unit
+        const descendantUnitIds = await getDescendantUnitIds(unit_id);
+        unitFilter = { unit_id: { in: descendantUnitIds } };
+    }
+
     const where = {
         // Exclude system admin (ADMIN role) - only show ADMIN_COMPANY and EMPLOYEE
         role: { not: UserRole.ADMIN },
-        ...(unit_id !== undefined && { unit_id }),
+        ...unitFilter,
         ...(search && {
             OR: [
                 { full_name: { contains: search, mode: "insensitive" } },
@@ -63,14 +99,14 @@ export const listUsers = async ({ unit_id, search, page, per_page }) => {
 
     return {
         total,
-        data: users.map(formatUser),
+        data: users.map(user => formatUser(user, currentUser)),
         last_page: Math.ceil(total / per_page),
     };
 };
 
 // ─── Find ─────────────────────────────────────────────────────────────────────
 
-export const findUserById = async (userId) => {
+export const findUserById = async (userId, currentUser = null) => {
     const user = await prisma.users.findFirst({
         where: { id: userId },
         select: userSelect,
@@ -78,7 +114,7 @@ export const findUserById = async (userId) => {
 
     if (!user) throw new AppError("User not found", 404);
 
-    return formatUser(user);
+    return formatUser(user, currentUser);
 };
 
 // ─── Create ───────────────────────────────────────────────────────────────────
@@ -123,6 +159,8 @@ export const updateUser = async (userId, { full_name, unit_id, password, is_acti
     });
     if (!existing) throw new AppError("User not found", 404);
 
+    const unitIdChanged = unit_id !== undefined && unit_id !== existing.unit_id;
+
     if (unit_id !== undefined && unit_id !== null) {
         const unit = await prisma.units.findFirst({
             where: { id: unit_id },
@@ -136,10 +174,20 @@ export const updateUser = async (userId, { full_name, unit_id, password, is_acti
     if (is_active !== undefined) updates.is_active = is_active;
     if (password !== undefined) updates.password = await hashPassword(password);
 
-    const updated = await prisma.users.update({
-        where: { id: userId },
-        data: updates,
-        select: userSelect,
+    // Use transaction to ensure consistency between user update and access_path updates
+    const updated = await prisma.$transaction(async (tx) => {
+        const user = await tx.users.update({
+            where: { id: userId },
+            data: updates,
+            select: userSelect,
+        });
+
+        // Update access_path for user's owned objectives and assignments when unit changes
+        if (unitIdChanged) {
+            await updateAccessPathForUserOwnedItems(tx, userId, unit_id ?? null);
+        }
+
+        return user;
     });
 
     return formatUser(updated);

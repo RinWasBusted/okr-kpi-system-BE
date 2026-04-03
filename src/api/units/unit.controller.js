@@ -26,7 +26,7 @@ export const getUnits = async (req, res) => {
         const per_page = parsePositiveInt(req.query.per_page, 100);
         const mode = req.query.mode === "list" ? "list" : "tree"; // "tree" | "list"
 
-        const { total, data } = await unitService.listUnits({ page, per_page, mode });
+        const { total, data } = await unitService.listUnits({ page, per_page, mode }, req.user);
 
         res.success("Units retrieved successfully", 200, data, {
             page,
@@ -147,7 +147,7 @@ export const getUnitDetail = async (req, res) => {
             throw new AppError("Invalid unit ID", 400);
         }
 
-        const unit = await unitService.getUnitDetail(unitId);
+        const unit = await unitService.getUnitDetail(unitId, req.user);
 
         res.success("Unit detail retrieved successfully", 200, unit);
     } catch (error) {

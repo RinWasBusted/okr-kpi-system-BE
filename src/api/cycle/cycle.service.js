@@ -69,11 +69,66 @@ export const listCycles = async ({ companyId, is_locked, year, page, per_page })
         }),
     ]);
 
+    // Get all cycle IDs for batch querying statistics
+    const cycleIds = cycles.map((c) => c.id);
+
+    // Fetch objectives statistics for all cycles in batch
+    const objectivesByCycle = await prisma.objectives.groupBy({
+        by: ["cycle_id"],
+        where: {
+            company_id: companyId,
+            cycle_id: { in: cycleIds },
+            deleted_at: null,
+        },
+        _count: { id: true },
+        _avg: { progress_percentage: true },
+    });
+
+    // Fetch KPI assignments statistics for all cycles in batch
+    const kpiByCycle = await prisma.kPIAssignments.groupBy({
+        by: ["cycle_id"],
+        where: {
+            company_id: companyId,
+            cycle_id: { in: cycleIds },
+            deleted_at: null,
+        },
+        _count: { id: true },
+        _avg: { progress_percentage: true },
+    });
+
+    // Create lookup maps
+    const objectivesStatsMap = new Map();
+    objectivesByCycle.forEach((stat) => {
+        objectivesStatsMap.set(stat.cycle_id, {
+            count: stat._count.id,
+            avgProgress: stat._avg.progress_percentage || 0,
+        });
+    });
+
+    const kpiStatsMap = new Map();
+    kpiByCycle.forEach((stat) => {
+        kpiStatsMap.set(stat.cycle_id, {
+            count: stat._count.id,
+            avgProgress: stat._avg.progress_percentage || 0,
+        });
+    });
+
     const today = new Date();
-    const data = cycles.map((cycle) => ({
-        ...formatCycle(cycle),
-        days_remaining: daysBetweenUtc(cycle.end_date, today),
-    }));
+    const data = cycles.map((cycle) => {
+        const objStats = objectivesStatsMap.get(cycle.id) || { count: 0, avgProgress: 0 };
+        const kpiStats = kpiStatsMap.get(cycle.id) || { count: 0, avgProgress: 0 };
+
+        return {
+            ...formatCycle(cycle),
+            days_remaining: daysBetweenUtc(cycle.end_date, today),
+            statistics: {
+                total_objectives: objStats.count,
+                total_kpis: kpiStats.count,
+                avg_objective_progress: Math.round(objStats.avgProgress * 100) / 100,
+                avg_kpi_progress: Math.round(kpiStats.avgProgress * 100) / 100,
+            },
+        };
+    });
 
     return {
         total,
@@ -190,6 +245,59 @@ export const getCycleDetail = async (companyId, cycleId) => {
             avg_kpi_progress: kpiStats._avg.progress_percentage || 0,
         },
     };
+};
+
+// ─── Delete ───────────────────────────────────────────────────────────────────
+
+export const deleteCycle = async (companyId, cycleId) => {
+    // Check cycle exists and belongs to company
+    const cycle = await prisma.cycles.findFirst({
+        where: { id: cycleId, company_id: companyId },
+        select: { id: true, name: true, is_locked: true },
+    });
+
+    if (!cycle) throw new AppError("Cycle not found", 404);
+
+    // Check if cycle has objectives
+    const objectivesCount = await prisma.objectives.count({
+        where: {
+            company_id: companyId,
+            cycle_id: cycleId,
+            deleted_at: null,
+        },
+    });
+
+    if (objectivesCount > 0) {
+        throw new AppError(
+            `Cannot delete cycle: ${objectivesCount} objective(s) exist. Please remove objectives first.`,
+            400,
+            "CYCLE_HAS_DATA"
+        );
+    }
+
+    // Check if cycle has KPI assignments
+    const assignmentsCount = await prisma.kPIAssignments.count({
+        where: {
+            company_id: companyId,
+            cycle_id: cycleId,
+            deleted_at: null,
+        },
+    });
+
+    if (assignmentsCount > 0) {
+        throw new AppError(
+            `Cannot delete cycle: ${assignmentsCount} KPI assignment(s) exist. Please remove KPI assignments first.`,
+            400,
+            "CYCLE_HAS_DATA"
+        );
+    }
+
+    // Delete cycle
+    await prisma.cycles.delete({
+        where: { id: cycleId },
+    });
+
+    return { id: cycle.id, name: cycle.name };
 };
 
 // ─── Lock ─────────────────────────────────────────────────────────────────────

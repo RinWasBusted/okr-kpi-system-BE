@@ -71,3 +71,19 @@ export const getKPIRecords = async (req, res) => {
         throw error;
     }
 };
+
+// GET /kpi-records/chart-data
+export const getKPIChartData = async (req, res) => {
+    try {
+        const { unit_id } = req.query;
+
+        const unitId = parsePositiveInt(unit_id, null);
+        if (!unitId) throw new AppError("unit_id is required", 422);
+
+        const data = await recordsService.getKPIChartData(req.user, unitId);
+
+        res.success("KPI Chart data retrieved successfully", 200, data);
+    } catch (error) {
+        throw error;
+    }
+};

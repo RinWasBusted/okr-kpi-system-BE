@@ -6,6 +6,11 @@ import {
     deleteKPIAssignment,
 } from "./assignments.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
+import { validate } from "../../../middlewares/validate.js";
+import {
+    createKPIAssignmentSchema,
+    updateKPIAssignmentSchema,
+} from "../../../schemas/kpi.schema.js";
 
 const router = express.Router();
 
@@ -46,6 +51,25 @@ router.use(authenticate);
  *           type: string
  *           enum: [PUBLIC, INTERNAL, PRIVATE]
  *         description: Filter by visibility
+ *       - in: query
+ *         name: progress_status
+ *         schema:
+ *           type: string
+ *           enum: [NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED]
+ *         description: Filter by progress status (calculated from progress_percentage)
+ *       - in: query
+ *         name: kpi_status
+ *         schema:
+ *           type: string
+ *           enum: [ON_TRACK, AT_RISK, CRITICAL]
+ *         description: Filter by KPI status from latest record
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [active, deleted]
+ *           default: active
+ *         description: Filter by activity status
  *       - in: query
  *         name: parent_assignment_id
  *         schema:
@@ -148,15 +172,17 @@ router.get("/kpi-assignments", getKPIAssignments);
  *                 type: integer
  *               target_value:
  *                 type: number
+ *                 exclusiveMinimum: 0
  *               current_value:
  *                 type: number
+ *                 minimum: 0
  *                 description: Defaults to 0 if not provided
  *               owner_id:
  *                 type: integer
- *                 description: For personal KPI
+ *                 description: For personal KPI (either owner_id or unit_id, not both)
  *               unit_id:
  *                 type: integer
- *                 description: For unit KPI
+ *                 description: For unit KPI (either owner_id or unit_id, not both)
  *               parent_assignment_id:
  *                 type: integer
  *               visibility:
@@ -171,7 +197,7 @@ router.get("/kpi-assignments", getKPIAssignments);
  *       422:
  *         description: Validation error
  */
-router.post("/kpi-assignments", createKPIAssignment);
+router.post("/kpi-assignments", validate(createKPIAssignmentSchema), createKPIAssignment);
 
 /**
  * @swagger
@@ -196,8 +222,10 @@ router.post("/kpi-assignments", createKPIAssignment);
  *                 type: integer
  *               target_value:
  *                 type: number
+ *                 exclusiveMinimum: 0
  *               current_value:
  *                 type: number
+ *                 minimum: 0
  *               visibility:
  *                 type: string
  *                 enum: [PUBLIC, INTERNAL, PRIVATE]
@@ -209,7 +237,7 @@ router.post("/kpi-assignments", createKPIAssignment);
  *       404:
  *         description: KPI Assignment not found
  */
-router.put("/kpi-assignments/:id", updateKPIAssignment);
+router.put("/kpi-assignments/:id", validate(updateKPIAssignmentSchema), updateKPIAssignment);
 
 /**
  * @swagger

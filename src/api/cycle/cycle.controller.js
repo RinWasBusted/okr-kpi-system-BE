@@ -1,6 +1,23 @@
 import * as cycleService from "./cycle.service.js";
 import AppError from "../../utils/appError.js";
 
+// DELETE /cycles/:id
+export const deleteCycle = async (req, res) => {
+    try {
+        const companyId = req.user.company_id;
+        if (!companyId) throw new AppError("Company context is required", 403);
+
+        const cycleId = parsePositiveInt(req.params.id, null);
+        if (!cycleId) throw new AppError("Invalid cycle ID", 400);
+
+        const result = await cycleService.deleteCycle(companyId, cycleId);
+
+        res.success("Cycle deleted successfully", 200, { deleted_cycle: result });
+    } catch (error) {
+        throw error;
+    }
+};
+
 const parsePositiveInt = (value, fallback) => {
     const parsed = Number(value);
     if (!Number.isInteger(parsed) || parsed <= 0) return fallback;

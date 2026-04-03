@@ -17,18 +17,13 @@ const recordSelect = {
     created_at: true,
 };
 
-const calculateTimeElapsedPercentage = (cycleStart, cycleEnd, periodEnd) => {
-    const totalDays = Math.max(1, cycleEnd.getTime() - cycleStart.getTime()) / (1000 * 60 * 60 * 24);
-    const elapsedDays = Math.max(1, periodEnd.getTime() - cycleStart.getTime()) / (1000 * 60 * 60 * 24);
-    return Math.min((elapsedDays / totalDays) * 100, 100);
-};
-
-const calculateStatus = (progress, ratio) => {
-    if (progress >= 100) return "OnTrack";
-    if (ratio >= 0.9) return "OnTrack";
-    if (ratio >= 0.75) return "AtRisk";
-    if (ratio >= 0.5) return "Behind";
-    return "Critical";
+const calculateStatus = (progress) => {
+    // An toàn (xanh lá): progress >= 80%
+    if (progress >= 80) return "ON_TRACK";
+    // Chú ý (vàng): 50% <= progress < 80%
+    if (progress >= 50) return "AT_RISK";
+    // Nguy hiểm (đỏ): progress < 50%
+    return "CRITICAL";
 };
 
 const calculateTrend = (currentValue, previousValue) => {
@@ -44,7 +39,6 @@ export const createKPIRecord = async (user, assignmentId, payload) => {
         where: { id: assignmentId, deleted_at: null },
         include: {
             kpi_dictionary: { select: { evaluation_method: true } },
-            cycle: { select: { start_date: true, end_date: true } },
         },
     });
 
@@ -86,8 +80,6 @@ export const createKPIRecord = async (user, assignmentId, payload) => {
 
     const periodStart = toDateOnlyUtc(payload.period_start);
     const periodEnd = toDateOnlyUtc(payload.period_end);
-    const cycleStart = toDateOnlyUtc(assignment.cycle.start_date);
-    const cycleEnd = toDateOnlyUtc(assignment.cycle.end_date);
 
     if (periodStart > periodEnd) {
         throw new AppError("period_start must be before period_end", 422);
@@ -100,10 +92,7 @@ export const createKPIRecord = async (user, assignmentId, payload) => {
         assignment.kpi_dictionary.evaluation_method,
     );
 
-    const timeElapsed = calculateTimeElapsedPercentage(cycleStart, cycleEnd, periodEnd);
-    const ratio = timeElapsed > 0 ? progress / timeElapsed : 1;
-
-    const status = calculateStatus(progress, ratio);
+    const status = calculateStatus(progress);
 
     // Get previous record for trend
     const previousRecord = await prisma.kPIRecords.findFirst({
@@ -163,13 +152,20 @@ export const listKPIRecords = async (user, assignmentId) => {
             visibility: true,
             owner_id: true,
             unit_id: true,
+            parent_assignment_id: true,
         },
     });
 
     if (!assignment) throw new AppError("KPI Assignment not found", 404);
 
     // Check if user can view this assignment using visibility logic
-    const canView = await canViewAssignment(user, assignment);
+    let canView = await canViewAssignment(user, assignment);
+
+    // If not allowed by visibility, check if user owns any parent assignment
+    if (!canView && assignment.parent_assignment_id) {
+        canView = await isParentAssignmentOwner(user.id, assignmentId);
+    }
+
     if (!canView) {
         throw new AppError("You do not have permission to view records for this assignment", 403);
     }
@@ -181,6 +177,31 @@ export const listKPIRecords = async (user, assignmentId) => {
     });
 
     return records;
+};
+
+// Helper function to check if user owns any parent assignment
+const isParentAssignmentOwner = async (userId, assignmentId) => {
+    const assignment = await prisma.kPIAssignments.findFirst({
+        where: { id: assignmentId },
+        select: { parent_assignment_id: true },
+    });
+
+    if (!assignment || !assignment.parent_assignment_id) return false;
+
+    // Check if user owns the parent assignment
+    const parentAssignment = await prisma.kPIAssignments.findFirst({
+        where: {
+            id: assignment.parent_assignment_id,
+            owner_id: userId,
+            deleted_at: null,
+        },
+        select: { id: true },
+    });
+
+    if (parentAssignment) return true;
+
+    // Recursively check grandparents
+    return await isParentAssignmentOwner(userId, assignment.parent_assignment_id);
 };
 
 // Helper function to check view permission based on assignment visibility
@@ -237,4 +258,132 @@ const isDescendantOrEqual = (candidate, ancestor) => {
 const isAncestorOrEqual = (candidate, descendant) => {
     if (!candidate || !descendant) return false;
     return descendant === candidate || descendant.startsWith(`${candidate}.`);
+};
+
+// Get KPI chart data for a unit (all cycles, all history)
+export const getKPIChartData = async (user, unitId) => {
+    // Validate unit exists
+    const unit = await prisma.units.findFirst({
+        where: { id: unitId },
+        select: { id: true, name: true },
+    });
+    if (!unit) throw new AppError("Unit not found", 404);
+
+    // Check permission: ADMIN_COMPANY or user from same/ancestor unit
+    if (user.role !== "ADMIN_COMPANY") {
+        const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
+        const unitPath = await getUnitPath(unitId);
+
+        if (!userPath) {
+            throw new AppError("You do not have permission to view this unit's data", 403);
+        }
+
+        // Check if user's unit is the same or ancestor of target unit
+        const isAuthorized =
+            user.unit_id === unitId ||
+            (unitPath && isDescendantOrEqual(unitPath, userPath));
+
+        if (!isAuthorized) {
+            throw new AppError("You do not have permission to view this unit's data", 403);
+        }
+    }
+
+    // Get all assignments for this unit with their dictionaries (all cycles, including locked)
+    const assignments = await prisma.kPIAssignments.findMany({
+        where: {
+            deleted_at: null,
+            unit_id: unitId,
+        },
+        select: {
+            id: true,
+            target_value: true,
+            kpi_dictionary: {
+                select: {
+                    id: true,
+                    name: true,
+                    unit: true,
+                    evaluation_method: true,
+                },
+            },
+            cycle: {
+                select: {
+                    id: true,
+                    name: true,
+                    start_date: true,
+                    end_date: true,
+                    is_locked: true,
+                },
+            },
+        },
+    });
+
+    if (assignments.length === 0) {
+        return {
+            unit: { id: unit.id, name: unit.name },
+            kpis: [],
+        };
+    }
+
+    // Get all records for these assignments (all time, all cycles)
+    const assignmentIds = assignments.map((a) => a.id);
+
+    const records = await prisma.kPIRecords.findMany({
+        where: {
+            kpi_assignment_id: { in: assignmentIds },
+        },
+        orderBy: { period_start: "asc" },
+        select: {
+            id: true,
+            kpi_assignment_id: true,
+            actual_value: true,
+            progress_percentage: true,
+            status: true,
+            trend: true,
+            period_start: true,
+            period_end: true,
+        },
+    });
+
+    // Group data by KPI dictionary
+    const kpiMap = new Map();
+
+    for (const assignment of assignments) {
+        const dict = assignment.kpi_dictionary;
+        if (!kpiMap.has(dict.id)) {
+            kpiMap.set(dict.id, {
+                kpi_id: dict.id,
+                kpi_name: dict.name,
+                unit: dict.unit,
+                evaluation_method: dict.evaluation_method,
+                target_value: assignment.target_value,
+                records: [],
+            });
+        }
+    }
+
+    // Map records to their KPI
+    const assignmentToKpiMap = new Map(assignments.map((a) => [a.id, a.kpi_dictionary.id]));
+
+    for (const record of records) {
+        const kpiId = assignmentToKpiMap.get(record.kpi_assignment_id);
+        if (kpiId) {
+            const kpiData = kpiMap.get(kpiId);
+            kpiData.records.push({
+                period_start: record.period_start.toISOString().split("T")[0],
+                period_end: record.period_end.toISOString().split("T")[0],
+                actual_value: record.actual_value,
+                progress_percentage: Math.round(record.progress_percentage * 100) / 100,
+                status: record.status,
+                trend: record.trend,
+            });
+        }
+    }
+
+    return {
+        unit: {
+            id: unit.id,
+            name: unit.name,
+        },
+        kpis: Array.from(kpiMap.values()).filter((k) => k.records.length > 0),
+    };
 };

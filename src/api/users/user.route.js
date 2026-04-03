@@ -12,6 +12,12 @@ import { authenticate, authorize } from "../../middlewares/auth.js";
 import { uploadSingle } from "../../utils/multer.js";
 import { wrapMulter } from "../../utils/wrapMulter.js";
 import requestContext from "../../utils/context.js";
+import { validate } from "../../middlewares/validate.js";
+import {
+    createUserSchema,
+    updateUserSchema,
+    listUsersQuerySchema,
+} from "../../schemas/user.schema.js";
 
 const router = express.Router();
 
@@ -41,6 +47,7 @@ router.use(authenticate, authorize("ADMIN_COMPANY"));
  *         name: search
  *         schema:
  *           type: string
+ *           maxLength: 255
  *         description: Search by full name or email (partial match)
  *       - in: query
  *         name: page
@@ -167,7 +174,7 @@ router.use(authenticate, authorize("ADMIN_COMPANY"));
  *                       type: string
  *                       example: "Access denied"
  */
-router.get("/", getUsers);
+router.get("/", validate(listUsersQuerySchema, "query"), getUsers);
  
 /**
  * @swagger
@@ -307,10 +314,8 @@ router.get("/:id", getUserById);
  * /users/{id}/avatar:
  *   patch:
  *     summary: Update user avatar
- *     description: Upload or update user avatar. Can only be done by the user themselves or ADMIN_COMPANY. If no file is sent, the avatar will be deleted.
+ *     description: Upload or update user avatar. Can only be done by the user themselves or ADMIN_COMPANY. If no file is sent, the avatar will be deleted. Requires `accessToken` cookie.
  *     tags: [Users]
- *     security:
- *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -350,7 +355,7 @@ router.get("/:id", getUserById);
  *       400:
  *         description: Invalid user ID
  *       401:
- *         description: Unauthorized
+ *         description: Unauthorized - Access token missing or invalid
  *       403:
  *         description: Forbidden - Not owner or admin
  *       404:
@@ -405,14 +410,18 @@ router.delete("/:id/avatar", authorize("ADMIN_COMPANY", "EMPLOYEE"), isOwnerOrAd
  *             properties:
  *               full_name:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "Nguyen Van A"
  *               email:
  *                 type: string
  *                 format: email
+ *                 maxLength: 255
  *                 example: "nguyenvana@acme.com"
  *               password:
  *                 type: string
  *                 minLength: 8
+ *                 maxLength: 255
  *                 example: "password123"
  *               unit_id:
  *                 type: integer
@@ -576,7 +585,7 @@ router.delete("/:id/avatar", authorize("ADMIN_COMPANY", "EMPLOYEE"), isOwnerOrAd
  *                       type: string
  *                       example: "Password must be at least 8 characters"
  */
-router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createUser);
+router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), validate(createUserSchema), createUser);
  
 /**
  * @swagger
@@ -601,6 +610,8 @@ router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createUser)
  *             properties:
  *               full_name:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "Nguyen Van B"
  *               unit_id:
  *                 type: integer
@@ -610,6 +621,7 @@ router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createUser)
  *               password:
  *                 type: string
  *                 minLength: 8
+ *                 maxLength: 255
  *                 example: "newpassword123"
  *                 description: Admin reset password on behalf of employee.
  *               is_active:
@@ -762,6 +774,6 @@ router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createUser)
  *                       type: string
  *                       example: "Password must be at least 8 characters"
  */
-router.put("/:id", updateUser);
+router.put("/:id", validate(updateUserSchema), updateUser);
  
 export default router;

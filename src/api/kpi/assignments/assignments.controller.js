@@ -33,6 +33,9 @@ export const getKPIAssignments = async (req, res) => {
                 req.query.parent_assignment_id === "null"
                     ? null
                     : parseOptionalInt(req.query.parent_assignment_id),
+            progress_status: req.query.progress_status,
+            kpi_status: req.query.kpi_status,
+            status: req.query.status || "active",
             page: parsePositiveInt(req.query.page, 1),
             per_page: parsePositiveInt(req.query.per_page, 20),
         };

@@ -32,9 +32,17 @@ const parseVisibility = (value) => {
 const parseStatus = (value) => {
     if (value === undefined || value === null || value === "") return undefined;
     const normalized = String(value);
-    const allowed = ["Draft", "Pending_Approval", "Active", "Rejected", "Closed"];
+    const allowed = ["Draft", "Pending_Approval", "Active", "Rejected", "Completed"];
     if (allowed.includes(normalized)) return normalized;
     throw new AppError("Invalid status", 422);
+};
+
+const parseProgressStatus = (value) => {
+    if (value === undefined || value === null || value === "") return undefined;
+    const normalized = String(value).toUpperCase();
+    const allowed = ["NOT_STARTED", "DANGER", "WARNING", "ON_TRACK", "COMPLETED"];
+    if (allowed.includes(normalized)) return normalized;
+    throw new AppError("Invalid progress_status", 422);
 };
 
 // GET /objectives
@@ -45,6 +53,7 @@ export const getObjectives = async (req, res) => {
             unit_id: parseOptionalId(req.query.unit_id),
             owner_id: parseOptionalId(req.query.owner_id),
             status: parseStatus(req.query.status),
+            progress_status: parseProgressStatus(req.query.progress_status),
             parent_objective_id: parseOptionalId(req.query.parent_objective_id),
             visibility: parseVisibility(req.query.visibility),
         };

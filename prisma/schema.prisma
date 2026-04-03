@@ -167,6 +167,12 @@ model KPIAssignments {
   @@index([company_id])
 }
 
+enum KPIStatus {
+  ON_TRACK
+  AT_RISK
+  CRITICAL
+}
+
 model KPIRecords {
   id                  Int      @id @default(autoincrement())
   company_id          Int
@@ -175,7 +181,7 @@ model KPIRecords {
   period_end          DateTime @db.Date
   actual_value        Float
   progress_percentage Float
-  status              String
+  status              KPIStatus
   trend               String
   created_at          DateTime @default(now())
 
@@ -183,6 +189,14 @@ model KPIRecords {
   kpi_assignment KPIAssignments @relation(fields: [kpi_assignment_id], references: [id])
 
   @@index([company_id])
+}
+
+enum ObjectiveProgressStatus {
+  NOT_STARTED
+  ON_TRACK
+  WARNING
+  DANGER
+  COMPLETED
 }
 
 model Objectives {

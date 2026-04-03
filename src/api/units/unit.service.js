@@ -3,6 +3,12 @@ import AppError from "../../utils/appError.js";
 import { UserRole } from "@prisma/client";
 import requestContext from "../../utils/context.js";
 import { getCloudinaryImageUrl } from "../../utils/cloudinary.js";
+import {
+    getUnitPath,
+    updateObjectivesAccessPathForUnit,
+    updateKPIAssignmentsAccessPathForUnit,
+    updateAccessPathForUserOwnedItems,
+} from "../../utils/path.js";
 
 const withContext = async (fn) => {
     const store = requestContext.getStore();
@@ -16,7 +22,10 @@ const withContext = async (fn) => {
     });
 };
 
-const formatUnitRow = (row, includeStats = false) => {
+const formatUnitRow = (row, includeStats = false, currentUser = null) => {
+    const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
+    const isManager = currentUser?.id === row.manager_id;
+
     const base = {
         id: row.id,
         name: row.name,
@@ -27,6 +36,8 @@ const formatUnitRow = (row, includeStats = false) => {
             : null,
         member_count: Number(row.member_count ?? 0),
         created_at: row.created_at,
+        editable: isAdmin || isManager,
+        deletable: isAdmin,
     };
 
     if (includeStats) {
@@ -78,7 +89,7 @@ const getUnitRowById = async (tx, unitId) => {
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-export const listUnits = async ({ page, per_page, mode = "tree" }) => {
+export const listUnits = async ({ page, per_page, mode = "tree" }, currentUser = null) => {
     return withContext(async (tx) => {
         // Get all units with stats using pre-aggregated CTEs to avoid JOIN fan-out
         const allUnits = await tx.$queryRaw`
@@ -135,14 +146,14 @@ export const listUnits = async ({ page, per_page, mode = "tree" }) => {
 
             return {
                 total,
-                data: paginatedUnits.map((unit) => formatUnitRow(unit, true)),
+                data: paginatedUnits.map((unit) => formatUnitRow(unit, true, currentUser)),
             };
         }
 
         // Tree mode: build tree structure (default behavior)
         const unitsMap = new Map();
         const formattedUnits = allUnits.map((unit) => ({
-            ...formatUnitRow(unit, true),
+            ...formatUnitRow(unit, true, currentUser),
             sub_units: [],
         }));
 
@@ -277,11 +288,15 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
                 await tx.$executeRaw`
                     UPDATE "Users" SET unit_id = null WHERE id = ${oldManagerId}
                 `;
+                // Update access_path for old manager's owned items (now without unit)
+                await updateAccessPathForUserOwnedItems(tx, oldManagerId, null);
             }
             if (newManagerId !== null) {
                 await tx.$executeRaw`
                     UPDATE "Users" SET unit_id = ${unitId} WHERE id = ${newManagerId}
                 `;
+                // Update access_path for new manager's owned items (now with this unit)
+                await updateAccessPathForUserOwnedItems(tx, newManagerId, unitId);
             }
         }
 
@@ -300,6 +315,19 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
                 END
                 WHERE path <@ ${oldPath}::ltree
             `;
+
+            // Update access_path for Objectives and KPIAssignments of affected units
+            // Get all affected units (the updated unit and its descendants)
+            const affectedUnits = await tx.$queryRaw`
+                SELECT id, path::text AS path
+                FROM "Units"
+                WHERE path <@ ${newPath}::ltree
+            `;
+
+            for (const unit of affectedUnits) {
+                await updateObjectivesAccessPathForUnit(tx, unit.id, unit.path);
+                await updateKPIAssignmentsAccessPathForUnit(tx, unit.id, unit.path);
+            }
         }
 
         const unitRow = await getUnitRowById(tx, unitId);
@@ -364,7 +392,7 @@ export const getUnitInfo = async (unitId) => {
 
 // ─── Detail ───────────────────────────────────────────────────────────────────
 
-export const getUnitDetail = async (unitId) => {
+export const getUnitDetail = async (unitId, currentUser = null) => {
     return withContext(async (tx) => {
         const rows = await tx.$queryRaw`
             SELECT
@@ -401,6 +429,9 @@ export const getUnitDetail = async (unitId) => {
         `;
         const total_objective = Number(objectiveResult[0]?.total ?? 0);
 
+        const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
+        const isManager = currentUser?.id === unit.manager_id;
+
         return {
             id: unit.id,
             name: unit.name,
@@ -418,6 +449,8 @@ export const getUnitDetail = async (unitId) => {
                 : null,
             total_kpi,
             total_objective,
+            editable: isAdmin || isManager,
+            deletable: isAdmin,
         };
     });
 };
