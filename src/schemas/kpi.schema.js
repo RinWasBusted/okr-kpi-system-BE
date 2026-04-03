@@ -101,13 +101,12 @@ export const createKPIRecordSchema = z.object({
     period_start: z.string().datetime(),
     period_end: z.string().datetime(),
     actual_value: z.number().min(0),
-    status: z.string().min(1).max(50),
-    trend: z.string().min(1).max(50),
 });
 
 // CheckIn schemas
 export const createCheckInSchema = z.object({
     achieved_value: z.number(),
+    evidence_url: z.string().url("evidence_url must be a valid URL").max(2048, "evidence_url must not exceed 2048 characters"),
     comment: z.string().max(1000).optional(),
 });
 

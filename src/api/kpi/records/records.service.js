@@ -17,12 +17,6 @@ const recordSelect = {
     created_at: true,
 };
 
-const calculateTimeElapsedPercentage = (cycleStart, cycleEnd, periodEnd) => {
-    const totalDays = Math.max(1, cycleEnd.getTime() - cycleStart.getTime()) / (1000 * 60 * 60 * 24);
-    const elapsedDays = Math.max(1, periodEnd.getTime() - cycleStart.getTime()) / (1000 * 60 * 60 * 24);
-    return Math.min((elapsedDays / totalDays) * 100, 100);
-};
-
 const calculateStatus = (progress) => {
     // An toàn (xanh lá): progress >= 80%
     if (progress >= 80) return "ON_TRACK";
@@ -45,7 +39,6 @@ export const createKPIRecord = async (user, assignmentId, payload) => {
         where: { id: assignmentId, deleted_at: null },
         include: {
             kpi_dictionary: { select: { evaluation_method: true } },
-            cycle: { select: { start_date: true, end_date: true } },
         },
     });
 
@@ -87,8 +80,6 @@ export const createKPIRecord = async (user, assignmentId, payload) => {
 
     const periodStart = toDateOnlyUtc(payload.period_start);
     const periodEnd = toDateOnlyUtc(payload.period_end);
-    const cycleStart = toDateOnlyUtc(assignment.cycle.start_date);
-    const cycleEnd = toDateOnlyUtc(assignment.cycle.end_date);
 
     if (periodStart > periodEnd) {
         throw new AppError("period_start must be before period_end", 422);
@@ -100,9 +91,6 @@ export const createKPIRecord = async (user, assignmentId, payload) => {
         assignment.target_value,
         assignment.kpi_dictionary.evaluation_method,
     );
-
-    const timeElapsed = calculateTimeElapsedPercentage(cycleStart, cycleEnd, periodEnd);
-    const ratio = timeElapsed > 0 ? progress / timeElapsed : 1;
 
     const status = calculateStatus(progress);
 

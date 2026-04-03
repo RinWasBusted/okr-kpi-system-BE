@@ -1,5 +1,3 @@
-import AppError from "../utils/appError.js";
-
 /**
  * Middleware factory to validate request data using Zod schema
  * @param {z.ZodSchema} schema - Zod schema to validate against
@@ -11,7 +9,7 @@ export const validate = (schema, source = "body") => {
             const data = req[source];
             const result = await schema.parseAsync(data);
             // Replace the original data with validated/parsed data
-            Object.assign(req[source], result);
+            req[source] = result;
             next();
         } catch (error) {
             if (error.name === "ZodError") {

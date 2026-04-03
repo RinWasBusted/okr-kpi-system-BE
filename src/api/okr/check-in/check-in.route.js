@@ -36,6 +36,7 @@ router.use(authenticate);
  *             type: object
  *             required:
  *               - achieved_value
+ *               - evidence_url
  *             properties:
  *               achieved_value:
  *                 type: number
@@ -44,7 +45,7 @@ router.use(authenticate);
  *                 type: string
  *                 format: uri
  *                 maxLength: 2048
- *                 description: URL to evidence of achievement (optional, max 2048 characters)
+ *                 description: URL to evidence of achievement (required, max 2048 characters)
  *               comment:
  *                 type: string
  *                 maxLength: 1000

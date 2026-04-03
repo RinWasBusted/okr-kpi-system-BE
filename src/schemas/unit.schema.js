@@ -27,6 +27,11 @@ export const updateUnitSchema = z.object({
 
 export const listUnitsQuerySchema = z.object({
     page: z.string().regex(/^\d+$/).transform(Number).default("1"),
-    per_page: z.string().regex(/^\d+$/).transform(Number).default("20"),
+    per_page: z
+        .string()
+        .regex(/^\d+$/)
+        .transform(Number)
+        .refine((n) => n <= 100, "per_page must not exceed 100")
+        .default("100"),
     mode: z.enum(["tree", "list"]).default("tree"),
 });

@@ -180,7 +180,7 @@ export const listUnits = async ({ page, per_page, mode = "tree" }, currentUser =
         const paginatedRoots = rootUnits.slice(offset, offset + per_page);
 
         return {
-            total: allUnits.length,
+            total: rootUnits.length,
             data: paginatedRoots,
         };
     });

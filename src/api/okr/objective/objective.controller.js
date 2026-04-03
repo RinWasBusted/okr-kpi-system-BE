@@ -32,7 +32,7 @@ const parseVisibility = (value) => {
 const parseStatus = (value) => {
     if (value === undefined || value === null || value === "") return undefined;
     const normalized = String(value);
-    const allowed = ["Draft", "Pending_Approval", "Active", "Rejected", "Closed"];
+    const allowed = ["Draft", "Pending_Approval", "Active", "Rejected", "Completed"];
     if (allowed.includes(normalized)) return normalized;
     throw new AppError("Invalid status", 422);
 };

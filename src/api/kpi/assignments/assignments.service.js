@@ -342,7 +342,7 @@ export const listKPIAssignments = async (user, filters) => {
     };
 
     // Validate status filter permission
-    if (filters.status && filters.status !== "active") {
+    if (filters.status === "deleted") {
         const hasPermission = await canFilterByStatus(user, filters.unit_id);
         if (!hasPermission) {
             throw new AppError("You do not have permission to filter by status", 403);
