@@ -56,7 +56,7 @@ export const getUsers = async (req, res) => {
             search: search || undefined,
             page,
             per_page,
-        });
+        }, req.user);
 
         res.success("Users retrieved successfully", 200, data, {
             total,
@@ -78,7 +78,7 @@ export const getUserById = async (req, res) => {
         const userId = parsePositiveInt(req.params.id, null);
         if (!userId) throw new AppError("Invalid user ID", 400);
 
-        const user = await userService.findUserById(userId);
+        const user = await userService.findUserById(userId, req.user);
 
         res.success("User retrieved successfully", 200, { user });
     } catch (error) {

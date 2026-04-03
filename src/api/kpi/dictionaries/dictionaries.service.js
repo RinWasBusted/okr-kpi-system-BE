@@ -11,13 +11,19 @@ const dictionarySelect = {
     unit_id: true,
 };
 
-const formatDictionary = (dict) => ({
-    id: dict.id,
-    name: dict.name,
-    unit: dict.unit,
-    evaluation_method: dict.evaluation_method,
-    unit_id: dict.unit_id,
-});
+const formatDictionary = (dict, currentUser = null) => {
+    const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
+
+    return {
+        id: dict.id,
+        name: dict.name,
+        unit: dict.unit,
+        evaluation_method: dict.evaluation_method,
+        unit_id: dict.unit_id,
+        editable: isAdmin,
+        deletable: isAdmin,
+    };
+};
 
 export const listKPIDictionaries = async (user) => {
     if (user.role === UserRole.ADMIN_COMPANY) {
@@ -30,7 +36,7 @@ export const listKPIDictionaries = async (user) => {
             orderBy: { id: "asc" },
         });
 
-        return dictionaries.map(formatDictionary);
+        return dictionaries.map(dict => formatDictionary(dict, user));
     }
 
     // Employee sees company-wide dictionaries and their unit + parent units
@@ -50,7 +56,7 @@ export const listKPIDictionaries = async (user) => {
         orderBy: { id: "asc" },
     });
 
-    return dictionaries.map(formatDictionary);
+    return dictionaries.map(dict => formatDictionary(dict, user));
 };
 
 export const createKPIDictionary = async (user, payload) => {

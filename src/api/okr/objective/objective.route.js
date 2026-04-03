@@ -50,7 +50,14 @@ router.use(authenticate);
  *         name: status
  *         schema:
  *           type: string
+ *           enum: [Draft, Active, Pending_Approval, Rejected, Completed]
  *           example: Active
+ *       - in: query
+ *         name: progress_status
+ *         schema:
+ *           type: string
+ *           enum: [NOT_STARTED, DANGER, WARNING, ON_TRACK, COMPLETED]
+ *           description: Filter by progress percentage
  *       - in: query
  *         name: visibility
  *         schema:

@@ -111,6 +111,16 @@ const formatKeyResult = (kr, now) => ({
     days_until_due: kr.due_date ? daysBetweenUtc(kr.due_date, now) : null,
 });
 
+// Calculate progress status based on progress_percentage
+const calculateProgressStatus = (progress) => {
+    const p = Number(progress) || 0;
+    if (p === 0) return "NOT_STARTED";
+    if (p >= 100) return "COMPLETED";
+    if (p >= 80) return "ON_TRACK";
+    if (p >= 30) return "WARNING";
+    return "DANGER";
+};
+
 const formatObjective = (objective, includeKeyResults = false) => {
     const now = new Date();
     const formatUserAvatar = (user) => {
@@ -128,6 +138,7 @@ const formatObjective = (objective, includeKeyResults = false) => {
         status: objective.status,
         visibility: objective.visibility,
         progress_percentage: objective.progress_percentage,
+        progress_status: calculateProgressStatus(objective.progress_percentage),
         cycle: objective.cycle ?? null,
         unit_id: objective.unit_id,
         owner_id: objective.owner_id,
@@ -260,7 +271,30 @@ export const listObjectives = async ({
 }) => {
     const visibleObjectiveIds = await getVisibleObjectiveIds(user);
 
+    // Check if user can filter by status (only ADMIN_COMPANY or unit manager)
+    const canFilterByStatus = async (user, unitId) => {
+        if (user.role === UserRole.ADMIN_COMPANY) return true;
+        if (!unitId || !user.unit_id) return false;
+        // Check if user is manager of the unit
+        const unit = await prisma.units.findUnique({
+            where: { id: unitId },
+            select: { manager_id: true },
+        });
+        if (unit?.manager_id === user.id) return true;
+        // Check if user is manager of ancestor unit
+        return await isAncestorUnit(user.unit_id, unitId);
+    };
+
+    // Validate status filter permission
+    if (filters.status) {
+        const hasPermission = await canFilterByStatus(user, filters.unit_id);
+        if (!hasPermission) {
+            throw new AppError("You do not have permission to filter by status", 403);
+        }
+    }
+
     const where = {
+        deleted_at: null,
         ...(filters.cycle_id !== undefined && { cycle_id: filters.cycle_id }),
         ...(filters.unit_id !== undefined && { unit_id: filters.unit_id }),
         ...(filters.owner_id !== undefined && { owner_id: filters.owner_id }),
@@ -292,10 +326,17 @@ export const listObjectives = async ({
 
     // Build tree structure
     const objectivesMap = new Map();
-    const formattedObjectives = allObjectives.map((objective) => ({
+    let formattedObjectives = allObjectives.map((objective) => ({
         ...formatObjective(objective, include_key_results),
         sub_objectives: [],
     }));
+
+    // Filter by progress_status if provided
+    if (filters.progress_status) {
+        formattedObjectives = formattedObjectives.filter(
+            (o) => o.progress_status === filters.progress_status
+        );
+    }
 
     // Create map for quick lookup
     formattedObjectives.forEach((objective) => {
@@ -332,6 +373,10 @@ export const createObjective = async (user, payload) => {
     let owner = null;
     if (payload.owner_id) {
         owner = await ensureUserExists(payload.owner_id);
+        // Validate: owner without unit cannot be assigned to objective with unit_id
+        if (payload.unit_id && !owner.unit_id) {
+            throw new AppError("Cannot assign owner without unit to an objective with unit_id", 422);
+        }
     }
 
     let unitId = payload.unit_id ?? owner?.unit_id ?? null;

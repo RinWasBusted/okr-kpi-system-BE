@@ -11,7 +11,7 @@ export const validate = (schema, source = "body") => {
             const data = req[source];
             const result = await schema.parseAsync(data);
             // Replace the original data with validated/parsed data
-            req[source] = result;
+            Object.assign(req[source], result);
             next();
         } catch (error) {
             if (error.name === "ZodError") {

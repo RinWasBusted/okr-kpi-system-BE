@@ -314,10 +314,8 @@ router.get("/:id", getUserById);
  * /users/{id}/avatar:
  *   patch:
  *     summary: Update user avatar
- *     description: Upload or update user avatar. Can only be done by the user themselves or ADMIN_COMPANY. If no file is sent, the avatar will be deleted.
+ *     description: Upload or update user avatar. Can only be done by the user themselves or ADMIN_COMPANY. If no file is sent, the avatar will be deleted. Requires `accessToken` cookie.
  *     tags: [Users]
- *     security:
- *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -357,7 +355,7 @@ router.get("/:id", getUserById);
  *       400:
  *         description: Invalid user ID
  *       401:
- *         description: Unauthorized
+ *         description: Unauthorized - Access token missing or invalid
  *       403:
  *         description: Forbidden - Not owner or admin
  *       404:

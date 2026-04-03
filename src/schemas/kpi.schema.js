@@ -110,3 +110,20 @@ export const createCheckInSchema = z.object({
     achieved_value: z.number(),
     comment: z.string().max(1000).optional(),
 });
+
+// KPI Assignment list query schema
+export const listKPIAssignmentsQuerySchema = z.object({
+    cycle_id: z.string().regex(/^\d+$/).transform(Number).optional(),
+    unit_id: z.string().regex(/^\d+$/).transform(Number).optional(),
+    owner_id: z.string().regex(/^\d+$/).transform(Number).optional(),
+    visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
+    parent_assignment_id: z.string().regex(/^\d+$/).transform(Number).optional(),
+    // Progress status filter based on progress_percentage
+    progress_status: z.enum(["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"]).optional(),
+    // KPIStatus filter from latest record
+    kpi_status: z.enum(["ON_TRACK", "AT_RISK", "CRITICAL"]).optional(),
+    // Activity status filter
+    status: z.enum(["active", "deleted"]).optional().default("active"),
+    page: z.string().regex(/^\d+$/).transform(Number).default("1"),
+    per_page: z.string().regex(/^\d+$/).transform(Number).default("20"),
+});

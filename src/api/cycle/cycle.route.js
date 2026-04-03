@@ -4,6 +4,7 @@ import {
     getCycleById,
     createCycle,
     updateCycle,
+    deleteCycle,
     lockCycle,
     cloneCycle,
 } from "./cycle.controller.js";
@@ -25,7 +26,7 @@ router.use(authenticate);
  * /cycles:
  *   get:
  *     summary: Get list of cycles
- *     description: Returns a paginated list of cycles with open cycles count. Requires `accessToken` cookie and `ADMIN_COMPANY` role.
+ *     description: Returns a paginated list of cycles with open cycles count. Requires `accessToken` cookie and `ADMIN_COMPANY` role. Employee can only see cycle names through Objective/KPI references.
  *     tags: [Cycles]
  *     parameters:
  *       - in: query
@@ -97,7 +98,7 @@ router.use(authenticate);
  *                     last_page:
  *                       type: integer
  */
-router.get("/", getCycles);
+router.get("/", authorize("ADMIN_COMPANY"), getCycles);
 
 /**
  * @swagger
@@ -230,6 +231,51 @@ router.get("/:id", getCycleById);
  *         description: Cycle updated successfully
  */
 router.put("/:id", authorize("ADMIN_COMPANY"), updateCycle);
+
+/**
+ * @swagger
+ * /cycles/{id}:
+ *   delete:
+ *     summary: Delete a cycle
+ *     description: Delete a cycle that has no objectives or KPI assignments. Requires `ADMIN_COMPANY` role.
+ *     tags: [Cycles]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Cycle ID
+ *     responses:
+ *       200:
+ *         description: Cycle deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     deleted_cycle:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         name:
+ *                           type: string
+ *       400:
+ *         description: Cannot delete cycle - has existing objectives or KPI assignments
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Cycle not found
+ */
+router.delete("/:id", authorize("ADMIN_COMPANY"), deleteCycle);
 
 /**
  * @swagger

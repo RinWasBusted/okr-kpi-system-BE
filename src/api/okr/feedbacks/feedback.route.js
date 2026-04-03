@@ -33,7 +33,7 @@ router.use(authenticate);
  * /objectives/{objectiveId}/feedbacks:
  *   get:
  *     summary: List feedbacks for an objective
- *     description: Returns top-level feedbacks only. 
+ *     description: Returns top-level feedbacks only.
  *     tags: [Feedbacks]
  *     parameters:
  *       - in: path
@@ -86,7 +86,37 @@ router.use(authenticate);
  *                 data:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/Feedback'
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       objective_id:
+ *                         type: integer
+ *                       user_id:
+ *                         type: integer
+ *                       content:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                         enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER]
+ *                       sentiment:
+ *                         type: string
+ *                         enum: [POSITIVE, NEUTRAL, NEGATIVE, MIXED, UNKNOWN]
+ *                       status:
+ *                         type: string
+ *                         enum: [ACTIVE, RESOLVED, FLAGGED]
+ *                       kr_tag_id:
+ *                         type: integer
+ *                         nullable: true
+ *                       parent_feedback_id:
+ *                         type: integer
+ *                         nullable: true
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
  *                 meta:
  *                   type: object
  *                   properties:
@@ -153,7 +183,34 @@ router.get("/objectives/:objectiveId/feedbacks", validate(listFeedbacksQuerySche
  *                   type: object
  *                   properties:
  *                     feedback:
- *                       $ref: '#/components/schemas/Feedback'
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         objective_id:
+ *                           type: integer
+ *                         user_id:
+ *                           type: integer
+ *                         content:
+ *                           type: string
+ *                         type:
+ *                           type: string
+ *                         sentiment:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                         kr_tag_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         parent_feedback_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         created_at:
+ *                           type: string
+ *                           format: date-time
+ *                         updated_at:
+ *                           type: string
+ *                           format: date-time
  *       403:
  *         description: No permission to view this objective
  *       404:
@@ -194,7 +251,34 @@ router.post("/objectives/:objectiveId/feedbacks", validate(createFeedbackSchema)
  *                   type: object
  *                   properties:
  *                     feedback:
- *                       $ref: '#/components/schemas/Feedback'
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         objective_id:
+ *                           type: integer
+ *                         user_id:
+ *                           type: integer
+ *                         content:
+ *                           type: string
+ *                         type:
+ *                           type: string
+ *                         sentiment:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                         kr_tag_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         parent_feedback_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         created_at:
+ *                           type: string
+ *                           format: date-time
+ *                         updated_at:
+ *                           type: string
+ *                           format: date-time
  *       403:
  *         description: No permission
  *       404:
@@ -330,7 +414,34 @@ router.delete("/objectives/:objectiveId/feedbacks/:feedbackId", deleteFeedback);
  *                 data:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/Feedback'
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       objective_id:
+ *                         type: integer
+ *                       user_id:
+ *                         type: integer
+ *                       content:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                       sentiment:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       kr_tag_id:
+ *                         type: integer
+ *                         nullable: true
+ *                       parent_feedback_id:
+ *                         type: integer
+ *                         nullable: true
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
  *       400:
  *         description: Trying to get replies of a reply
  *       404:
@@ -385,7 +496,34 @@ router.get("/feedbacks/:id/replies", listReplies);
  *                   type: object
  *                   properties:
  *                     feedback:
- *                       $ref: '#/components/schemas/Feedback'
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         objective_id:
+ *                           type: integer
+ *                         user_id:
+ *                           type: integer
+ *                         content:
+ *                           type: string
+ *                         type:
+ *                           type: string
+ *                         sentiment:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                         kr_tag_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         parent_feedback_id:
+ *                           type: integer
+ *                           nullable: true
+ *                         created_at:
+ *                           type: string
+ *                           format: date-time
+ *                         updated_at:
+ *                           type: string
+ *                           format: date-time
  *       400:
  *         description: Cannot reply to a reply
  *       403:

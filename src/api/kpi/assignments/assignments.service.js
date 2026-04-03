@@ -33,6 +33,16 @@ const calculateProgressPercentage = (currentValue, targetValue, evaluationMethod
     return Math.min((currentValue / targetValue) * 100, 100);
 };
 
+// Calculate progress status for KPI (different enum than Objective)
+const calculateProgressStatus = (progress) => {
+    const p = Number(progress) || 0;
+    if (p === 0) return "NOT_STARTED";
+    if (p >= 100) return "COMPLETED";
+    if (p >= 80) return "ON_TRACK";
+    if (p >= 30) return "AT_RISK";
+    return "CRITICAL";
+};
+
 const assignmentSelect = {
     id: true,
     kpi_dictionary_id: true,
@@ -89,6 +99,8 @@ const formatAssignment = async (assignment) => {
         target_value: assignment.target_value,
         current_value: assignment.current_value,
         progress_percentage: Math.round(assignment.progress_percentage * 100) / 100,
+        progress_status: calculateProgressStatus(assignment.progress_percentage),
+        status: latestRecord?.status || null,
         visibility: assignment.visibility,
         owner: owner,
         unit: unit,
@@ -315,8 +327,38 @@ const buildNestedAssignments = async (assignments) => {
 };
 
 export const listKPIAssignments = async (user, filters) => {
+    // Check if user can filter by status (only ADMIN_COMPANY or unit manager)
+    const canFilterByStatus = async (user, unitId) => {
+        if (user.role === UserRole.ADMIN_COMPANY) return true;
+        if (!unitId || !user.unit_id) return false;
+        // Check if user is manager of the unit
+        const unit = await prisma.units.findUnique({
+            where: { id: unitId },
+            select: { manager_id: true },
+        });
+        if (unit?.manager_id === user.id) return true;
+        // Check if user is from ancestor unit
+        return await isAncestorUnit(user.unit_id, unitId);
+    };
+
+    // Validate status filter permission
+    if (filters.status && filters.status !== "active") {
+        const hasPermission = await canFilterByStatus(user, filters.unit_id);
+        if (!hasPermission) {
+            throw new AppError("You do not have permission to filter by status", 403);
+        }
+    }
+
+    // Validate kpi_status filter permission (also requires manager/admin)
+    if (filters.kpi_status) {
+        const hasPermission = await canFilterByStatus(user, filters.unit_id);
+        if (!hasPermission) {
+            throw new AppError("You do not have permission to filter by kpi_status", 403);
+        }
+    }
+
     const where = {
-        deleted_at: null,
+        deleted_at: filters.status === "deleted" ? { not: null } : null,
     };
 
     if (filters.cycle_id) where.cycle_id = filters.cycle_id;
@@ -355,7 +397,37 @@ export const listKPIAssignments = async (user, filters) => {
     });
 
     // Build nested structure
-    const nestedAssignments = await buildNestedAssignments(allAssignments);
+    let nestedAssignments = await buildNestedAssignments(allAssignments);
+
+    // Filter by progress_status if provided
+    if (filters.progress_status) {
+        const filterByProgressStatus = (assignments) => {
+            return assignments.filter((a) => {
+                const matches = a.progress_status === filters.progress_status;
+                // Filter sub_assignments recursively
+                if (a.sub_assignments && a.sub_assignments.length > 0) {
+                    a.sub_assignments = filterByProgressStatus(a.sub_assignments);
+                }
+                return matches;
+            });
+        };
+        nestedAssignments = filterByProgressStatus(nestedAssignments);
+    }
+
+    // Filter by kpi_status (from latest record) if provided
+    if (filters.kpi_status) {
+        const filterByKpiStatus = (assignments) => {
+            return assignments.filter((a) => {
+                const matches = a.status === filters.kpi_status;
+                // Filter sub_assignments recursively
+                if (a.sub_assignments && a.sub_assignments.length > 0) {
+                    a.sub_assignments = filterByKpiStatus(a.sub_assignments);
+                }
+                return matches;
+            });
+        };
+        nestedAssignments = filterByKpiStatus(nestedAssignments);
+    }
 
     // Apply pagination on root assignments only
     const page = filters.page || 1;

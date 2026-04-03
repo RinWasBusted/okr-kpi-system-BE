@@ -52,6 +52,25 @@ router.use(authenticate);
  *           enum: [PUBLIC, INTERNAL, PRIVATE]
  *         description: Filter by visibility
  *       - in: query
+ *         name: progress_status
+ *         schema:
+ *           type: string
+ *           enum: [NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED]
+ *         description: Filter by progress status (calculated from progress_percentage)
+ *       - in: query
+ *         name: kpi_status
+ *         schema:
+ *           type: string
+ *           enum: [ON_TRACK, AT_RISK, CRITICAL]
+ *         description: Filter by KPI status from latest record
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [active, deleted]
+ *           default: active
+ *         description: Filter by activity status
+ *       - in: query
  *         name: parent_assignment_id
  *         schema:
  *           type: integer

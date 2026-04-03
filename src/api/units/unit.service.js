@@ -22,7 +22,10 @@ const withContext = async (fn) => {
     });
 };
 
-const formatUnitRow = (row, includeStats = false) => {
+const formatUnitRow = (row, includeStats = false, currentUser = null) => {
+    const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
+    const isManager = currentUser?.id === row.manager_id;
+
     const base = {
         id: row.id,
         name: row.name,
@@ -33,6 +36,8 @@ const formatUnitRow = (row, includeStats = false) => {
             : null,
         member_count: Number(row.member_count ?? 0),
         created_at: row.created_at,
+        editable: isAdmin || isManager,
+        deletable: isAdmin,
     };
 
     if (includeStats) {
@@ -84,7 +89,7 @@ const getUnitRowById = async (tx, unitId) => {
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-export const listUnits = async ({ page, per_page, mode = "tree" }) => {
+export const listUnits = async ({ page, per_page, mode = "tree" }, currentUser = null) => {
     return withContext(async (tx) => {
         // Get all units with stats using pre-aggregated CTEs to avoid JOIN fan-out
         const allUnits = await tx.$queryRaw`
@@ -141,14 +146,14 @@ export const listUnits = async ({ page, per_page, mode = "tree" }) => {
 
             return {
                 total,
-                data: paginatedUnits.map((unit) => formatUnitRow(unit, true)),
+                data: paginatedUnits.map((unit) => formatUnitRow(unit, true, currentUser)),
             };
         }
 
         // Tree mode: build tree structure (default behavior)
         const unitsMap = new Map();
         const formattedUnits = allUnits.map((unit) => ({
-            ...formatUnitRow(unit, true),
+            ...formatUnitRow(unit, true, currentUser),
             sub_units: [],
         }));
 
@@ -175,7 +180,7 @@ export const listUnits = async ({ page, per_page, mode = "tree" }) => {
         const paginatedRoots = rootUnits.slice(offset, offset + per_page);
 
         return {
-            total: rootUnits.length,
+            total: allUnits.length,
             data: paginatedRoots,
         };
     });
@@ -387,7 +392,7 @@ export const getUnitInfo = async (unitId) => {
 
 // ─── Detail ───────────────────────────────────────────────────────────────────
 
-export const getUnitDetail = async (unitId) => {
+export const getUnitDetail = async (unitId, currentUser = null) => {
     return withContext(async (tx) => {
         const rows = await tx.$queryRaw`
             SELECT
@@ -424,6 +429,9 @@ export const getUnitDetail = async (unitId) => {
         `;
         const total_objective = Number(objectiveResult[0]?.total ?? 0);
 
+        const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
+        const isManager = currentUser?.id === unit.manager_id;
+
         return {
             id: unit.id,
             name: unit.name,
@@ -441,6 +449,8 @@ export const getUnitDetail = async (unitId) => {
                 : null,
             total_kpi,
             total_objective,
+            editable: isAdmin || isManager,
+            deletable: isAdmin,
         };
     });
 };
