@@ -28,11 +28,23 @@ export const loginService = async (email, password, company_slug = '') => {
             throw new AppError("Invalid email or password", 401);
         }
 
+        // Fetch unit_path if user has a unit
+        let unit_path = null;
+        if (user.unit_id) {
+            const unitData = await prisma.$queryRaw`
+                SELECT path::text as unit_path
+                FROM "Units"
+                WHERE id = ${user.unit_id}
+            `;
+            unit_path = unitData[0]?.unit_path || null;
+        }
+
         const tokenPayload = {
             id: user.id,
             role: user.role,
             company_id: user.company_id,
-            unit_id: user.unit_id
+            unit_id: user.unit_id,
+            unit_path: unit_path
         }
 
         const accessToken = generateToken(tokenPayload, '15m');
@@ -58,9 +70,9 @@ export const refreshTokenService = async (refreshToken) => {
             throw new AppError("Invalid refresh token", 401);
         }
 
-        const { id, role, company_id, unit_id } = JSON.parse(tokenData);
+        const { id, role, company_id, unit_id, unit_path } = JSON.parse(tokenData);
 
-        const accessToken = generateToken({ id, role, company_id, unit_id }, '15m');
+        const accessToken = generateToken({ id, role, company_id, unit_id, unit_path }, '15m');
 
         return accessToken;
     } catch (error) {

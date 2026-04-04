@@ -6,6 +6,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["views"]
 }
 
 datasource db {
@@ -127,6 +128,7 @@ model KPIDictionaries {
   id                Int     @id @default(autoincrement())
   company_id        Int?
   name              String
+  description       String?
   unit              String
   evaluation_method String
   unit_id           Int?
@@ -357,4 +359,20 @@ model AIUsageLogs {
   user      Users?     @relation(fields: [user_id], references: [id])
 
   @@index([company_id])
+}
+
+view UnitPerformance {
+  unit_id          Int    @unique
+  company_id       Int
+  name             String
+  parent_id        Int?
+  manager_id       Int?
+  path             Unsupported("ltree")
+  total_users      Int
+  total_okrs       Int
+  avg_okr_progress Float
+  total_kpis       Int
+  avg_kpi_progress Float
+
+  @@map("unit_performance")
 }

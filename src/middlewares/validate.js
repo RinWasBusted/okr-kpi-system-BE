@@ -8,11 +8,12 @@ export const validate = (schema, source = "body") => {
         try {
             const data = req[source];
             const result = await schema.parseAsync(data);
-            // Replace the original data with validated/parsed data
+            // Replace request data with the validated/parsing result so controllers
+            // receive Zod defaults, coercions, and transforms for all supported sources.
             req[source] = result;
             next();
         } catch (error) {
-            if (error.name === "ZodError") {
+            if (error.name === "ZodError" && Array.isArray(error.errors)) {
                 const message = error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
                 return res.status(422).json({
                     success: false,
@@ -22,6 +23,7 @@ export const validate = (schema, source = "body") => {
                     },
                 });
             }
+            // Fallback for non-ZodError or malformed ZodError
             next(error);
         }
     };

@@ -245,7 +245,7 @@ router.post("/kpi-assignments", validate(createKPIAssignmentSchema), createKPIAs
  * /kpi-assignments/{id}:
  *   put:
  *     summary: Update a KPI Assignment
- *     description: |\n *       Update KPI assignment values and settings.\n *       Cycle context is automatically included in responses.\n *       Note: parent_assignment_id and visibility inheritance rules are enforced on create/update.
+ *     description: Update KPI assignment values and settings. Cycle context is automatically included in responses. Note - parent_assignment_id and visibility inheritance rules are enforced on create/update.
  *     tags: [KPIAssignments]
  *     parameters:
  *       - in: path
@@ -274,7 +274,7 @@ router.post("/kpi-assignments", validate(createKPIAssignmentSchema), createKPIAs
  *               visibility:
  *                 type: string
  *                 enum: [PUBLIC, INTERNAL, PRIVATE]
- *                 description: |\n *                   Visibility level (PUBLIC < INTERNAL < PRIVATE)\n *                   If parent assignment exists, child visibility must be >= parent visibility
+ *                 description: Visibility level (PUBLIC < INTERNAL < PRIVATE). If parent assignment exists, child visibility must be >= parent visibility
  *     responses:
  *       200:
  *         description: KPI Assignment updated successfully

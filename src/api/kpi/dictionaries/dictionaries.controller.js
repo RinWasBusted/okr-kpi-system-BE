@@ -35,7 +35,7 @@ export const getKPIDictionaries = async (req, res) => {
 // POST /kpi-dictionaries
 export const createKPIDictionary = async (req, res) => {
     try {
-        const { name, unit, evaluation_method, unit_id } = req.body;
+        const { name, unit, evaluation_method, unit_id, description } = req.body;
 
         if (!name || typeof name !== "string" || name.trim() === "") {
             throw new AppError("name is required", 422);
@@ -63,6 +63,7 @@ export const createKPIDictionary = async (req, res) => {
             name: name.trim(),
             unit: unit.trim(),
             evaluation_method,
+            description: description?.trim() || null,
             unit_id: parsedUnitId,
         });
 
@@ -78,7 +79,7 @@ export const updateKPIDictionary = async (req, res) => {
         const dictionaryId = parsePositiveInt(req.params.id, null);
         if (!dictionaryId) throw new AppError("Invalid dictionary ID", 400);
 
-        const { name, unit, evaluation_method, unit_id } = req.body;
+        const { name, unit, evaluation_method, unit_id, description } = req.body;
         const updates = {};
 
         if (name !== undefined) {
@@ -107,6 +108,10 @@ export const updateKPIDictionary = async (req, res) => {
                 );
             }
             updates.evaluation_method = evaluation_method;
+        }
+
+        if (description !== undefined) {
+            updates.description = description ? description.trim() : null;
         }
 
         if (unit_id !== undefined) {

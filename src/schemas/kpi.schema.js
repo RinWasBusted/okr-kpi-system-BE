@@ -18,6 +18,7 @@ export const createKPIDictionarySchema = z.object({
         .min(LIMITS.unit.min, "unit is required")
         .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`),
     evaluation_method: z.enum(["Positive", "Negative", "Stabilizing"]),
+    description: z.string().max(1000).optional(),
 });
 
 export const updateKPIDictionarySchema = z.object({
@@ -32,6 +33,7 @@ export const updateKPIDictionarySchema = z.object({
         .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`)
         .optional(),
     evaluation_method: z.enum(["Positive", "Negative", "Stabilizing"]).optional(),
+    description: z.string().max(1000).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
 });
@@ -123,6 +125,7 @@ export const listKPIAssignmentsQuerySchema = z.object({
     kpi_status: z.enum(["ON_TRACK", "AT_RISK", "CRITICAL"]).optional(),
     // Activity status filter
     status: z.enum(["active", "deleted"]).optional().default("active"),
-    page: z.string().regex(/^\d+$/).transform(Number).default("1"),
-    per_page: z.string().regex(/^\d+$/).transform(Number).default("20"),
-});
+    page: z.string().regex(/^\d+$/).transform(Number).optional().default("1"),
+    per_page: z.string().regex(/^\d+$/).transform(Number).optional().default("20"),
+    mode: z.enum(["tree", "list"]).optional().default("tree"),
+}).passthrough();

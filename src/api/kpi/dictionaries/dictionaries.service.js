@@ -8,6 +8,7 @@ const dictionarySelect = {
     name: true,
     unit: true,
     evaluation_method: true,
+    description: true,
     unit_id: true,
 };
 
@@ -19,6 +20,7 @@ const formatDictionary = (dict, currentUser = null) => {
         name: dict.name,
         unit: dict.unit,
         evaluation_method: dict.evaluation_method,
+        description: dict.description ?? null,
         unit_id: dict.unit_id,
         editable: isAdmin,
         deletable: isAdmin,
@@ -101,6 +103,7 @@ export const createKPIDictionary = async (user, payload) => {
             name: payload.name,
             unit: payload.unit,
             evaluation_method: payload.evaluation_method,
+            description: payload.description ?? null,
             unit_id: payload.unit_id ?? null,
         },
         select: dictionarySelect,
@@ -139,6 +142,7 @@ export const updateKPIDictionary = async (user, dictionaryId, payload) => {
             ...(payload.evaluation_method !== undefined && {
                 evaluation_method: payload.evaluation_method,
             }),
+            ...(payload.description !== undefined && { description: payload.description }),
             ...(payload.unit_id !== undefined ? {unit_id: payload.unit_id} : { unit_id: null }),
         },
         select: dictionarySelect,

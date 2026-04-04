@@ -62,6 +62,9 @@ router.use(authenticate);
  *                       evaluation_method:
  *                         type: string
  *                         enum: [Positive, Negative, Stabilizing]
+ *                       description:
+ *                         type: string
+ *                         nullable: true
  *                       unit_id:
  *                         type: integer
  *                         nullable: true
@@ -99,6 +102,10 @@ router.get("/kpi-dictionaries", getKPIDictionaries);
  *                 type: string
  *                 enum: [Positive, Negative, Stabilizing]
  *                 description: Evaluation method
+ *               description:
+ *                 type: string
+ *                 maxLength: 1000
+ *                 description: Optional description for the KPI
  *               unit_id:
  *                 type: integer
  *                 description: Unit ID (null for company-wide)
@@ -145,6 +152,10 @@ router.post("/kpi-dictionaries", validate(createKPIDictionarySchema), createKPID
  *                 type: string
  *                 enum: [Positive, Negative, Stabilizing]
  *                 description: Evaluation method (optional for update)
+ *               description:
+ *                 type: string
+ *                 maxLength: 1000
+ *                 description: Optional description for the KPI (optional for update)
  *               unit_id:
  *                 type: integer
  *     responses:

@@ -39,6 +39,6 @@ export const listFeedbacksQuerySchema = z.object({
     sentiment: z.enum(["POSITIVE", "NEUTRAL", "NEGATIVE", "MIXED", "UNKNOWN"]).optional(),
     status: z.enum(["ACTIVE", "RESOLVED", "FLAGGED"]).optional(),
     kr_tag_id: z.string().regex(/^\d+$/).transform(Number).optional(),
-    page: z.string().regex(/^\d+$/).transform(Number).default("1"),
-    per_page: z.string().regex(/^\d+$/).transform(Number).default("20"),
-});
+    page: z.string().regex(/^\d+$/).transform(Number).optional().default("1"),
+    per_page: z.string().regex(/^\d+$/).transform(Number).optional().default("20"),
+}).passthrough();
