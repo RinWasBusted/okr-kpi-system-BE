@@ -9,6 +9,7 @@ import kpiRoutes from "./kpi/index.js";
 import okrAiRoutes from "./okr-ai/okrAi.route.js";
 import aiUsageRoutes from "./ai-usage/ai-usage.route.js";
 import healthRoutes from "./health/health.route.js";
+import statisticRoutes from "./statistic/statistic.route.js";
 const router = express.Router();
 
 router.use("/health", healthRoutes);
@@ -21,5 +22,6 @@ router.use("/", okrRoutes);
 router.use("/", kpiRoutes);
 router.use("/", okrAiRoutes);
 router.use("/ai-usage", aiUsageRoutes);
+router.use("/statistics", statisticRoutes);
 
 export default router;
