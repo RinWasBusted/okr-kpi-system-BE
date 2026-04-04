@@ -544,6 +544,18 @@ export const updateObjective = async (user, objectiveId, updates) => {
                 422
             );
         }
+    } else if (objective.parent_objective_id && updates.visibility !== undefined) {
+        // Validate visibility hierarchy when only changing visibility (not parent) but objective already has a parent
+        const parent = await prisma.objectives.findFirst({
+            where: { id: objective.parent_objective_id },
+            select: { id: true, visibility: true },
+        });
+        if (parent && !validateChildVisibility(updates.visibility, parent.visibility)) {
+            throw new AppError(
+                `Child objective visibility (${updates.visibility}) cannot be more public than parent visibility (${parent.visibility})`,
+                422
+            );
+        }
     }
 
     if (updates.visibility === "PRIVATE" && !objective.owner_id) {
@@ -621,6 +633,24 @@ export const approveObjective = async (user, objectiveId, updates) => {
                 422
             );
         }
+    } else if (objective.parent_objective_id && updates.visibility !== undefined) {
+        // Validate visibility hierarchy when only changing visibility (not parent) but objective already has a parent
+        const parent = await prisma.objectives.findFirst({
+            where: { id: objective.parent_objective_id },
+            select: { id: true, visibility: true },
+        });
+        if (parent && !validateChildVisibility(updates.visibility, parent.visibility)) {
+            throw new AppError(
+                `Child objective visibility (${updates.visibility}) cannot be more public than parent visibility (${parent.visibility})`,
+                422
+            );
+        }
+    }
+
+    // Validate PRIVATE visibility requires owner_id (consistent with createObjective)
+    const finalVisibility = updates.visibility !== undefined ? updates.visibility : objective.visibility;
+    if (finalVisibility === "PRIVATE" && !objective.owner_id) {
+        throw new AppError("owner_id is required for PRIVATE objectives", 422);
     }
 
     const updated = await prisma.objectives.update({
