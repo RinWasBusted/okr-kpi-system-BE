@@ -61,7 +61,7 @@ export const getObjectives = async (req, res) => {
         const include_key_results = parseBoolean(req.query.include_key_results) ?? false;
         const page = parsePositiveInt(req.query.page, 1);
         const per_page = Math.min(parsePositiveInt(req.query.per_page, 20), 100);
-        const mode = req.query.mode ?? "tree";
+        const mode = req.query.mode;
 
         const { total, data, last_page } = await objectiveService.listObjectives({
             user: req.user,
