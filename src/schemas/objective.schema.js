@@ -38,8 +38,8 @@ export const listObjectivesQuerySchema = z.object({
     parent_objective_id: z.string().regex(/^\d+$/).transform(Number).optional(),
     // Progress status filter based on progress_percentage
     progress_status: z.enum(["NOT_STARTED", "DANGER", "WARNING", "ON_TRACK", "COMPLETED"]).optional(),
-    page: z.string().regex(/^\d+$/).transform(Number).default("1"),
-    per_page: z.string().regex(/^\d+$/).transform(Number).default("20"),
-    include_key_results: z.enum(["true", "false"]).transform((v) => v === "true").default("false"),
-    mode: z.enum(["tree", "list"]).default("tree"),
-});
+    page: z.string().regex(/^\d+$/).transform(Number).optional().default("1"),
+    per_page: z.string().regex(/^\d+$/).transform(Number).optional().default("20"),
+    include_key_results: z.enum(["true", "false"]).transform((v) => v === "true").optional().default("false"),
+    mode: z.enum(["tree", "list"]).optional().default("tree"),
+}).passthrough();

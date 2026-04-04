@@ -23,6 +23,8 @@ const prisma = basePrisma.$extends({
           basePrisma.$executeRawUnsafe(`
             SET LOCAL app.current_company_id = '${company_id}';
             SET LOCAL app.user_role = '${role}';
+            SET LOCAL app.current_user_id = '${store?.user_id || ''}';
+            SET LOCAL app.current_user_unit_path = '${store?.unit_path || ''}';
           `),
           query(args)
         ]);
@@ -40,6 +42,8 @@ const prisma = basePrisma.$extends({
         await tx.$executeRawUnsafe(`
           SET LOCAL app.current_company_id = '${company_id}';
           SET LOCAL app.user_role = '${role}';
+          SET LOCAL app.current_user_id = '${store?.user_id || ''}';
+          SET LOCAL app.current_user_unit_path = '${store?.unit_path || ''}';
         `);
         return tx.$queryRaw(...args);
       });
@@ -53,6 +57,8 @@ const prisma = basePrisma.$extends({
         await tx.$executeRawUnsafe(`
           SET LOCAL app.current_company_id = '${company_id}';
           SET LOCAL app.user_role = '${role}';
+          SET LOCAL app.current_user_id = '${store?.user_id || ''}';
+          SET LOCAL app.current_user_unit_path = '${store?.unit_path || ''}';
         `);
         return tx.$queryRawUnsafe(...args);
       });
@@ -66,6 +72,8 @@ const prisma = basePrisma.$extends({
         await tx.$executeRawUnsafe(`
           SET LOCAL app.current_company_id = '${company_id}';
           SET LOCAL app.user_role = '${role}';
+          SET LOCAL app.current_user_id = '${store?.user_id || ''}';
+          SET LOCAL app.current_user_unit_path = '${store?.unit_path || ''}';
         `);
         return tx.$executeRaw(...args);
       });
@@ -79,6 +87,8 @@ const prisma = basePrisma.$extends({
         await tx.$executeRawUnsafe(`
           SET LOCAL app.current_company_id = '${company_id}';
           SET LOCAL app.user_role = '${role}';
+          SET LOCAL app.current_user_id = '${store?.user_id || ''}';
+          SET LOCAL app.current_user_unit_path = '${store?.unit_path || ''}';
         `);
         return tx.$executeRawUnsafe(...args);
       });

@@ -12,7 +12,6 @@ import {
 
 const formatUnitRow = (row, includeStats = false, currentUser = null) => {
     const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
-    const isManager = currentUser?.id === row.manager_id;
 
     const base = {
         id: row.id,
@@ -24,14 +23,18 @@ const formatUnitRow = (row, includeStats = false, currentUser = null) => {
             : null,
         member_count: Number(row.member_count ?? 0),
         created_at: row.created_at,
-        editable: isAdmin || isManager,
-        deletable: isAdmin,
     };
+
+    if (isAdmin) {
+        base.permission = {
+            editable: true,
+            deletable: true,
+        };
+    }
 
     if (includeStats) {
         base.okr_count = Number(row.okr_count ?? 0);
         base.kpi_count = Number(row.kpi_count ?? 0);
-        base.manager_name = row.manager_full_name ?? null;
         base.okr_progress = row.okr_progress !== null ? Number(row.okr_progress) : null;
         base.kpi_health = row.kpi_health !== null ? Number(row.kpi_health) : null;
     }
@@ -77,33 +80,9 @@ const getUnitRowById = async (tx, unitId) => {
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-export const listUnits = async ({ page, per_page, mode = "tree" }) => {
+export const listUnits = async ({ page, per_page, mode = "tree" }, currentUser) => {
     return prisma.$transaction(async (tx) => {
         const allUnits = await tx.$queryRaw`
-            WITH obj_stats AS (
-                SELECT
-                    unit_id,
-                    COUNT(id) AS okr_count,
-                    ROUND(AVG(progress_percentage)::numeric, 2) AS okr_progress
-                FROM "Objectives"
-                WHERE deleted_at IS NULL
-                GROUP BY unit_id
-            ),
-            kpi_stats AS (
-                SELECT
-                    unit_id,
-                    COUNT(id) AS kpi_count,
-                    ROUND(AVG(progress_percentage)::numeric, 2) AS kpi_health
-                FROM "KPIAssignments"
-                WHERE deleted_at IS NULL
-                GROUP BY unit_id
-            ),
-            member_stats AS (
-                SELECT unit_id, COUNT(id) AS member_count
-                FROM "Users"
-                WHERE deleted_at IS NULL
-                GROUP BY unit_id
-            )
             SELECT
                 u.id,
                 u.name,
@@ -112,16 +91,14 @@ export const listUnits = async ({ page, per_page, mode = "tree" }) => {
                 u.created_at,
                 m.id AS manager_id,
                 m.full_name AS manager_full_name,
-                COALESCE(ms.member_count, 0) AS member_count,
-                COALESCE(os.okr_count, 0) AS okr_count,
-                COALESCE(ks.kpi_count, 0) AS kpi_count,
-                COALESCE(os.okr_progress, 0) AS okr_progress,
-                COALESCE(ks.kpi_health, 0) AS kpi_health
+                COALESCE(up.total_users, 0) AS member_count,
+                COALESCE(up.total_okrs, 0) AS okr_count,
+                COALESCE(up.total_kpis, 0) AS kpi_count,
+                COALESCE(up.avg_okr_progress, 0) AS okr_progress,
+                COALESCE(up.avg_kpi_progress, 0) AS kpi_health
             FROM "Units" u
             LEFT JOIN "Users" m ON m.id = u.manager_id
-            LEFT JOIN member_stats ms ON ms.unit_id = u.id
-            LEFT JOIN obj_stats os ON os.unit_id = u.id
-            LEFT JOIN kpi_stats ks ON ks.unit_id = u.id
+            LEFT JOIN unit_performance up ON up.unit_id = u.id
             ORDER BY u.id ASC
         `;
 
@@ -379,7 +356,7 @@ export const getUnitInfo = async (unitId) => {
 
 // ─── Detail ───────────────────────────────────────────────────────────────────
 
-export const getUnitDetail = async (unitId) => {
+export const getUnitDetail = async (unitId, currentUser) => {
     return prisma.$transaction(async (tx) => {
         const rows = await tx.$queryRaw`
             SELECT
@@ -400,26 +377,9 @@ export const getUnitDetail = async (unitId) => {
         if (rows.length === 0) throw new AppError("Unit not found", 404);
         const unit = rows[0];
 
-        // Get total KPI assignments for this unit
-        const kpiResult = await tx.$queryRaw`
-            SELECT COUNT(*) AS total
-            FROM "KPIAssignments"
-            WHERE unit_id = ${unitId} AND deleted_at IS NULL
-        `;
-        const total_kpi = Number(kpiResult[0]?.total ?? 0);
-
-        // Get total objectives for this unit
-        const objectiveResult = await tx.$queryRaw`
-            SELECT COUNT(*) AS total
-            FROM "Objectives"
-            WHERE unit_id = ${unitId} AND deleted_at IS NULL
-        `;
-        const total_objective = Number(objectiveResult[0]?.total ?? 0);
-
         const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
-        const isManager = currentUser?.id === unit.manager_id;
 
-        return {
+        const result = {
             id: unit.id,
             name: unit.name,
             parent_id: unit.parent_id ?? null,
@@ -434,10 +394,15 @@ export const getUnitDetail = async (unitId) => {
                     job_title: unit.job_title,
                   }
                 : null,
-            total_kpi,
-            total_objective,
-            editable: isAdmin || isManager,
-            deletable: isAdmin,
         };
+
+        if (isAdmin) {
+            result.permission = {
+                editable: true,
+                deletable: true,
+            };
+        }
+
+        return result;
     });
 };

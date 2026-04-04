@@ -14,7 +14,12 @@ export const authenticate = (req, res, next) => {
 
     req.user = decoded;
 
-    requestContext.run({ company_id: decoded.company_id, role: decoded.role }, () => {
+    requestContext.run({
+        company_id: decoded.company_id,
+        role: decoded.role,
+        user_id: decoded.id,
+        unit_path: decoded.unit_path,
+    }, () => {
         next();
     });
 };

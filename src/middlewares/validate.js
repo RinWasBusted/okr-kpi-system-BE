@@ -8,11 +8,14 @@ export const validate = (schema, source = "body") => {
         try {
             const data = req[source];
             const result = await schema.parseAsync(data);
-            // Replace the original data with validated/parsed data
-            req[source] = result;
+            // Only replace data for 'body' and 'params' (not 'query' which is read-only)
+            // For 'query', validation passes but original req.query is used by controllers
+            if (source !== "query") {
+                req[source] = result;
+            }
             next();
         } catch (error) {
-            if (error.name === "ZodError") {
+            if (error.name === "ZodError" && Array.isArray(error.errors)) {
                 const message = error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
                 return res.status(422).json({
                     success: false,
@@ -22,6 +25,7 @@ export const validate = (schema, source = "body") => {
                     },
                 });
             }
+            // Fallback for non-ZodError or malformed ZodError
             next(error);
         }
     };

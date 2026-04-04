@@ -47,6 +47,6 @@ export const updateUserSchema = z.object({
 export const listUsersQuerySchema = z.object({
     unit_id: z.string().regex(/^\d+$/).transform(Number).optional(),
     search: z.string().max(255).optional(),
-    page: z.string().regex(/^\d+$/).transform(Number).default("1"),
-    per_page: z.string().regex(/^\d+$/).transform(Number).default("20"),
-});
+    page: z.string().regex(/^\d+$/).transform(Number).optional().default("1"),
+    per_page: z.string().regex(/^\d+$/).transform(Number).optional().default("20"),
+}).passthrough();

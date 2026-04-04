@@ -123,6 +123,7 @@ export const listKPIAssignmentsQuerySchema = z.object({
     kpi_status: z.enum(["ON_TRACK", "AT_RISK", "CRITICAL"]).optional(),
     // Activity status filter
     status: z.enum(["active", "deleted"]).optional().default("active"),
-    page: z.string().regex(/^\d+$/).transform(Number).default("1"),
-    per_page: z.string().regex(/^\d+$/).transform(Number).default("20"),
-});
+    page: z.string().regex(/^\d+$/).transform(Number).optional().default("1"),
+    per_page: z.string().regex(/^\d+$/).transform(Number).optional().default("20"),
+    mode: z.enum(["tree", "list"]).optional().default("tree"),
+}).passthrough();
