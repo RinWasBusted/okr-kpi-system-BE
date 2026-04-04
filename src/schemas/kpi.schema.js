@@ -18,6 +18,7 @@ export const createKPIDictionarySchema = z.object({
         .min(LIMITS.unit.min, "unit is required")
         .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`),
     evaluation_method: z.enum(["Positive", "Negative", "Stabilizing"]),
+    description: z.string().max(1000).optional(),
 });
 
 export const updateKPIDictionarySchema = z.object({
@@ -32,6 +33,7 @@ export const updateKPIDictionarySchema = z.object({
         .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`)
         .optional(),
     evaluation_method: z.enum(["Positive", "Negative", "Stabilizing"]).optional(),
+    description: z.string().max(1000).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
 });
