@@ -8,11 +8,9 @@ export const validate = (schema, source = "body") => {
         try {
             const data = req[source];
             const result = await schema.parseAsync(data);
-            // Only replace data for 'body' and 'params' (not 'query' which is read-only)
-            // For 'query', validation passes but original req.query is used by controllers
-            if (source !== "query") {
-                req[source] = result;
-            }
+            // Replace request data with the validated/parsing result so controllers
+            // receive Zod defaults, coercions, and transforms for all supported sources.
+            req[source] = result;
             next();
         } catch (error) {
             if (error.name === "ZodError" && Array.isArray(error.errors)) {
