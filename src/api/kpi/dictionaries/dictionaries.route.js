@@ -29,6 +29,13 @@ router.use(authenticate);
  *   get:
  *     summary: Get list of KPI Dictionaries
  *     tags: [KPIDictionaries]
+ *     parameters:
+ *       - in: query
+ *         name: for_unit_id
+ *         schema:
+ *           type: integer
+ *         required: false
+ *         description: Filter KPI dictionaries accessible to a specific unit (company-wide + unit itself + ancestor units)
  *     responses:
  *       200:
  *         description: KPI Dictionaries retrieved successfully

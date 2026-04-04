@@ -41,4 +41,5 @@ export const listObjectivesQuerySchema = z.object({
     page: z.string().regex(/^\d+$/).transform(Number).default("1"),
     per_page: z.string().regex(/^\d+$/).transform(Number).default("20"),
     include_key_results: z.enum(["true", "false"]).transform((v) => v === "true").default("false"),
+    mode: z.enum(["tree", "list"]).default("tree"),
 });

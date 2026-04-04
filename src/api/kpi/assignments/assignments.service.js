@@ -326,7 +326,7 @@ const buildNestedAssignments = async (assignments) => {
     return rootAssignments;
 };
 
-export const listKPIAssignments = async (user, filters) => {
+export const listKPIAssignments = async (user, filters, mode = "tree") => {
     // Check if user can filter by status (only ADMIN_COMPANY or unit manager)
     const canFilterByStatus = async (user, unitId) => {
         if (user.role === UserRole.ADMIN_COMPANY) return true;
@@ -396,46 +396,89 @@ export const listKPIAssignments = async (user, filters) => {
         orderBy: { id: "asc" },
     });
 
-    // Build nested structure
-    let nestedAssignments = await buildNestedAssignments(allAssignments);
+    // Format all assignments first
+    const formattedAssignments = await Promise.all(
+        allAssignments.map(async (a) => {
+            // Fetch access_path using raw SQL for ltree type support
+            const pathResult = await prisma.$queryRaw`
+                SELECT access_path::text AS access_path
+                FROM "KPIAssignments"
+                WHERE id = ${a.id}
+            `;
+            const assignmentWithPath = {
+                ...a,
+                access_path: pathResult[0]?.access_path || null,
+            };
+            return await formatAssignment(assignmentWithPath);
+        })
+    );
 
     // Filter by progress_status if provided
+    let filteredAssignments = formattedAssignments;
     if (filters.progress_status) {
-        const filterByProgressStatus = (assignments) => {
-            return assignments.filter((a) => {
-                const matches = a.progress_status === filters.progress_status;
-                // Filter sub_assignments recursively
-                if (a.sub_assignments && a.sub_assignments.length > 0) {
-                    a.sub_assignments = filterByProgressStatus(a.sub_assignments);
-                }
-                return matches;
-            });
-        };
-        nestedAssignments = filterByProgressStatus(nestedAssignments);
+        filteredAssignments = filteredAssignments.filter(
+            (a) => a.progress_status === filters.progress_status
+        );
     }
 
     // Filter by kpi_status (from latest record) if provided
     if (filters.kpi_status) {
-        const filterByKpiStatus = (assignments) => {
-            return assignments.filter((a) => {
-                const matches = a.status === filters.kpi_status;
-                // Filter sub_assignments recursively
-                if (a.sub_assignments && a.sub_assignments.length > 0) {
-                    a.sub_assignments = filterByKpiStatus(a.sub_assignments);
-                }
-                return matches;
-            });
-        };
-        nestedAssignments = filterByKpiStatus(nestedAssignments);
+        filteredAssignments = filteredAssignments.filter(
+            (a) => a.status === filters.kpi_status
+        );
     }
+
+    // Flat list mode: return all assignments as flat list with pagination
+    if (mode === "list") {
+        const page = filters.page || 1;
+        const per_page = filters.per_page || 20;
+        const skip = (page - 1) * per_page;
+        const total = filteredAssignments.length;
+        const paginatedAssignments = filteredAssignments.slice(skip, skip + per_page);
+
+        return {
+            data: paginatedAssignments,
+            meta: {
+                total,
+                page,
+                per_page,
+                last_page: Math.ceil(total / per_page),
+            },
+        };
+    }
+
+    // Tree mode: build tree structure (default behavior)
+    const assignmentMap = new Map();
+    const assignmentsWithSubs = filteredAssignments.map((a) => ({
+        ...a,
+        sub_assignments: [],
+    }));
+
+    // Create map for quick lookup
+    assignmentsWithSubs.forEach((a) => {
+        assignmentMap.set(a.id, a);
+    });
+
+    // Build parent-child relationships
+    const rootAssignments = [];
+    assignmentsWithSubs.forEach((a) => {
+        if (!a.parent_assignment || !a.parent_assignment.id) {
+            rootAssignments.push(a);
+        } else {
+            const parent = assignmentMap.get(a.parent_assignment.id);
+            if (parent) {
+                parent.sub_assignments.push(a);
+            }
+        }
+    });
 
     // Apply pagination on root assignments only
     const page = filters.page || 1;
     const per_page = filters.per_page || 20;
     const skip = (page - 1) * per_page;
 
-    const paginatedRoots = nestedAssignments.slice(skip, skip + per_page);
-    const total = nestedAssignments.length;
+    const paginatedRoots = rootAssignments.slice(skip, skip + per_page);
+    const total = rootAssignments.length;
 
     return {
         data: paginatedRoots,

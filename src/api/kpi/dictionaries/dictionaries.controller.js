@@ -24,7 +24,8 @@ const parseOptionalInt = (value) => {
 // GET /kpi-dictionaries
 export const getKPIDictionaries = async (req, res) => {
     try {
-        const data = await dictionariesService.listKPIDictionaries(req.user);
+        const forUnitId = parseOptionalInt(req.query.for_unit_id);
+        const data = await dictionariesService.listKPIDictionaries(req.user, forUnitId);
         res.success("KPI Dictionaries retrieved successfully", 200, data);
     } catch (error) {
         throw error;
