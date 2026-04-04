@@ -21,6 +21,13 @@ const parseNumber = (value) => {
     return parsed;
 };
 
+const parseMode = (value) => {
+    if (value === undefined || value === null || value === "") return "tree";
+    const lower = String(value).toLowerCase();
+    if (["tree", "list"].includes(lower)) return lower;
+    return "tree";
+};
+
 // GET /kpi-assignments
 export const getKPIAssignments = async (req, res) => {
     try {
@@ -40,7 +47,8 @@ export const getKPIAssignments = async (req, res) => {
             per_page: parsePositiveInt(req.query.per_page, 20),
         };
 
-        const data = await assignmentsService.listKPIAssignments(req.user, filters);
+        const mode = parseMode(req.query.mode);
+        const data = await assignmentsService.listKPIAssignments(req.user, filters, mode);
         res.success("KPI Assignments retrieved successfully", 200, data.data, data.meta);
     } catch (error) {
         throw error;

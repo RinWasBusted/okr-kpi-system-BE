@@ -25,7 +25,29 @@ const formatDictionary = (dict, currentUser = null) => {
     };
 };
 
-export const listKPIDictionaries = async (user) => {
+export const listKPIDictionaries = async (user, forUnitId = null) => {
+    // If forUnitId is provided, filter dictionaries accessible to that specific unit
+    // (company-wide + unit itself + ancestor units)
+    if (forUnitId) {
+        const unitPath = await getUnitPath(forUnitId);
+        const ancestorUnitIds = unitPath ? await getUnitAncestors(forUnitId) : [];
+        const accessibleUnitIds = [forUnitId, ...ancestorUnitIds];
+
+        const dictionaries = await prisma.kPIDictionaries.findMany({
+            where: {
+                deleted_at: null,
+                OR: [
+                    { unit_id: null }, // Company-wide
+                    { unit_id: { in: accessibleUnitIds } }, // Target unit and ancestor units
+                ],
+            },
+            select: dictionarySelect,
+            orderBy: { id: "asc" },
+        });
+
+        return dictionaries.map(dict => formatDictionary(dict, user));
+    }
+
     if (user.role === UserRole.ADMIN_COMPANY) {
         // AdminCompany sees all non-deleted dictionaries
         const dictionaries = await prisma.kPIDictionaries.findMany({

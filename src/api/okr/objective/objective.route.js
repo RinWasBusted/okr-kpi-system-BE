@@ -32,20 +32,24 @@ router.use(authenticate);
  * /objectives:
  *   get:
  *     summary: Get list of objectives
+ *     description: Retrieve objectives with visibility hierarchy enforcement. Child objectives cannot be more public than parent objectives (PUBLIC < INTERNAL < PRIVATE).
  *     tags: [Objectives]
  *     parameters:
  *       - in: query
  *         name: cycle_id
  *         schema:
  *           type: integer
+ *         description: Filter by cycle
  *       - in: query
  *         name: unit_id
  *         schema:
  *           type: integer
+ *         description: Filter by unit
  *       - in: query
  *         name: owner_id
  *         schema:
  *           type: integer
+ *         description: Filter by owner
  *       - in: query
  *         name: status
  *         schema:
@@ -57,20 +61,31 @@ router.use(authenticate);
  *         schema:
  *           type: string
  *           enum: [NOT_STARTED, DANGER, WARNING, ON_TRACK, COMPLETED]
- *           description: Filter by progress percentage
+ *           description: Filter by progress status
  *       - in: query
  *         name: visibility
  *         schema:
  *           type: string
- *           example: PUBLIC
+ *           enum: [PUBLIC, INTERNAL, PRIVATE]
+ *           example: INTERNAL
+ *         description: Filter by visibility level
  *       - in: query
  *         name: parent_objective_id
  *         schema:
  *           type: integer
+ *         description: Filter by parent objective
  *       - in: query
  *         name: include_key_results
  *         schema:
  *           type: boolean
+ *         description: Include associated key results in response
+ *       - in: query
+ *         name: mode
+ *         schema:
+ *           type: string
+ *           enum: [tree, list]
+ *           default: tree
+ *         description: Response format - tree (hierarchical) or list (flat)
  *       - in: query
  *         name: page
  *         schema:
@@ -81,9 +96,72 @@ router.use(authenticate);
  *         schema:
  *           type: integer
  *           default: 20
+ *           maximum: 100
  *     responses:
  *       200:
  *         description: Objectives retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       title:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                         enum: [Draft, Active, Pending_Approval, Rejected, Completed]
+ *                       visibility:
+ *                         type: string
+ *                         enum: [PUBLIC, INTERNAL, PRIVATE]
+ *                       progress_percentage:
+ *                         type: number
+ *                       progress_status:
+ *                         type: string
+ *                       cycle:
+ *                         type: object
+ *                         nullable: true
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           name:
+ *                             type: string
+ *                           start_date:
+ *                             type: string
+ *                             format: date
+ *                           end_date:
+ *                             type: string
+ *                             format: date
+ *                       owner:
+ *                         type: object
+ *                         nullable: true
+ *                       unit:
+ *                         type: object
+ *                         nullable: true
+ *                       parent_objective:
+ *                         type: object
+ *                         nullable: true
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     page:
+ *                       type: integer
+ *                     per_page:
+ *                       type: integer
+ *                     last_page:
+ *                       type: integer
  */
 router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjectives);
 
@@ -92,6 +170,7 @@ router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjec
  * /objectives:
  *   post:
  *     summary: Create a new objective
+ *     description: Create a new objective with visibility hierarchy enforcement. If parent_objective_id is specified, child objective's visibility must be >= parent's visibility (more private or equal). Status determined automatically based on user role and target unit.
  *     tags: [Objectives]
  *     requestBody:
  *       required: true
@@ -109,19 +188,33 @@ router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjec
  *                 description: Objective title (1-255 characters)
  *               cycle_id:
  *                 type: integer
+ *                 description: Required - cycle this objective belongs to
  *               unit_id:
  *                 type: integer
+ *                 description: Optional - target unit for this objective
  *               owner_id:
  *                 type: integer
+ *                 description: Optional - assign to specific user
  *               parent_objective_id:
  *                 type: integer
+ *                 description: Optional - parent objective ID (child visibility must be >= parent visibility)
  *               visibility:
  *                 type: string
  *                 enum: [PUBLIC, INTERNAL, PRIVATE]
- *                 example: INTERNAL
+ *                 default: INTERNAL
+ *                 description: |
+ *                   Visibility level (PUBLIC < INTERNAL < PRIVATE)
+ *                   - PUBLIC: Visible to all users
+ *                   - INTERNAL: Visible within unit hierarchy
+ *                   - PRIVATE: Only visible to owner and unit ancestors
+ *                   If parent_objective_id provided, child visibility must be >= parent visibility
  *     responses:
  *       201:
  *         description: Objective created successfully
+ *       400:
+ *         description: Invalid request or objective cannot be its own parent
+ *       422:
+ *         description: Validation error (e.g., child visibility more public than parent)
  */
 router.post("/objectives", validate(createObjectiveSchema), createObjective);
 
@@ -130,7 +223,11 @@ router.post("/objectives", validate(createObjectiveSchema), createObjective);
  * /objectives/{id}:
  *   put:
  *     summary: Update an objective
- *     description: Allowed when status is Draft, Rejected, or Active. For Active, title/parent/visibility can change without resetting to Draft (supports iteration after feedback).
+ *     description: |
+ *       Update objective with visibility hierarchy enforcement.
+ *       Allowed when status is Draft, Rejected, or Active.
+ *       When parent_objective_id changes, child visibility must be >= parent visibility (more private or equal).
+ *       For Active objectives, title/parent/visibility can change without resetting to Draft (supports iteration after feedback).
  *     tags: [Objectives]
  *     parameters:
  *       - in: path
@@ -152,12 +249,22 @@ router.post("/objectives", validate(createObjectiveSchema), createObjective);
  *               parent_objective_id:
  *                 type: integer
  *                 nullable: true
+ *                 description: Change parent objective (child visibility must be >= parent visibility)
  *               visibility:
  *                 type: string
  *                 enum: [PUBLIC, INTERNAL, PRIVATE]
+ *                 description: |
+ *                   Visibility level (must be >= parent visibility if parent changes)
+ *                   - PUBLIC (1) < INTERNAL (2) < PRIVATE (3)
  *     responses:
  *       200:
  *         description: Objective updated successfully
+ *       400:
+ *         description: Invalid objective ID or cannot be own parent
+ *       403:
+ *         description: No permission to update
+ *       422:
+ *         description: Validation error (e.g., child visibility more public than parent)
  */
 router.put("/objectives/:id", validate(updateObjectiveSchema), updateObjective);
 
@@ -184,6 +291,10 @@ router.post("/objectives/:id/submit", submitObjective);
  * /objectives/{id}/approve:
  *   post:
  *     summary: Approve objective
+ *     description: |
+ *       Approve objective (status must be Pending_Approval).
+ *       Can optionally update title, parent, or visibility during approval.
+ *       If parent_objective_id changes, child visibility must be >= parent visibility (more private or equal).
  *     tags: [Objectives]
  *     parameters:
  *       - in: path
@@ -205,12 +316,22 @@ router.post("/objectives/:id/submit", submitObjective);
  *               parent_objective_id:
  *                 type: integer
  *                 nullable: true
+ *                 description: Set parent objective (child visibility must be >= parent visibility)
  *               visibility:
  *                 type: string
- *                 enum: [PUBLIC, PRIVATE, COMPANY]
+ *                 enum: [PUBLIC, INTERNAL, PRIVATE]
+ *                 description: |
+ *                   Visibility level (must be >= parent visibility if parent changes)
+ *                   - PUBLIC (1) < INTERNAL (2) < PRIVATE (3)
  *     responses:
  *       200:
  *         description: Objective approved successfully
+ *       400:
+ *         description: Objective not pending approval or invalid parent
+ *       403:
+ *         description: No permission to approve
+ *       422:
+ *         description: Validation error (e.g., child visibility more public than parent)
  */
 router.post("/objectives/:id/approve", approveObjective);
 

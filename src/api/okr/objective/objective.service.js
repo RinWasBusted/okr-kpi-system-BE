@@ -15,6 +15,19 @@ import {
     isAncestorUnit,
 } from "../../../utils/path.js";
 
+// Visibility hierarchy: PUBLIC (1) < INTERNAL (2) < PRIVATE (3)
+// Child objective visibility must be >= parent visibility (more private)
+const getVisibilityLevel = (visibility) => {
+    const levels = { PUBLIC: 1, INTERNAL: 2, PRIVATE: 3 };
+    return levels[visibility] || 1;
+};
+
+const validateChildVisibility = (childVisibility, parentVisibility) => {
+    const childLevel = getVisibilityLevel(childVisibility);
+    const parentLevel = getVisibilityLevel(parentVisibility);
+    return childLevel >= parentLevel; // Child must be more private or equal
+};
+
 const toDateOnlyUtc = (date) =>
     new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 
@@ -268,6 +281,7 @@ export const listObjectives = async ({
     include_key_results,
     page,
     per_page,
+    mode = "tree",
 }) => {
     const visibleObjectiveIds = await getVisibleObjectiveIds(user);
 
@@ -324,12 +338,9 @@ export const listObjectives = async ({
         select,
     });
 
-    // Build tree structure
-    const objectivesMap = new Map();
-    let formattedObjectives = allObjectives.map((objective) => ({
-        ...formatObjective(objective, include_key_results),
-        sub_objectives: [],
-    }));
+    let formattedObjectives = allObjectives.map((objective) =>
+        formatObjective(objective, include_key_results)
+    );
 
     // Filter by progress_status if provided
     if (filters.progress_status) {
@@ -338,14 +349,34 @@ export const listObjectives = async ({
         );
     }
 
+    // Flat list mode: return all objectives as flat list with pagination
+    if (mode === "list") {
+        const total = formattedObjectives.length;
+        const offset = (page - 1) * per_page;
+        const paginatedObjectives = formattedObjectives.slice(offset, offset + per_page);
+
+        return {
+            total,
+            data: paginatedObjectives,
+            last_page: Math.ceil(total / per_page),
+        };
+    }
+
+    // Tree mode: build tree structure (default behavior)
+    const objectivesMap = new Map();
+    const objectivesWithSubs = formattedObjectives.map((objective) => ({
+        ...objective,
+        sub_objectives: [],
+    }));
+
     // Create map for quick lookup
-    formattedObjectives.forEach((objective) => {
+    objectivesWithSubs.forEach((objective) => {
         objectivesMap.set(objective.id, objective);
     });
 
     // Build parent-child relationships
     const rootObjectives = [];
-    formattedObjectives.forEach((objective) => {
+    objectivesWithSubs.forEach((objective) => {
         if (objective.parent_objective_id === null) {
             rootObjectives.push(objective);
         } else {
@@ -407,9 +438,18 @@ export const createObjective = async (user, payload) => {
     if (payload.parent_objective_id) {
         const parent = await prisma.objectives.findFirst({
             where: { id: payload.parent_objective_id },
-            select: { id: true },
+            select: { id: true, visibility: true },
         });
         if (!parent) throw new AppError("Parent objective not found", 404);
+        
+        // Validate child visibility is not more public than parent
+        const resolvedVisibility = resolveVisibility(payload.visibility);
+        if (!validateChildVisibility(resolvedVisibility, parent.visibility)) {
+            throw new AppError(
+                `Child objective visibility (${resolvedVisibility}) cannot be more public than parent visibility (${parent.visibility})`,
+                422
+            );
+        }
     }
 
     const resolvedVisibility = resolveVisibility(payload.visibility);
@@ -492,9 +532,18 @@ export const updateObjective = async (user, objectiveId, updates) => {
         }
         const parent = await prisma.objectives.findFirst({
             where: { id: updates.parent_objective_id },
-            select: { id: true },
+            select: { id: true, visibility: true },
         });
         if (!parent) throw new AppError("Parent objective not found", 404);
+        
+        // Validate child visibility is not more public than parent
+        const childVisibility = updates.visibility !== undefined ? updates.visibility : objective.visibility;
+        if (!validateChildVisibility(childVisibility, parent.visibility)) {
+            throw new AppError(
+                `Child objective visibility (${childVisibility}) cannot be more public than parent visibility (${parent.visibility})`,
+                422
+            );
+        }
     }
 
     if (updates.visibility === "PRIVATE" && !objective.owner_id) {
@@ -560,13 +609,18 @@ export const approveObjective = async (user, objectiveId, updates) => {
         }
         const parent = await prisma.objectives.findFirst({
             where: { id: updates.parent_objective_id },
-            select: { id: true },
+            select: { id: true, visibility: true },
         });
         if (!parent) throw new AppError("Parent objective not found", 404);
-    }
-
-    if (updates.visibility === "PRIVATE" && !objective.owner_id) {
-        throw new AppError("owner_id is required for PRIVATE objectives", 422);
+        
+        // Validate child visibility is not more public than parent
+        const childVisibility = updates.visibility !== undefined ? updates.visibility : objective.visibility;
+        if (!validateChildVisibility(childVisibility, parent.visibility)) {
+            throw new AppError(
+                `Child objective visibility (${childVisibility}) cannot be more public than parent visibility (${parent.visibility})`,
+                422
+            );
+        }
     }
 
     const updated = await prisma.objectives.update({
