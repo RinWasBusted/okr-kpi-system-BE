@@ -45,13 +45,6 @@ const parseProgressStatus = (value) => {
     throw new AppError("Invalid progress_status", 422);
 };
 
-const parseMode = (value) => {
-    if (value === undefined || value === null || value === "") return "tree";
-    const lower = String(value).toLowerCase();
-    if (["tree", "list"].includes(lower)) return lower;
-    return "tree";
-};
-
 // GET /objectives
 export const getObjectives = async (req, res) => {
     try {
@@ -68,7 +61,7 @@ export const getObjectives = async (req, res) => {
         const include_key_results = parseBoolean(req.query.include_key_results) ?? false;
         const page = parsePositiveInt(req.query.page, 1);
         const per_page = Math.min(parsePositiveInt(req.query.per_page, 20), 100);
-        const mode = parseMode(req.query.mode);
+        const mode = req.query.mode ?? "tree";
 
         const { total, data, last_page } = await objectiveService.listObjectives({
             user: req.user,
