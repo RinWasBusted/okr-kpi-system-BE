@@ -9,17 +9,6 @@ import {
     updateAccessPathForUserOwnedItems,
 } from "../../utils/path.js";
 
-const withContext = async (fn) => {
-    const store = requestContext.getStore();
-    const company_id = store?.company_id ?? "";
-    const role = store?.role ?? "";
-
-    return prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT set_config('app.current_company_id', ${String(company_id)}, true);`;
-        await tx.$executeRaw`SELECT set_config('app.user_role', ${String(role)}, true);`;
-        return fn(tx);
-    });
-};
 
 const formatUnitRow = (row, includeStats = false, currentUser = null) => {
     const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
