@@ -1,7 +1,6 @@
 import prisma from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
 import { UserRole } from "@prisma/client";
-import requestContext from "../../utils/context.js";
 import { getCloudinaryImageUrl } from "../../utils/cloudinary.js";
 import {
     getUnitPath,
@@ -89,9 +88,8 @@ const getUnitRowById = async (tx, unitId) => {
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-export const listUnits = async ({ page, per_page, mode = "tree" }, currentUser = null) => {
-    return withContext(async (tx) => {
-        // Get all units with stats using pre-aggregated CTEs to avoid JOIN fan-out
+export const listUnits = async ({ page, per_page, mode = "tree" }) => {
+    return prisma.$transaction(async (tx) => {
         const allUnits = await tx.$queryRaw`
             WITH obj_stats AS (
                 SELECT
@@ -364,7 +362,7 @@ export const deleteUnit = async (unitId) => {
 // ─── Info (lightweight) ───────────────────────────────────────────────────────
 
 export const getUnitInfo = async (unitId) => {
-    return withContext(async (tx) => {
+    return prisma.$transaction(async (tx) => {
         const rows = await tx.$queryRaw`
             SELECT
                 u.id,
