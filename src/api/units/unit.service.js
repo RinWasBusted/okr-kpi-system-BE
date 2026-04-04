@@ -12,6 +12,7 @@ import {
 
 const formatUnitRow = (row, includeStats = false, currentUser = null) => {
     const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
+    const isManager = currentUser?.id === row.manager_id;
 
     const base = {
         id: row.id,
@@ -23,14 +24,9 @@ const formatUnitRow = (row, includeStats = false, currentUser = null) => {
             : null,
         member_count: Number(row.member_count ?? 0),
         created_at: row.created_at,
+        editable: isAdmin || isManager,
+        deletable: isAdmin,
     };
-
-    if (isAdmin) {
-        base.permission = {
-            editable: true,
-            deletable: true,
-        };
-    }
 
     if (includeStats) {
         base.okr_count = Number(row.okr_count ?? 0);
@@ -368,9 +364,12 @@ export const getUnitDetail = async (unitId, currentUser) => {
                 m.full_name AS manager_full_name,
                 m.email AS manager_email,
                 m.avatar_url,
-                m.job_title
+                m.job_title,
+                COALESCE(up.total_kpis, 0) AS total_kpi,
+                COALESCE(up.total_okrs, 0) AS total_objective
             FROM "Units" u
             LEFT JOIN "Users" m ON m.id = u.manager_id
+            LEFT JOIN unit_performance up ON up.unit_id = u.id
             WHERE u.id = ${unitId}
         `;
 
@@ -378,6 +377,7 @@ export const getUnitDetail = async (unitId, currentUser) => {
         const unit = rows[0];
 
         const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
+        const isManager = currentUser?.id === unit.manager_id;
 
         const result = {
             id: unit.id,
@@ -394,14 +394,11 @@ export const getUnitDetail = async (unitId, currentUser) => {
                     job_title: unit.job_title,
                   }
                 : null,
+            total_kpi: Number(unit.total_kpi),
+            total_objective: Number(unit.total_objective),
+            editable: isAdmin || isManager,
+            deletable: isAdmin,
         };
-
-        if (isAdmin) {
-            result.permission = {
-                editable: true,
-                deletable: true,
-            };
-        }
 
         return result;
     });

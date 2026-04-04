@@ -70,9 +70,9 @@ export const refreshTokenService = async (refreshToken) => {
             throw new AppError("Invalid refresh token", 401);
         }
 
-        const { id, role, company_id, unit_id } = JSON.parse(tokenData);
+        const { id, role, company_id, unit_id, unit_path } = JSON.parse(tokenData);
 
-        const accessToken = generateToken({ id, role, company_id, unit_id }, '15m');
+        const accessToken = generateToken({ id, role, company_id, unit_id, unit_path }, '15m');
 
         return accessToken;
     } catch (error) {
