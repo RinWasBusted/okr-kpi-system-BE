@@ -6,8 +6,8 @@ WITH
 -- Lấy context user từ session variable (set bởi app trước mỗi query)
 user_context AS (
   SELECT
-    current_setting('app.current_user_id', true)::int        AS user_id,
-    current_setting('app.current_user_unit_path', true)::ltree AS user_unit_path,
+    NULLIF(current_setting('app.current_user_id', true), '')::int           AS user_id,
+    NULLIF(current_setting('app.current_user_unit_path', true), '')::ltree  AS user_unit_path,
     current_setting('app.user_role', true)                    AS user_role
 ),
 
