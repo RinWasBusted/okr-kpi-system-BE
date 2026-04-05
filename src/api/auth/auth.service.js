@@ -173,14 +173,14 @@ export const refreshTokenService = async (refreshToken) => {
         throw new AppError("Refresh token not found", 401);
     }
 
-    const { userId, sessionId, ttl_seconds } = JSON.parse(tokenMeta);
+    const { id, sessionId, ttl_seconds } = JSON.parse(tokenMeta);
 
     // Fetch full user payload from the session record
     const sessionInfo = await client.get(`session:${sessionId}`);
     const { device_info } = sessionInfo ? JSON.parse(sessionInfo) : {};
 
     const user = await prisma.users.findUnique({
-        where: { id: userId },
+        where: { id: id },
         select: { id: true, role: true, company_id: true, unit_id: true },
     });
 
