@@ -26,7 +26,7 @@ export const getCompanies = async (req, res) => {
 
 export const createCompany = async (req, res) => {
     try {
-        const { name, slug } = req.body;
+        const { name, slug } = req.validated.body;
 
         let logoPublicId = null;
         // Upload logo if file is provided
@@ -50,7 +50,7 @@ export const createCompany = async (req, res) => {
 export const updateCompany = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, slug, is_active, ai_plan, token_usage, credit_cost, usage_limit } = req.body;
+        const { name, slug, is_active, ai_plan, token_usage, credit_cost, usage_limit } = req.validated.body;
 
         const company = await companyService.updateCompany(parseInt(id), {
             name,

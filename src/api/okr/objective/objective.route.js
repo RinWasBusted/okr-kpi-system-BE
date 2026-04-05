@@ -7,6 +7,7 @@ import {
     approveObjective,
     rejectObjective,
     deleteObjective,
+    getAvailableParentObjectives,
 } from "./objective.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
 import { validate } from "../../../middlewares/validate.js";
@@ -14,6 +15,7 @@ import {
     createObjectiveSchema,
     updateObjectiveSchema,
     listObjectivesQuerySchema,
+    getAvailableParentObjectivesSchema,
 } from "../../../schemas/objective.schema.js";
 
 const router = express.Router();
@@ -118,6 +120,9 @@ router.use(authenticate);
  *                         type: integer
  *                       title:
  *                         type: string
+ *                       description:
+ *                         type: string
+ *                         nullable: true
  *                       status:
  *                         type: string
  *                         enum: [Draft, Active, Pending_Approval, Rejected, Completed]
@@ -167,6 +172,88 @@ router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjec
 
 /**
  * @swagger
+ * /objectives/available-parents:
+ *   get:
+ *     summary: Get available parent objectives for a unit
+ *     description: |
+ *       Retrieve objectives that can be set as parent for a new objective in the specified unit.
+ *       Returns objectives from the specified unit and all its ancestor units.
+ *       Only includes objectives with status "Active" or "Completed".
+ *       Results are filtered by visibility permissions.
+ *     tags: [Objectives]
+ *     parameters:
+ *       - in: query
+ *         name: unit_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The unit ID for which to find available parent objectives
+ *       - in: query
+ *         name: cycle_id
+ *         schema:
+ *           type: integer
+ *         description: Optional - filter by cycle
+ *       - in: query
+ *         name: include_key_results
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Include associated key results in response
+ *     responses:
+ *       200:
+ *         description: Available parent objectives retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       unit:
+ *                         type: object
+ *                         nullable: true
+ *                       objectives:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             title:
+ *                               type: string
+ *                             status:
+ *                               type: string
+ *                             visibility:
+ *                               type: string
+ *                             progress_percentage:
+ *                               type: number
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     unit_id:
+ *                       type: integer
+ *                     unit_ids_searched:
+ *                       type: array
+ *                       items:
+ *                         type: integer
+ *                     total:
+ *                       type: integer
+ *       400:
+ *         description: Invalid unit_id
+ *       404:
+ *         description: Unit not found
+ */
+router.get("/objectives/available-parents", validate(getAvailableParentObjectivesSchema, "query"), getAvailableParentObjectives);
+
+/**
+ * @swagger
  * /objectives:
  *   post:
  *     summary: Create a new objective
@@ -208,6 +295,10 @@ router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjec
  *                   - INTERNAL: Visible within unit hierarchy
  *                   - PRIVATE: Only visible to owner and unit ancestors
  *                   If parent_objective_id provided, child visibility must be >= parent visibility
+ *               description:
+ *                 type: string
+ *                 maxLength: 1000
+ *                 description: Optional description for the objective (max 1000 characters)
  *     responses:
  *       201:
  *         description: Objective created successfully
@@ -256,6 +347,10 @@ router.post("/objectives", validate(createObjectiveSchema), createObjective);
  *                 description: |
  *                   Visibility level (must be >= parent visibility if parent changes)
  *                   - PUBLIC (1) < INTERNAL (2) < PRIVATE (3)
+ *               description:
+ *                 type: string
+ *                 maxLength: 1000
+ *                 description: Optional description for the objective (max 1000 characters)
  *     responses:
  *       200:
  *         description: Objective updated successfully
@@ -323,6 +418,10 @@ router.post("/objectives/:id/submit", submitObjective);
  *                 description: |
  *                   Visibility level (must be >= parent visibility if parent changes)
  *                   - PUBLIC (1) < INTERNAL (2) < PRIVATE (3)
+ *               description:
+ *                 type: string
+ *                 maxLength: 1000
+ *                 description: Optional description for the objective (max 1000 characters)
  *     responses:
  *       200:
  *         description: Objective approved successfully

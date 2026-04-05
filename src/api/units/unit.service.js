@@ -24,8 +24,6 @@ const formatUnitRow = (row, includeStats = false, currentUser = null) => {
             : null,
         member_count: Number(row.member_count ?? 0),
         created_at: row.created_at,
-        editable: isAdmin || isManager,
-        deletable: isAdmin,
     };
 
     if (includeStats) {
@@ -33,6 +31,14 @@ const formatUnitRow = (row, includeStats = false, currentUser = null) => {
         base.kpi_count = Number(row.kpi_count ?? 0);
         base.okr_progress = row.okr_progress !== null ? Number(row.okr_progress) : null;
         base.kpi_health = row.kpi_health !== null ? Number(row.kpi_health) : null;
+    }
+
+    // Only add permission for ADMIN_COMPANY
+    if (isAdmin) {
+        base.permission = {
+            editable: true,
+            deletable: true,
+        };
     }
 
     return base;
@@ -396,9 +402,15 @@ export const getUnitDetail = async (unitId, currentUser) => {
                 : null,
             total_kpi: Number(unit.total_kpi),
             total_objective: Number(unit.total_objective),
-            editable: isAdmin || isManager,
-            deletable: isAdmin,
         };
+
+        // Only add permission for ADMIN_COMPANY
+        if (isAdmin) {
+            result.permission = {
+                editable: true,
+                deletable: true,
+            };
+        }
 
         return result;
     });

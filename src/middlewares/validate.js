@@ -7,10 +7,11 @@ export const validate = (schema, source = "body") => {
     return async (req, res, next) => {
         try {
             const data = req[source];
-            const result = await schema.parseAsync(data);
-            // Replace request data with the validated/parsing result so controllers
-            // receive Zod defaults, coercions, and transforms for all supported sources.
-            req[source] = result;
+            const validData = await schema.parseAsync(data);
+            
+            if(!req.validated) req.validated = {};
+            req.validated[source] = validData; 
+
             next();
         } catch (error) {
             if (error.name === "ZodError" && Array.isArray(error.errors)) {

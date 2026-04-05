@@ -46,14 +46,11 @@ export const getUsers = async (req, res) => {
         const companyId = req.user.company_id;
         if (!companyId) throw new AppError("Company context is required", 403);
 
-        const { search } = req.query;
-        const unit_id = req.query.unit_id ? parsePositiveInt(req.query.unit_id, undefined) : undefined;
-        const page = parsePositiveInt(req.query.page, 1);
-        const per_page = Math.min(parsePositiveInt(req.query.per_page, 20), 100);
+        const { search, unit_id, page, per_page } = req.validated.query;
 
         const { total, data, last_page } = await userService.listUsers({
             unit_id,
-            search: search || undefined,
+            search,
             page,
             per_page,
         }, req.user);
@@ -92,7 +89,7 @@ export const createUser = async (req, res) => {
         const companyId = req.user.company_id;
         if (!companyId) throw new AppError("Company context is required", 403);
 
-        const { full_name, email, password, unit_id } = req.body;
+        const { full_name, email, password, unit_id } = req.validated.body;
 
         let avatarPublicId = null;
         // Upload avatar if file is provided
@@ -109,7 +106,7 @@ export const createUser = async (req, res) => {
             full_name: full_name.trim(),
             email: email.trim().toLowerCase(),
             password,
-            unit_id: unit_id !== undefined ? Number(unit_id) || null : undefined,
+            unit_id: unit_id ?? undefined,
             avatar_url: avatarPublicId,
         });
 
@@ -128,7 +125,7 @@ export const updateUser = async (req, res) => {
         const userId = parsePositiveInt(req.params.id, null);
         if (!userId) throw new AppError("Invalid user ID", 400);
 
-        const { full_name, unit_id, password, is_active } = req.body;
+        const { full_name, unit_id, password, is_active } = req.validated.body;
 
         // Build only provided fields
         const updates = {};
@@ -138,7 +135,7 @@ export const updateUser = async (req, res) => {
         }
 
         if (unit_id !== undefined) {
-            updates.unit_id = unit_id === null ? null : Number(unit_id) || null;
+            updates.unit_id = unit_id;
         }
 
         if (password !== undefined) {

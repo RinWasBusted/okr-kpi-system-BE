@@ -15,6 +15,7 @@ export const createObjectiveSchema = z.object({
     owner_id: z.number().int().positive().nullable().optional(),
     parent_objective_id: z.number().int().positive().nullable().optional(),
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
+    description: z.string().max(LIMITS.description.max).optional(),
 });
 
 export const updateObjectiveSchema = z.object({
@@ -25,6 +26,7 @@ export const updateObjectiveSchema = z.object({
         .optional(),
     parent_objective_id: z.number().int().positive().nullable().optional(),
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
+    description: z.string().max(LIMITS.description.max).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
 });
@@ -43,3 +45,9 @@ export const listObjectivesQuerySchema = z.object({
     include_key_results: z.enum(["true", "false"]).transform((v) => v === "true").optional().default("false"),
     mode: z.enum(["tree", "list"]).optional().default("tree"),
 }).passthrough();
+
+export const getAvailableParentObjectivesSchema = z.object({
+    unit_id: z.string().regex(/^\d+$/).transform(Number),
+    cycle_id: z.string().regex(/^\d+$/).transform(Number).optional(),
+    include_key_results: z.enum(["true", "false"]).transform((v) => v === "true").optional().default("false"),
+});

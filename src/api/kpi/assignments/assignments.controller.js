@@ -58,38 +58,16 @@ export const getKPIAssignments = async (req, res) => {
 // POST /kpi-assignments
 export const createKPIAssignment = async (req, res) => {
     try {
-        const { kpi_dictionary_id, cycle_id, target_value, current_value, owner_id, unit_id, parent_assignment_id, visibility } = req.body;
-
-        const dictId = parsePositiveInt(kpi_dictionary_id, null);
-        if (!dictId) throw new AppError("kpi_dictionary_id is required", 422);
-
-        const cycleId = parsePositiveInt(cycle_id, null);
-        if (!cycleId) throw new AppError("cycle_id is required", 422);
-
-        const targetValue = parseNumber(target_value);
-        if (targetValue === undefined) throw new AppError("target_value is required", 422);
-
-        const currentValue = current_value !== undefined ? parseNumber(current_value) : undefined;
-        if (current_value !== undefined && currentValue === undefined) {
-            throw new AppError("current_value must be a number", 422);
-        }
-
-        const ownerId = parseOptionalInt(owner_id);
-        const unitId = parseOptionalInt(unit_id);
-        const parentId = parseOptionalInt(parent_assignment_id);
-
-        if (visibility && !["PUBLIC", "INTERNAL", "PRIVATE"].includes(visibility)) {
-            throw new AppError("visibility must be one of: PUBLIC, INTERNAL, PRIVATE", 422);
-        }
+        const { kpi_dictionary_id, cycle_id, target_value, current_value, owner_id, unit_id, parent_assignment_id, visibility } = req.validated.body;
 
         const assignment = await assignmentsService.createKPIAssignment(req.user, {
-            kpi_dictionary_id: dictId,
-            cycle_id: cycleId,
-            target_value: targetValue,
-            current_value: currentValue,
-            owner_id: ownerId,
-            unit_id: unitId,
-            parent_assignment_id: parentId,
+            kpi_dictionary_id,
+            cycle_id,
+            target_value,
+            current_value,
+            owner_id,
+            unit_id,
+            parent_assignment_id,
             visibility,
         });
 
@@ -105,31 +83,22 @@ export const updateKPIAssignment = async (req, res) => {
         const assignmentId = parsePositiveInt(req.params.id, null);
         if (!assignmentId) throw new AppError("Invalid assignment ID", 400);
 
-        const { cycle_id, target_value, current_value, visibility } = req.body;
+        const { cycle_id, target_value, current_value, visibility } = req.validated.body;
         const updates = {};
 
         if (cycle_id !== undefined) {
-            const parsed = parsePositiveInt(cycle_id, null);
-            if (parsed === null) throw new AppError("cycle_id must be a positive integer", 422);
-            updates.cycle_id = parsed;
+            updates.cycle_id = cycle_id;
         }
 
         if (target_value !== undefined) {
-            const parsed = parseNumber(target_value);
-            if (parsed === undefined) throw new AppError("target_value must be a number", 422);
-            updates.target_value = parsed;
+            updates.target_value = target_value;
         }
 
         if (current_value !== undefined) {
-            const parsed = parseNumber(current_value);
-            if (parsed === undefined) throw new AppError("current_value must be a number", 422);
-            updates.current_value = parsed;
+            updates.current_value = current_value;
         }
 
         if (visibility !== undefined) {
-            if (!["PUBLIC", "INTERNAL", "PRIVATE"].includes(visibility)) {
-                throw new AppError("visibility must be one of: PUBLIC, INTERNAL, PRIVATE", 422);
-            }
             updates.visibility = visibility;
         }
 
