@@ -4,11 +4,16 @@ import { uploadImageToCloudinary } from "../../../utils/cloudinary.js";
 
 export const getCompanies = async (req, res) => {
     try {
-        const { is_active, search, page = 1, per_page = 20 } = req.query;
+        const { is_active, search, ai_plan, sort_by = "created_at", sort_order = "desc", from_date, to_date, page = 1, per_page = 20 } = req.query;
 
         const filters = {
             is_active: is_active !== undefined ? is_active === "true" : undefined,
             search: search || undefined,
+            ai_plan: ai_plan || undefined,
+            sort_by: sort_by || "created_at",
+            sort_order: sort_order || "desc",
+            from_date: from_date || undefined,
+            to_date: to_date || undefined,
         };
 
         const pagination = {
@@ -26,7 +31,7 @@ export const getCompanies = async (req, res) => {
 
 export const createCompany = async (req, res) => {
     try {
-        const { name, slug } = req.body;
+        const { name, slug, ai_plan = "FREE" } = req.body;
 
         let logoPublicId = null;
         // Upload logo if file is provided
@@ -39,7 +44,7 @@ export const createCompany = async (req, res) => {
             logoPublicId = uploadResult.public_id;
         }
 
-        const company = await companyService.createCompany({ name, slug, logo: logoPublicId });
+        const company = await companyService.createCompany({ name, slug, logo: logoPublicId, ai_plan });
 
         res.success("Company created successfully", 201, { company });
     } catch (error) {
@@ -50,15 +55,13 @@ export const createCompany = async (req, res) => {
 export const updateCompany = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, slug, is_active, ai_plan, token_usage, credit_cost, usage_limit } = req.body;
+        const { name, slug, is_active, ai_plan, usage_limit } = req.body;
 
         const company = await companyService.updateCompany(parseInt(id), {
             name,
             slug,
             is_active,
             ai_plan,
-            token_usage,
-            credit_cost,
             usage_limit,
         });
 
@@ -68,13 +71,25 @@ export const updateCompany = async (req, res) => {
     }
 };
 
+export const getCompanyById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const company = await companyService.getCompanyById(parseInt(id));
+
+        res.success("Company retrieved successfully", 200, company);
+    } catch (error) {
+        throw error;
+    }
+};
+
 export const deactivateCompany = async (req, res) => {
     try {
         const { id } = req.params;
 
-        await companyService.deactivateCompany(parseInt(id));
+        const result = await companyService.deactivateCompany(parseInt(id));
 
-        res.status(204).send();
+        res.success("Company deactivated successfully", 200, { id: parseInt(id), is_active: false, affected_users: result.affectedUsers });
     } catch (error) {
         throw error;
     }
@@ -140,14 +155,13 @@ export const deleteLogo = async (req, res) => {
     }
 };
 
-// GET /admin/companies/me - Get current ADMIN_COMPANY's company details
 export const getMyCompany = async (req, res) => {
     try {
         // Get company_id from authenticated user's token (req.user is set by authenticate middleware)
         const companyId = req.user?.company_id;
 
         if (!companyId) {
-            throw new AppError("Company ID not found in token", 400);
+            throw new AppError("Company ID not found in token", 401);
         }
 
         const company = await companyService.getMyCompanyDetails(companyId);

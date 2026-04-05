@@ -5,7 +5,7 @@ import { authenticate, authorize } from "../../middlewares/auth.js";
 const router = express.Router();
 
 // All routes require ADMIN_COMPANY authentication
-router.use(authenticate, authorize("ADMIN_COMPANY"));
+router.use(authenticate, authorize("ADMIN","ADMIN_COMPANY"));
 
 /**
  * @swagger

@@ -17,17 +17,30 @@ export const ensureCompanyExists = async (id) => {
 };
 
 export const getCompanies = async (filters, pagination) => {
-    const { is_active, search } = filters;
+    const { is_active, search, ai_plan, sort_by = "created_at", sort_order = "desc", from_date, to_date } = filters;
     const { page, per_page } = pagination;
 
     const where = {
         ...(is_active !== undefined && { is_active }),
+        ...(ai_plan && { ai_plan }),
+        ...((from_date || to_date) && {
+            created_at: {
+                ...(from_date && { gte: new Date(from_date) }),
+                ...(to_date && { lte: new Date(to_date) }),
+            },
+        }),
         ...(search && {
             OR: [
                 { name: { contains: search, mode: "insensitive" } },
                 { slug: { contains: search, mode: "insensitive" } },
             ],
         }),
+    };
+
+    const orderByMap = {
+        name: { name: sort_order },
+        created_at: { created_at: sort_order },
+        updated_at: { updated_at: sort_order },
     };
 
     const [companies, total] = await Promise.all([
@@ -41,8 +54,9 @@ export const getCompanies = async (filters, pagination) => {
                 slug: true,
                 logo: true,
                 is_active: true,
+                ai_plan: true,
                 created_at: true,
-                token_usage: true,
+                updated_at: true,
                 _count: {
                     select: {
                         users: {
@@ -51,7 +65,7 @@ export const getCompanies = async (filters, pagination) => {
                     },
                 },
             },
-            orderBy: { created_at: "desc" },
+            orderBy: orderByMap[sort_by] || { created_at: sort_order },
         }),
         prisma.companies.count({ where }),
     ]);
@@ -79,23 +93,24 @@ export const getCompanies = async (filters, pagination) => {
         name: company.name,
         slug: company.slug,
         logo_url: company.logo ? getCloudinaryImageUrl(company.logo, 80, 80, "fill") : null,
-        token_usage: company.token_usage,
         is_active: company.is_active,
+        ai_plan: company.ai_plan,
         admin_count: company._count.users,
         employee_count: employeeCountMap[company.id] ?? 0,
         created_at: company.created_at,
-        
+        updated_at: company.updated_at,
     }));
     const meta = {
         total,
         page,
+        per_page,
         last_page: Math.ceil(total / per_page),
     };
 
     return { data, meta };
 };
 
-export const createCompany = async ({ name, slug, logo }) => {
+export const createCompany = async ({ name, slug, logo, ai_plan = "FREE" }) => {
     const existing = await prisma.companies.findUnique({ where: { slug } });
 
     if (existing) {
@@ -104,18 +119,25 @@ export const createCompany = async ({ name, slug, logo }) => {
 
     try {
         const company = await prisma.companies.create({
-            data: { name, slug, is_active: true, logo: logo ?? null },
+            data: { name, slug, is_active: true, logo: logo ?? null, ai_plan },
             select: {
                 id: true,
                 name: true,
                 slug: true,
                 logo: true,
                 is_active: true,
+                ai_plan: true,
                 created_at: true,
+                updated_at: true,
             },
         });
 
-        return company;
+        return {
+            ...company,
+            logo_url: company.logo ? getCloudinaryImageUrl(company.logo, 80, 80, "fill") : null,
+            admin_count: 0,
+            employee_count: 0,
+        };
     } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
             throw new AppError("Slug already exists on this platform", 409);
@@ -124,7 +146,43 @@ export const createCompany = async ({ name, slug, logo }) => {
     }
 };
 
-export const updateCompany = async (id, { name, slug, is_active, ai_plan, token_usage, credit_cost, usage_limit }) => {
+export const getCompanyById = async (id) => {
+    const company = await prisma.companies.findUnique({
+        where: { id },
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            logo: true,
+            is_active: true,
+            ai_plan: true,
+            token_usage: true,
+            credit_cost: true,
+            usage_limit: true,
+            created_at: true,
+            updated_at: true,
+        },
+    });
+
+    if (!company) {
+        throw new AppError("Company not found", 404);
+    }
+
+    // Get user counts
+    const [admin_count, employee_count] = await Promise.all([
+        prisma.users.count({ where: { company_id: id, role: UserRole.ADMIN_COMPANY } }),
+        prisma.users.count({ where: { company_id: id, role: UserRole.EMPLOYEE } }),
+    ]);
+
+    return {
+        ...company,
+        logo_url: company.logo ? getCloudinaryImageUrl(company.logo, 80, 80, "fill") : null,
+        admin_count,
+        employee_count,
+    };
+};
+
+export const updateCompany = async (id, { name, slug, is_active, ai_plan, usage_limit }) => {
     const company = await prisma.companies.findUnique({ where: { id } });
 
     if (!company) {
@@ -142,14 +200,6 @@ export const updateCompany = async (id, { name, slug, is_active, ai_plan, token_
         throw new AppError(`Invalid ai_plan. Must be one of: ${Object.values(AIPlan).join(", ")}`, 422);
     }
 
-    if (token_usage !== undefined && (!Number.isFinite(token_usage) || token_usage < 0)) {
-        throw new AppError("token_usage must be a non-negative number", 422);
-    }
-
-    if (credit_cost !== undefined && (!Number.isFinite(credit_cost) || credit_cost < 0)) {
-        throw new AppError("credit_cost must be a non-negative number", 422);
-    }
-
     if (usage_limit !== undefined && (!Number.isFinite(usage_limit) || usage_limit < 0)) {
         throw new AppError("usage_limit must be a non-negative number", 422);
     }
@@ -162,8 +212,6 @@ export const updateCompany = async (id, { name, slug, is_active, ai_plan, token_
                 ...(slug !== undefined && { slug }),
                 ...(is_active !== undefined && { is_active }),
                 ...(ai_plan !== undefined && { ai_plan }),
-                ...(token_usage !== undefined && { token_usage }),
-                ...(credit_cost !== undefined && { credit_cost }),
                 ...(usage_limit !== undefined && { usage_limit }),
             },
             select: {
@@ -177,10 +225,22 @@ export const updateCompany = async (id, { name, slug, is_active, ai_plan, token_
                 credit_cost: true,
                 usage_limit: true,
                 created_at: true,
+                updated_at: true,
             },
         });
 
-        return updated;
+        // Get user counts
+        const [admin_count, employee_count] = await Promise.all([
+            prisma.users.count({ where: { company_id: id, role: UserRole.ADMIN_COMPANY } }),
+            prisma.users.count({ where: { company_id: id, role: UserRole.EMPLOYEE } }),
+        ]);
+
+        return {
+            ...updated,
+            logo_url: updated.logo ? getCloudinaryImageUrl(updated.logo, 80, 80, "fill") : null,
+            admin_count,
+            employee_count,
+        };
     } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
             throw new AppError("Slug already exists on this platform", 409);
@@ -219,7 +279,10 @@ export const updateCompanyLogo = async (id, publicId) => {
         },
     });
 
-    return updated;
+    return {
+        ...updated,
+        logo_url: updated.logo ? getCloudinaryImageUrl(updated.logo, 80, 80, "fill") : null,
+    };
 };
 
 export const deleteCompanyLogo = async (id) => {
@@ -250,7 +313,10 @@ export const deleteCompanyLogo = async (id) => {
         },
     });
 
-    return updated;
+    return {
+        ...updated,
+        logo_url: null,
+    };
 };
 
 export const deactivateCompany = async (id) => {
@@ -260,10 +326,21 @@ export const deactivateCompany = async (id) => {
         throw new AppError("Company not found", 404);
     }
 
+    if (!company.is_active) {
+        throw new AppError("Company is already deactivated", 409);
+    }
+
     await prisma.companies.update({
         where: { id },
         data: { is_active: false },
     });
+
+    // Count affected users
+    const affectedUsers = await prisma.users.count({
+        where: { company_id: id },
+    });
+
+    return { affectedUsers };
 };
 
 export const getCompanyStats = async (id) => {
@@ -280,6 +357,7 @@ export const getCompanyStats = async (id) => {
             credit_cost: true,
             usage_limit: true,
             created_at: true,
+            updated_at: true,
         },
     });
 
@@ -287,10 +365,22 @@ export const getCompanyStats = async (id) => {
         throw new AppError("Company not found", 404);
     }
 
-    const [admin_count, employee_count] = await Promise.all([
+    const [admin_count, employee_count, total_objectives, total_cycles, total_key_results, active_objectives] = await Promise.all([
         prisma.users.count({ where: { company_id: id, role: UserRole.ADMIN_COMPANY } }),
         prisma.users.count({ where: { company_id: id, role: UserRole.EMPLOYEE } }),
+        prisma.objectives.count({ where: { company_id: id, deleted_at: null } }),
+        prisma.cycles.count({ where: { company_id: id } }),
+        prisma.keyResults.count({
+            where: { objective: { company_id: id, deleted_at: null } },
+        }),
+        prisma.objectives.count({ where: { company_id: id, deleted_at: null, status: { in: ["Active", "Pending_Approval"] } } }),
     ]);
+
+    // Calculate completion rate (completed objectives / total objectives)
+    const completedObjectives = await prisma.objectives.count({
+        where: { company_id: id, deleted_at: null, status: "Completed" },
+    });
+    const completion_rate = total_objectives > 0 ? (completedObjectives / total_objectives) : 0;
 
     return {
         id: company.id,
@@ -306,6 +396,12 @@ export const getCompanyStats = async (id) => {
         admin_count,
         employee_count,
         created_at: company.created_at,
+        updated_at: company.updated_at,
+        total_objectives,
+        total_cycles,
+        total_key_results,
+        active_objectives,
+        completion_rate: parseFloat(completion_rate.toFixed(2)),
     };
 };
 
@@ -324,6 +420,7 @@ export const getMyCompanyDetails = async (companyId) => {
             credit_cost: true,
             usage_limit: true,
             created_at: true,
+            updated_at: true,
         },
     });
 
@@ -350,5 +447,6 @@ export const getMyCompanyDetails = async (companyId) => {
         admin_count,
         employee_count,
         created_at: company.created_at,
+        updated_at: company.updated_at,
     };
 };
