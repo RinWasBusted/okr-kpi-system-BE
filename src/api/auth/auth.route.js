@@ -534,7 +534,8 @@ router.post("/logout-all", authenticate, logoutAll);
  *                     properties:
  *                       id:
  *                         type: string
- *                         example: "refreshToken:abc123..."
+ *                         description: Opaque session identifier (UUID)
+ *                         example: "550e8400-e29b-41d4-a716-446655440000"
  *                       device_info:
  *                         type: object
  *                         properties:
@@ -544,9 +545,10 @@ router.post("/logout-all", authenticate, logoutAll);
  *                           fingerprint:
  *                             type: string
  *                             example: "abc123"
- *                       last_seen:
+ *                       created_at:
  *                         type: string
  *                         format: date-time
+ *                         description: When the session was created
  *                         example: "2026-04-04T10:00:00.000Z"
  *                       current:
  *                         type: boolean
@@ -581,8 +583,8 @@ router.get("/sessions", authenticate, getSessions);
  *         required: true
  *         schema:
  *           type: string
- *         description: The session ID to revoke
- *         example: "refreshToken:abc123..."
+ *         description: The opaque session ID (UUID) returned by `GET /auth/sessions`
+ *         example: "550e8400-e29b-41d4-a716-446655440000"
  *     responses:
  *       200:
  *         description: Session revoked successfully

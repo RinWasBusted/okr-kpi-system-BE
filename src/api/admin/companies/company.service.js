@@ -20,13 +20,41 @@ export const getCompanies = async (filters, pagination) => {
     const { is_active, search, ai_plan, sort_by = "created_at", sort_order = "desc", from_date, to_date } = filters;
     const { page, per_page } = pagination;
 
+    // Validate sort parameters to prevent Prisma errors on unexpected values
+    const allowedSortBy    = ["name", "created_at", "updated_at"];
+    const allowedSortOrder = ["asc", "desc"];
+    const safeSortBy    = allowedSortBy.includes(sort_by)    ? sort_by    : "created_at";
+    const safeSortOrder = allowedSortOrder.includes(sort_order) ? sort_order : "desc";
+
+    if (sort_by && !allowedSortBy.includes(sort_by)) {
+        throw new AppError(`Invalid sort_by value. Allowed: ${allowedSortBy.join(", ")}`, 422);
+    }
+    if (sort_order && !allowedSortOrder.includes(sort_order)) {
+        throw new AppError(`Invalid sort_order value. Allowed: ${allowedSortOrder.join(", ")}`, 422);
+    }
+
+    // Validate date filters
+    let parsedFromDate, parsedToDate;
+    if (from_date) {
+        parsedFromDate = new Date(from_date);
+        if (isNaN(parsedFromDate.getTime())) {
+            throw new AppError("Invalid from_date. Expected an ISO 8601 date string.", 422);
+        }
+    }
+    if (to_date) {
+        parsedToDate = new Date(to_date);
+        if (isNaN(parsedToDate.getTime())) {
+            throw new AppError("Invalid to_date. Expected an ISO 8601 date string.", 422);
+        }
+    }
+
     const where = {
         ...(is_active !== undefined && { is_active }),
         ...(ai_plan && { ai_plan }),
-        ...((from_date || to_date) && {
+        ...((parsedFromDate || parsedToDate) && {
             created_at: {
-                ...(from_date && { gte: new Date(from_date) }),
-                ...(to_date && { lte: new Date(to_date) }),
+                ...(parsedFromDate && { gte: parsedFromDate }),
+                ...(parsedToDate  && { lte: parsedToDate  }),
             },
         }),
         ...(search && {
@@ -38,9 +66,9 @@ export const getCompanies = async (filters, pagination) => {
     };
 
     const orderByMap = {
-        name: { name: sort_order },
-        created_at: { created_at: sort_order },
-        updated_at: { updated_at: sort_order },
+        name:       { name:       safeSortOrder },
+        created_at: { created_at: safeSortOrder },
+        updated_at: { updated_at: safeSortOrder },
     };
 
     const [companies, total] = await Promise.all([
@@ -65,7 +93,7 @@ export const getCompanies = async (filters, pagination) => {
                     },
                 },
             },
-            orderBy: orderByMap[sort_by] || { created_at: sort_order },
+            orderBy: orderByMap[safeSortBy],
         }),
         prisma.companies.count({ where }),
     ]);
