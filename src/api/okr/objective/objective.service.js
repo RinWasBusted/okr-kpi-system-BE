@@ -13,6 +13,7 @@ import {
     getObjectiveAccessPath,
     getUnitPath,
     isAncestorUnit,
+    getUnitAncestors,
 } from "../../../utils/path.js";
 
 // Visibility hierarchy: PUBLIC (1) < INTERNAL (2) < PRIVATE (3)
@@ -86,6 +87,7 @@ const unitSelect = {
 const objectiveBaseSelect = {
     id: true,
     title: true,
+    description: true,
     status: true,
     visibility: true,
     progress_percentage: true,
@@ -148,6 +150,7 @@ const formatObjective = (objective, includeKeyResults = false) => {
     return {
         id: objective.id,
         title: objective.title,
+        description: objective.description ?? null,
         status: objective.status,
         visibility: objective.visibility,
         progress_percentage: objective.progress_percentage,
@@ -478,6 +481,7 @@ export const createObjective = async (user, payload) => {
             id,
             company_id,
             title,
+            description,
             cycle_id,
             unit_id,
             owner_id,
@@ -492,6 +496,7 @@ export const createObjective = async (user, payload) => {
             ${objectiveId},
             ${user.company_id},
             ${payload.title},
+            ${payload.description ?? null},
             ${payload.cycle_id},
             ${unitId},
             ${payload.owner_id ?? null},
@@ -564,6 +569,7 @@ export const updateObjective = async (user, objectiveId, updates) => {
 
     const data = {
         ...(updates.title !== undefined && { title: updates.title }),
+        ...(updates.description !== undefined && { description: updates.description ?? null }),
         ...(updates.parent_objective_id !== undefined && {
             parent_objective_id: updates.parent_objective_id,
         }),
@@ -657,6 +663,7 @@ export const approveObjective = async (user, objectiveId, updates) => {
         where: { id: objectiveId },
         data: {
             ...(updates.title !== undefined && { title: updates.title }),
+            ...(updates.description !== undefined && { description: updates.description ?? null }),
             ...(updates.parent_objective_id !== undefined && {
                 parent_objective_id: updates.parent_objective_id,
             }),
@@ -749,4 +756,106 @@ export const deleteObjective = async (user, objectiveId) => {
     ]);
 
     return { success: true, message: "Objective deleted successfully" };
+};
+
+/**
+ * Get available objectives that can be set as parent for a new objective in a specific unit
+ * Returns objectives from the specified unit and all its ancestor units
+ */
+export const getAvailableParentObjectives = async (user, unitId, cycleId, includeKeyResults = false) => {
+    // Validate unit exists
+    const unit = await prisma.units.findFirst({
+        where: { id: unitId },
+        select: { id: true },
+    });
+    if (!unit) throw new AppError("Unit not found", 404);
+
+    // Get ancestor unit IDs
+    const ancestorUnitIds = await getUnitAncestors(unitId);
+    const relevantUnitIds = [unitId, ...ancestorUnitIds];
+
+    // Build where clause
+    const where = {
+        deleted_at: null,
+        unit_id: { in: relevantUnitIds },
+        status: { in: ["Active", "Completed"] },
+        ...(cycleId !== undefined && { cycle_id: cycleId }),
+    };
+
+    const select = {
+        ...objectiveBaseSelect,
+        ...(includeKeyResults && { key_results: { select: keyResultSelect } }),
+    };
+
+    // Get all objectives from the unit and its ancestors
+    const objectives = await prisma.objectives.findMany({
+        where,
+        orderBy: [
+            { unit_id: "asc" },
+            { created_at: "desc" },
+        ],
+        select,
+    });
+
+    // Filter by visibility permissions
+    const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
+    const unitPaths = await Promise.all(
+        relevantUnitIds.map(async (id) => ({
+            id,
+            path: await getUnitPath(id),
+        }))
+    );
+    const unitPathMap = new Map(unitPaths.map((u) => [u.id, u.path]));
+
+    const visibleObjectives = objectives.filter((objective) => {
+        // Admin can see all
+        if (user.role === UserRole.ADMIN_COMPANY) return true;
+
+        // PUBLIC visibility - visible to all
+        if (objective.visibility === "PUBLIC") return true;
+
+        const objectivePath = unitPathMap.get(objective.unit_id);
+        if (!objectivePath || !userPath) return false;
+
+        // INTERNAL visibility - visible if user is in same unit hierarchy
+        if (objective.visibility === "INTERNAL") {
+            return (
+                isAncestorOrEqual(objectivePath, userPath) ||
+                isDescendantOrEqual(objectivePath, userPath)
+            );
+        }
+
+        // PRIVATE visibility - visible to owner or ancestor units
+        if (objective.visibility === "PRIVATE") {
+            if (objective.owner_id === user.id) return true;
+            return objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath);
+        }
+
+        return false;
+    });
+
+    // Group objectives by unit for better organization in response
+    const formattedObjectives = visibleObjectives.map((objective) =>
+        formatObjective(objective, includeKeyResults)
+    );
+
+    // Group by unit
+    const groupedByUnit = formattedObjectives.reduce((acc, objective) => {
+        const unitKey = objective.unit?.id?.toString() || "unknown";
+        if (!acc[unitKey]) {
+            acc[unitKey] = {
+                unit: objective.unit,
+                objectives: [],
+            };
+        }
+        acc[unitKey].objectives.push(objective);
+        return acc;
+    }, {});
+
+    return {
+        unit_id: unitId,
+        unit_ids_searched: relevantUnitIds,
+        total: formattedObjectives.length,
+        data: Object.values(groupedByUnit),
+    };
 };

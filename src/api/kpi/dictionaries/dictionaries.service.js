@@ -15,16 +15,24 @@ const dictionarySelect = {
 const formatDictionary = (dict, currentUser = null) => {
     const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
 
-    return {
+    const result = {
         id: dict.id,
         name: dict.name,
         unit: dict.unit,
         evaluation_method: dict.evaluation_method,
         description: dict.description ?? null,
         unit_id: dict.unit_id,
-        editable: isAdmin,
-        deletable: isAdmin,
     };
+
+    // Only add permission for ADMIN_COMPANY
+    if (isAdmin) {
+        result.permission = {
+            editable: true,
+            deletable: true,
+        };
+    }
+
+    return result;
 };
 
 export const listKPIDictionaries = async (user, forUnitId = null) => {

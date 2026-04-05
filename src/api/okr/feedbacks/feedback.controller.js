@@ -62,14 +62,13 @@ export const listFeedbacks = async (req, res) => {
         const objectiveId = parsePositiveInt(req.params.objectiveId, null);
         if (!objectiveId) throw new AppError("Invalid objective ID", 400);
 
-        const page = parsePositiveInt(req.query.page, 1);
-        const per_page = Math.min(parsePositiveInt(req.query.per_page, 20), 100);
+        const { page, per_page, type, sentiment, status, kr_tag_id } = req.validated.query;
 
         const filters = {
-            type: parseFeedbackType(req.query.type),
-            sentiment: parseSentiment(req.query.sentiment),
-            status: parseFeedbackStatus(req.query.status),
-            kr_tag_id: parseOptionalId(req.query.kr_tag_id),
+            type,
+            sentiment,
+            status,
+            kr_tag_id,
         };
 
         const { total, last_page, data } = await feedbackService.listFeedbacks(
@@ -97,16 +96,12 @@ export const createFeedback = async (req, res) => {
         const objectiveId = parsePositiveInt(req.params.objectiveId, null);
         if (!objectiveId) throw new AppError("Invalid objective ID", 400);
 
-        const { content, type, kr_tag_id } = req.body;
-
-        if (!content || typeof content !== "string" || content.trim() === "") {
-            throw new AppError("content is required", 422);
-        }
+        const { content, type, kr_tag_id } = req.validated.body;
 
         const feedback = await feedbackService.createFeedback(req.user, objectiveId, {
             content: content.trim(),
-            type: parseFeedbackType(type, true),
-            kr_tag_id: parseOptionalId(kr_tag_id),
+            type,
+            kr_tag_id,
         });
 
         res.success("Feedback created successfully", 201, { feedback });
@@ -141,27 +136,18 @@ export const updateFeedback = async (req, res) => {
         const feedbackId = parsePositiveInt(req.params.feedbackId, null);
         if (!feedbackId) throw new AppError("Invalid feedback ID", 400);
 
-        const { content, type, sentiment, status, kr_tag_id } = req.body;
+        const { content, type, sentiment, status, kr_tag_id } = req.validated.body;
         const updates = {};
 
         if (content !== undefined) {
-            if (typeof content !== "string" || content.trim() === "") {
-                throw new AppError("content must be a non-empty string", 422);
-            }
             updates.content = content.trim();
         }
 
-        if (type !== undefined) updates.type = parseFeedbackType(type);
-        if (sentiment !== undefined) updates.sentiment = parseSentiment(sentiment);
-        if (status !== undefined) updates.status = parseFeedbackStatus(status);
+        if (type !== undefined) updates.type = type;
+        if (sentiment !== undefined) updates.sentiment = sentiment;
+        if (status !== undefined) updates.status = status;
         if (kr_tag_id !== undefined) {
-            const parsedKrTagId = parseOptionalId(kr_tag_id);
-            // If a value was provided but cannot be parsed as a valid ID,
-            // and it's not an explicit "clear" (null or empty string), reject it.
-            if (parsedKrTagId === undefined && kr_tag_id !== null && kr_tag_id !== "") {
-                throw new AppError("Invalid kr_tag_id", 422);
-            }
-            updates.kr_tag_id = parsedKrTagId ?? null;
+            updates.kr_tag_id = kr_tag_id;
         }
 
         if (Object.keys(updates).length === 0) {
@@ -222,15 +208,11 @@ export const createReply = async (req, res) => {
         const feedbackId = parsePositiveInt(req.params.id, null);
         if (!feedbackId) throw new AppError("Invalid feedback ID", 400);
 
-        const { content, type } = req.body;
-
-        if (!content || typeof content !== "string" || content.trim() === "") {
-            throw new AppError("content is required", 422);
-        }
+        const { content, type } = req.validated.body;
 
         const reply = await feedbackService.createReply(req.user, feedbackId, {
             content: content.trim(),
-            type: parseFeedbackType(type, true),
+            type,
         });
 
         res.success("Reply created successfully", 201, { feedback: reply });

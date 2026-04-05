@@ -35,36 +35,14 @@ export const getKPIDictionaries = async (req, res) => {
 // POST /kpi-dictionaries
 export const createKPIDictionary = async (req, res) => {
     try {
-        const { name, unit, evaluation_method, unit_id, description } = req.body;
-
-        if (!name || typeof name !== "string" || name.trim() === "") {
-            throw new AppError("name is required", 422);
-        }
-
-        if (!unit || typeof unit !== "string" || unit.trim() === "") {
-            throw new AppError("unit is required", 422);
-        }
-
-        if (!evaluation_method || typeof evaluation_method !== "string") {
-            throw new AppError("evaluation_method is required", 422);
-        }
-
-        const validMethods = ["Positive", "Negative", "Stabilizing"];
-        if (!validMethods.includes(evaluation_method)) {
-            throw new AppError(
-                "evaluation_method must be one of: Positive, Negative, Stabilizing",
-                422,
-            );
-        }
-
-        const parsedUnitId = parseOptionalInt(unit_id);
+        const { name, unit, evaluation_method, unit_id, description } = req.validated.body;
 
         const dictionary = await dictionariesService.createKPIDictionary(req.user, {
             name: name.trim(),
             unit: unit.trim(),
             evaluation_method,
             description: description?.trim() || null,
-            unit_id: parsedUnitId,
+            unit_id: unit_id ?? undefined,
         });
 
         res.success("KPI Dictionary created successfully", 201, { kpi_dictionary: dictionary });
@@ -79,34 +57,18 @@ export const updateKPIDictionary = async (req, res) => {
         const dictionaryId = parsePositiveInt(req.params.id, null);
         if (!dictionaryId) throw new AppError("Invalid dictionary ID", 400);
 
-        const { name, unit, evaluation_method, unit_id, description } = req.body;
+        const { name, unit, evaluation_method, unit_id, description } = req.validated.body;
         const updates = {};
 
         if (name !== undefined) {
-            if (typeof name !== "string" || name.trim() === "") {
-                throw new AppError("name must be a non-empty string", 422);
-            }
             updates.name = name.trim();
         }
 
         if (unit !== undefined) {
-            if (typeof unit !== "string" || unit.trim() === "") {
-                throw new AppError("unit must be a non-empty string", 422);
-            }
             updates.unit = unit.trim();
         }
 
         if (evaluation_method !== undefined) {
-            if (typeof evaluation_method !== "string") {
-                throw new AppError("evaluation_method must be a string", 422);
-            }
-            const validMethods = ["Positive", "Negative", "Stabilizing"];
-            if (!validMethods.includes(evaluation_method)) {
-                throw new AppError(
-                    "evaluation_method must be one of: Positive, Negative, Stabilizing",
-                    422,
-                );
-            }
             updates.evaluation_method = evaluation_method;
         }
 
@@ -115,8 +77,7 @@ export const updateKPIDictionary = async (req, res) => {
         }
 
         if (unit_id !== undefined) {
-            const parsedUnitId = parseOptionalInt(unit_id);
-            updates.unit_id = parsedUnitId;
+            updates.unit_id = unit_id;
         }
 
         if (Object.keys(updates).length === 0) {

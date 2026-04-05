@@ -50,40 +50,15 @@ export const createKeyResult = async (req, res) => {
         const objectiveId = parsePositiveInt(req.params.objective_id, null);
         if (!objectiveId) throw new AppError("Invalid objective ID", 400);
 
-        const { title, target_value, current_value, unit, weight, due_date } = req.body;
-
-        if (!title || typeof title !== "string" || title.trim() === "") {
-            throw new AppError("title is required", 422);
-        }
-
-        const targetValue = parseNumber(target_value);
-        if (targetValue === undefined) throw new AppError("target_value is required", 422);
-
-        if (!unit || typeof unit !== "string" || unit.trim() === "") {
-            throw new AppError("unit is required", 422);
-        }
-
-        const weightValue = parseNumber(weight);
-        if (weightValue === undefined) throw new AppError("weight is required", 422);
-        if (weightValue < 0 || weightValue > 100) {
-            throw new AppError("weight must be between 0 and 100", 422);
-        }
-
-        const parsedDueDate = parseDateInput(due_date);
-        if (due_date !== undefined && !parsedDueDate) {
-            throw new AppError("due_date must be in YYYY-MM-DD format", 422);
-        }
-
-        const currentValue = current_value !== undefined ? parseNumber(current_value) : 0;
-        if (currentValue === undefined) throw new AppError("current_value must be a number", 422);
+        const { title, target_value, current_value, unit, weight, due_date } = req.validated.body;
 
         const keyResult = await keyResultService.createKeyResult(req.user, objectiveId, {
             title: title.trim(),
-            target_value: targetValue,
-            current_value: currentValue,
+            target_value,
+            current_value,
             unit: unit.trim(),
-            weight: weightValue,
-            due_date: parsedDueDate,
+            weight,
+            due_date,
         });
 
         res.success("Key result created successfully", 201, { key_result: keyResult });
@@ -98,48 +73,31 @@ export const updateKeyResult = async (req, res) => {
         const keyResultId = parsePositiveInt(req.params.id, null);
         if (!keyResultId) throw new AppError("Invalid key result ID", 400);
 
-        const { title, target_value, current_value, unit, weight, due_date } = req.body;
+        const { title, target_value, current_value, unit, weight, due_date } = req.validated.body;
         const updates = {};
 
         if (title !== undefined) {
-            if (typeof title !== "string" || title.trim() === "") {
-                throw new AppError("title must be a non-empty string", 422);
-            }
             updates.title = title.trim();
         }
 
         if (target_value !== undefined) {
-            const parsed = parseNumber(target_value);
-            if (parsed === undefined) throw new AppError("target_value must be a number", 422);
-            updates.target_value = parsed;
+            updates.target_value = target_value;
         }
 
         if (current_value !== undefined) {
-            const parsed = parseNumber(current_value);
-            if (parsed === undefined) throw new AppError("current_value must be a number", 422);
-            updates.current_value = parsed;
+            updates.current_value = current_value;
         }
 
         if (unit !== undefined) {
-            if (typeof unit !== "string" || unit.trim() === "") {
-                throw new AppError("unit must be a non-empty string", 422);
-            }
             updates.unit = unit.trim();
         }
 
         if (weight !== undefined) {
-            const parsed = parseNumber(weight);
-            if (parsed === undefined) throw new AppError("weight must be a number", 422);
-            if (parsed < 0 || parsed > 100) {
-                throw new AppError("weight must be between 0 and 100", 422);
-            }
-            updates.weight = parsed;
+            updates.weight = weight;
         }
 
         if (due_date !== undefined) {
-            const parsed = parseDateInput(due_date);
-            if (!parsed) throw new AppError("due_date must be in YYYY-MM-DD format", 422);
-            updates.due_date = parsed;
+            updates.due_date = due_date;
         }
 
         if (Object.keys(updates).length === 0) {
