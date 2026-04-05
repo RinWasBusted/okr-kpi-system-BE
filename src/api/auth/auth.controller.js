@@ -4,11 +4,11 @@ import * as authService from "./auth.service.js";
 import AppError from "../../utils/appError.js";
 
 export const login = async (req, res) => {
-    const { email, password, company_slug, device_info, remember_me } = loginSchema.parse(req.body);
+    const { email, password, company_slug, remember_me } = loginSchema.parse(req.body);
 
     try {
         const { user, accessToken, refreshToken, cookie_max_age, expires_in } = await authService.loginService(
-            email, password, company_slug ? company_slug : '', device_info, remember_me
+            email, password, company_slug ? company_slug : '', remember_me
         );
 
         const cookieOptions = {

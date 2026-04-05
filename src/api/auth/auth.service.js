@@ -16,14 +16,13 @@ const SESSION_TTL_30D = 30 * 24 * 60 * 60;
  * Store a new session in Redis.
  * Keys:
  *   refreshToken:{token}  → { userId, sessionId, ttl_seconds }
- *   session:{sessionId}   → { userId, device_info, created_at, ttl_seconds, token }
+ *   session:{sessionId}   → { userId, created_at, ttl_seconds, token }
  *   userSessions:{userId} → Set<sessionId>
  */
-const storeSession = async (userId, refreshToken, sessionId, deviceInfo, ttlSeconds) => {
+const storeSession = async (userId, refreshToken, sessionId, ttlSeconds) => {
     const tokenMeta = JSON.stringify({ userId, sessionId, ttl_seconds: ttlSeconds });
     const sessionMeta = JSON.stringify({
         userId,
-        device_info: deviceInfo || { name: 'Unknown', fingerprint: 'unknown' },
         created_at: new Date().toISOString(),
         ttl_seconds: ttlSeconds,
         token: refreshToken,
@@ -73,7 +72,7 @@ const removeAllUserSessions = async (userId) => {
 
 // ─── Auth services ────────────────────────────────────────────────────────────
 
-export const loginService = async (email, password, company_slug = '', device_info = null, remember_me = false) => {
+export const loginService = async (email, password, company_slug = '', remember_me = false) => {
     let company_id = null;
     let company = null;
     if (company_slug !== '') {
@@ -133,7 +132,7 @@ export const loginService = async (email, password, company_slug = '', device_in
             const refreshToken = generateToken(tokenPayload, refreshTokenExpiry);
 
             const sessionId = crypto.randomUUID();
-            await storeSession(user.id, refreshToken, sessionId, device_info, ttlSeconds);
+            await storeSession(user.id, refreshToken, sessionId, ttlSeconds);
 
             // Transform avatar_url to Cloudinary URL with 50x50 pixels
             const avatarUrl = user.avatar_url
@@ -177,7 +176,7 @@ export const refreshTokenService = async (refreshToken) => {
 
     // Fetch full user payload from the session record
     const sessionInfo = await client.get(`session:${sessionId}`);
-    const { device_info } = sessionInfo ? JSON.parse(sessionInfo) : {};
+    const sessionData = sessionInfo ? JSON.parse(sessionInfo) : {};
 
     const user = await prisma.users.findUnique({
         where: { id: id },
@@ -208,8 +207,7 @@ export const refreshTokenService = async (refreshToken) => {
     await client.del(`refreshToken:${refreshToken}`);
     const updatedSessionMeta = JSON.stringify({
         userId: user.id,
-        device_info: device_info || { name: 'Unknown', fingerprint: 'unknown' },
-        created_at: sessionInfo ? JSON.parse(sessionInfo).created_at : new Date().toISOString(),
+        created_at: sessionData.created_at || new Date().toISOString(),
         ttl_seconds,
         token: newRefreshToken,
     });

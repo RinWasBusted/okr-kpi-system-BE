@@ -16,7 +16,7 @@ const parsePositiveInt = (value, fallback) => {
   return parsed;
 };
 
-export const getCompanyAdmins = async (req, res) => {
+export const getCompanyAdmins = async (req, res, next) => {
   try {
     const companyId = Number(req.params.company_id);
     if (!Number.isInteger(companyId) || companyId <= 0) {
@@ -44,7 +44,7 @@ export const getCompanyAdmins = async (req, res) => {
       total,
     });
   } catch (error) {
-    throw error;
+    next(error);
   }
 };
 

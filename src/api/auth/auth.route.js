@@ -39,16 +39,6 @@ const router = express.Router();
  *                 type: string
  *                 description: Company slug for multi-tenant applications. If provided, the system will attempt to find the user within the specified company.
  *                 example: "acme-corp"
- *               device_info:
- *                 type: object
- *                 description: Optional device information for session tracking
- *                 properties:
- *                   name:
- *                     type: string
- *                     example: "Chrome/Windows"
- *                   fingerprint:
- *                     type: string
- *                     example: "abc123"
  *               remember_me:
  *                 type: boolean
  *                 description: If true, refresh token expires in 30 days instead of 7 days
