@@ -251,3 +251,17 @@ export const getAvailableParentObjectives = async (req, res) => {
         throw error;
     }
 };
+
+// GET /objectives/:id
+export const getObjectiveById = async (req, res) => {
+    try {
+        const objectiveId = parsePositiveInt(req.params.id, null);
+        if (!objectiveId) throw new AppError("Invalid objective ID", 400);
+
+        const objective = await objectiveService.getObjectiveById(req.user, objectiveId);
+
+        res.success("Objective retrieved successfully", 200, { objective });
+    } catch (error) {
+        throw error;
+    }
+};

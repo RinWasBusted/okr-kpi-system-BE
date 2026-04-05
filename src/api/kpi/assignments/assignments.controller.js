@@ -133,3 +133,38 @@ export const deleteKPIAssignment = async (req, res) => {
         throw error;
     }
 };
+
+// GET /kpi-assignments/:id
+export const getKPIAssignmentById = async (req, res) => {
+    try {
+        const assignmentId = parsePositiveInt(req.params.id, null);
+        if (!assignmentId) throw new AppError("Invalid assignment ID", 400);
+
+        const assignment = await assignmentsService.getKPIAssignmentById(req.user, assignmentId);
+
+        res.success("KPI Assignment retrieved successfully", 200, { kpi_assignment: assignment });
+    } catch (error) {
+        throw error;
+    }
+};
+
+// GET /kpi-assignments/available-parents
+export const getAvailableParentKPIs = async (req, res) => {
+    try {
+        const unitId = parseOptionalInt(req.query.unit_id);
+        if (!unitId) throw new AppError("unit_id is required", 400);
+
+        const kpiDictionaryId = parseOptionalInt(req.query.kpi_dictionary_id);
+
+        const result = await assignmentsService.getAvailableParentKPIs(req.user, unitId, kpiDictionaryId);
+
+        res.success("Available parent KPIs retrieved successfully", 200, result.data, {
+            unit_id: result.unit_id,
+            unit_ids_searched: result.unit_ids_searched,
+            kpi_dictionary_id: result.kpi_dictionary_id,
+            total: result.total,
+        });
+    } catch (error) {
+        throw error;
+    }
+};

@@ -4,6 +4,8 @@ import {
     createKPIAssignment,
     updateKPIAssignment,
     deleteKPIAssignment,
+    getKPIAssignmentById,
+    getAvailableParentKPIs,
 } from "./assignments.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
 import { validate } from "../../../middlewares/validate.js";
@@ -174,6 +176,152 @@ router.use(authenticate);
  *                       type: integer
  */
 router.get("/kpi-assignments", getKPIAssignments);
+
+/**
+ * @swagger
+ * /kpi-assignments/available-parents:
+ *   get:
+ *     summary: Get available parent KPI assignments for a unit
+ *     description: |
+ *       Retrieve KPI assignments that can be set as parent for a new KPI in the specified unit.
+ *       Returns assignments from the specified unit and all its ancestor units.
+ *       Only includes root assignments (assignments without a parent) that use the same KPI dictionary.
+ *       Results are filtered by visibility permissions.
+ *     tags: [KPIAssignments]
+ *     parameters:
+ *       - in: query
+ *         name: unit_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The unit ID for which to find available parent KPIs
+ *       - in: query
+ *         name: kpi_dictionary_id
+ *         schema:
+ *           type: integer
+ *         description: Optional - filter by KPI dictionary ID (parent must use same KPI)
+ *     responses:
+ *       200:
+ *         description: Available parent KPIs retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       unit:
+ *                         type: object
+ *                         nullable: true
+ *                       assignments:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             kpi_dictionary:
+ *                               type: object
+ *                             target_value:
+ *                               type: number
+ *                             current_value:
+ *                               type: number
+ *                             progress_percentage:
+ *                               type: number
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     unit_id:
+ *                       type: integer
+ *                     unit_ids_searched:
+ *                       type: array
+ *                       items:
+ *                         type: integer
+ *                     kpi_dictionary_id:
+ *                       type: integer
+ *                       nullable: true
+ *                     total:
+ *                       type: integer
+ *       400:
+ *         description: Invalid unit_id
+ *       404:
+ *         description: Unit not found
+ */
+router.get("/kpi-assignments/available-parents", getAvailableParentKPIs);
+
+/**
+ * @swagger
+ * /kpi-assignments/{id}:
+ *   get:
+ *     summary: Get KPI Assignment details by ID
+ *     description: Retrieve detailed information about a specific KPI assignment including its dictionary, owner, unit, cycle, and latest record.
+ *     tags: [KPIAssignments]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: KPI Assignment ID
+ *     responses:
+ *       200:
+ *         description: KPI Assignment retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     kpi_assignment:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         kpi_dictionary:
+ *                           type: object
+ *                         target_value:
+ *                           type: number
+ *                         current_value:
+ *                           type: number
+ *                         progress_percentage:
+ *                           type: number
+ *                         progress_status:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                         visibility:
+ *                           type: string
+ *                         owner:
+ *                           type: object
+ *                         unit:
+ *                           type: object
+ *                         cycle:
+ *                           type: object
+ *                         parent_assignment:
+ *                           type: object
+ *                         latest_record:
+ *                           type: object
+ *       400:
+ *         description: Invalid assignment ID
+ *       403:
+ *         description: No permission to view this assignment
+ *       404:
+ *         description: KPI Assignment not found
+ */
+router.get("/kpi-assignments/:id", getKPIAssignmentById);
 
 /**
  * @swagger

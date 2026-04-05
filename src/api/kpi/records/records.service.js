@@ -138,9 +138,15 @@ export const createKPIRecord = async (user, assignmentId, payload) => {
         await recalculateCurrentValueFromChildren(assignment.parent_assignment_id);
     }
 
+    // Calculate time elapsed percentage for the period
+    const now = new Date();
+    const totalPeriodDays = (periodEnd - periodStart) / (1000 * 60 * 60 * 24);
+    const elapsedDays = Math.max(0, Math.min(totalPeriodDays, (now - periodStart) / (1000 * 60 * 60 * 24)));
+    const timeElapsedPercentage = totalPeriodDays > 0 ? (elapsedDays / totalPeriodDays) * 100 : 0;
+
     return {
         ...record,
-        time_elapsed_percentage: Math.round(timeElapsed * 100) / 100,
+        time_elapsed_percentage: Math.round(timeElapsedPercentage * 100) / 100,
     };
 };
 

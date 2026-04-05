@@ -255,27 +255,9 @@ const ensureUserExists = async (userId) => {
 
 const resolveVisibility = (visibility) => visibility ?? "INTERNAL";
 
-const determineObjectiveStatus = async (user, targetUnitId, ownerId) => {
-    if (user.role === UserRole.ADMIN_COMPANY) return "Active";
-
-    if (!targetUnitId && !ownerId) {
-        throw new AppError("You do not have permission to create this objective", 403);
-    }
-
-    if (ownerId && ownerId === user.id) return "Draft";
-
-    if (!user.unit_id || !targetUnitId) {
-        throw new AppError("You do not have permission to create this objective", 403);
-    }
-
-    if (user.unit_id === targetUnitId) return "Draft";
-
-    const isAncestor = await isAncestorUnit(user.unit_id, targetUnitId);
-    if (!isAncestor) {
-        throw new AppError("You do not have permission to create this objective", 403);
-    }
-
-    return "Active";
+const determineObjectiveStatus = async () => {
+    // Always return Draft when creating new objective
+    return "Draft";
 };
 
 export const listObjectives = async ({
@@ -729,6 +711,18 @@ export const ensureObjectiveEditable = async (user, objectiveId) => {
         throw new AppError("You do not have permission to edit this objective", 403);
     }
     return objective;
+};
+
+export const getObjectiveById = async (user, objectiveId) => {
+    const objective = await getObjectiveOrThrow(objectiveId, { key_results: true });
+
+    // Check if user can view this objective
+    const canView = await canViewObjective(user, objective);
+    if (!canView) {
+        throw new AppError("You do not have permission to view this objective", 403);
+    }
+
+    return formatObjective(objective, true);
 };
 
 export const deleteObjective = async (user, objectiveId) => {

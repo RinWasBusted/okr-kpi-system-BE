@@ -778,3 +778,160 @@ export const deleteKPIAssignment = async (user, assignmentId, cascade = false) =
         await recalculateCurrentValueFromChildren(parentAssignmentId);
     }
 };
+
+export const getKPIAssignmentById = async (user, assignmentId) => {
+    const assignment = await prisma.kPIAssignments.findFirst({
+        where: { id: assignmentId, deleted_at: null },
+        select: assignmentSelect,
+    });
+
+    if (!assignment) throw new AppError("KPI Assignment not found", 404);
+
+    // Fetch access_path using raw SQL for ltree type support
+    const pathResult = await prisma.$queryRaw`
+        SELECT access_path::text AS access_path
+        FROM "KPIAssignments"
+        WHERE id = ${assignmentId}
+    `;
+
+    const assignmentWithPath = {
+        ...assignment,
+        access_path: pathResult[0]?.access_path || null,
+    };
+
+    // Check if user can view this assignment
+    const canView = await canViewAssignment(user, assignmentWithPath);
+    if (!canView) {
+        throw new AppError("You do not have permission to view this KPI assignment", 403);
+    }
+
+    return await formatAssignment(assignmentWithPath);
+};
+
+/**
+ * Get available KPI Assignments that can be set as parent for a new KPI in a specific unit
+ * Returns assignments from the specified unit and all its ancestor units
+ * Only includes assignments with the same KPI dictionary that don't already have a parent
+ */
+export const getAvailableParentKPIs = async (user, unitId, kpiDictionaryId) => {
+    // Validate unit exists
+    const unit = await prisma.units.findFirst({
+        where: { id: unitId },
+        select: { id: true },
+    });
+    if (!unit) throw new AppError("Unit not found", 404);
+
+    // Get ancestor unit IDs (including current unit)
+    const ancestorUnitIds = await getUnitAncestors(unitId);
+    const relevantUnitIds = [unitId, ...ancestorUnitIds];
+
+    // Get all assignments from relevant units with the same KPI dictionary
+    // that don't already have a parent (only root assignments can be parents)
+    const where = {
+        deleted_at: null,
+        unit_id: { in: relevantUnitIds },
+        parent_assignment_id: null, // Only root assignments can be parents
+    };
+
+    // If kpiDictionaryId is provided, filter by it
+    if (kpiDictionaryId) {
+        where.kpi_dictionary_id = kpiDictionaryId;
+    }
+
+    const assignments = await prisma.kPIAssignments.findMany({
+        where,
+        select: assignmentSelect,
+        orderBy: [
+            { unit_id: "asc" },
+            { created_at: "desc" },
+        ],
+    });
+
+    // Filter by visibility permissions
+    const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
+    const unitPaths = await Promise.all(
+        relevantUnitIds.map(async (id) => ({
+            id,
+            path: await getUnitPath(id),
+        }))
+    );
+    const unitPathMap = new Map(unitPaths.map((u) => [u.id, u.path]));
+
+    const visibleAssignments = [];
+    for (const assignment of assignments) {
+        // Admin can see all
+        if (user.role === UserRole.ADMIN_COMPANY) {
+            visibleAssignments.push(assignment);
+            continue;
+        }
+
+        // PUBLIC visibility - visible to all
+        if (assignment.visibility === "PUBLIC") {
+            visibleAssignments.push(assignment);
+            continue;
+        }
+
+        const assignmentPath = unitPathMap.get(assignment.unit_id);
+        if (!assignmentPath || !userPath) continue;
+
+        // INTERNAL visibility - visible if user is in same unit hierarchy
+        if (assignment.visibility === "INTERNAL") {
+            if (
+                isAncestorOrEqual(assignmentPath, userPath) ||
+                isDescendantOrEqual(assignmentPath, userPath)
+            ) {
+                visibleAssignments.push(assignment);
+            }
+            continue;
+        }
+
+        // PRIVATE visibility - visible to owner or ancestor units
+        if (assignment.visibility === "PRIVATE") {
+            if (assignment.owner_id === user.id) {
+                visibleAssignments.push(assignment);
+                continue;
+            }
+            if (assignmentPath !== userPath && isDescendantOrEqual(assignmentPath, userPath)) {
+                visibleAssignments.push(assignment);
+            }
+        }
+    }
+
+    // Format all visible assignments
+    const formattedAssignments = await Promise.all(
+        visibleAssignments.map(async (a) => {
+            // Fetch access_path using raw SQL for ltree type support
+            const pathResult = await prisma.$queryRaw`
+                SELECT access_path::text AS access_path
+                FROM "KPIAssignments"
+                WHERE id = ${a.id}
+            `;
+            const assignmentWithPath = {
+                ...a,
+                access_path: pathResult[0]?.access_path || null,
+            };
+            return await formatAssignment(assignmentWithPath);
+        })
+    );
+
+    // Group by unit for better organization in response
+    const groupedByUnit = formattedAssignments.reduce((acc, assignment) => {
+        const unitKey = assignment.unit?.id?.toString() || "unknown";
+        if (!acc[unitKey]) {
+            acc[unitKey] = {
+                unit: assignment.unit,
+                assignments: [],
+            };
+        }
+        acc[unitKey].assignments.push(assignment);
+        return acc;
+    }, {});
+
+    return {
+        unit_id: unitId,
+        unit_ids_searched: relevantUnitIds,
+        kpi_dictionary_id: kpiDictionaryId || null,
+        total: formattedAssignments.length,
+        data: Object.values(groupedByUnit),
+    };
+};

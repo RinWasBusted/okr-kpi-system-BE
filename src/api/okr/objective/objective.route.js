@@ -8,6 +8,7 @@ import {
     rejectObjective,
     deleteObjective,
     getAvailableParentObjectives,
+    getObjectiveById,
 } from "./objective.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
 import { validate } from "../../../middlewares/validate.js";
@@ -169,6 +170,71 @@ router.use(authenticate);
  *                       type: integer
  */
 router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjectives);
+
+/**
+ * @swagger
+ * /objectives/{id}:
+ *   get:
+ *     summary: Get objective details by ID
+ *     description: Retrieve a single objective with its key results. User must have permission to view the objective based on visibility rules.
+ *     tags: [Objectives]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Objective ID
+ *     responses:
+ *       200:
+ *         description: Objective retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     objective:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         title:
+ *                           type: string
+ *                         description:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                         visibility:
+ *                           type: string
+ *                         progress_percentage:
+ *                           type: number
+ *                         progress_status:
+ *                           type: string
+ *                         cycle:
+ *                           type: object
+ *                         owner:
+ *                           type: object
+ *                         unit:
+ *                           type: object
+ *                         parent_objective:
+ *                           type: object
+ *                         key_results:
+ *                           type: array
+ *       400:
+ *         description: Invalid objective ID
+ *       403:
+ *         description: No permission to view this objective
+ *       404:
+ *         description: Objective not found
+ */
+router.get("/objectives/:id", getObjectiveById);
 
 /**
  * @swagger

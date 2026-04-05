@@ -98,6 +98,11 @@ export const updateKeyResultSchema = z.object({
     message: "At least one field must be provided to update",
 });
 
+// KPI Assignment params schema
+export const kpiAssignmentIdSchema = z.object({
+    id: z.coerce.number().int().positive("Invalid assignment ID"),
+});
+
 // KPI Record schemas
 export const createKPIRecordSchema = z.object({
     period_start: z.string().datetime(),
