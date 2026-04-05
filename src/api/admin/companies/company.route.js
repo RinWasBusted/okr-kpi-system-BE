@@ -3,7 +3,6 @@ import {
     getCompanies,
     createCompany,
     updateCompany,
-    deactivateCompany,
     getCompanyStats,
     uploadLogo,
     deleteLogo,
@@ -93,10 +92,6 @@ const router = express.Router();
  *                       type: string
  *                       format: date-time
  *                       example: "2026-01-01T00:00:00.000Z"
- *                     updated_at:
- *                       type: string
- *                       format: date-time
- *                       example: "2026-01-01T00:00:00.000Z"
  *       401:
  *         description: Unauthenticated or Company ID not found in token
  *         content:
@@ -181,7 +176,7 @@ router.use("/:company_id/admins", adminCompanyRoutes);
  *         name: sort_by
  *         schema:
  *           type: string
- *           enum: [name, created_at, updated_at]
+ *           enum: [name, created_at]
  *           default: created_at
  *         description: Field to sort by
  *       - in: query
@@ -247,10 +242,6 @@ router.use("/:company_id/admins", adminCompanyRoutes);
  *                         type: integer
  *                         example: 50
  *                       created_at:
- *                         type: string
- *                         format: date-time
- *                         example: "2026-01-01T00:00:00.000Z"
- *                       updated_at:
  *                         type: string
  *                         format: date-time
  *                         example: "2026-01-01T00:00:00.000Z"
@@ -388,10 +379,6 @@ router.get("/", getCompanies);
  *                           type: string
  *                           format: date-time
  *                           example: "2026-01-01T00:00:00.000Z"
- *                         updated_at:
- *                           type: string
- *                           format: date-time
- *                           example: "2026-01-01T00:00:00.000Z"
  *       409:
  *         description: Slug already exists on the platform
  *         content:
@@ -463,9 +450,9 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(crea
 /**
  * @swagger
  * /admin/companies/{id}:
- *   put:
+ *   patch:
  *     summary: Update company information
- *     description: Update company name, slug, activation status, AI plan, or usage limit. Note - token_usage and credit_cost cannot be modified directly via this endpoint; use the AI usage management endpoint instead.
+ *     description: Partial update of company fields (name, slug, ai_plan, usage_limit). Note - is_active cannot be modified via this endpoint; use separate deactivate/reactivate endpoints. token_usage and credit_cost also cannot be modified directly.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -496,10 +483,6 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(crea
  *                 pattern: ^[a-z0-9-]+$
  *                 example: "acme-corporation"
  *                 description: New slug. Must be unique across the platform and contain only lowercase letters, numbers, and hyphens (3-60 characters).
- *               is_active:
- *                 type: boolean
- *                 example: false
- *                 description: "false = deactivate the company, all users will lose login access; true = reactivate"
  *               ai_plan:
  *                 type: string
  *                 enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
@@ -566,10 +549,6 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(crea
  *                       type: integer
  *                       example: 50
  *                     created_at:
- *                       type: string
- *                       format: date-time
- *                       example: "2026-01-01T00:00:00.000Z"
- *                     updated_at:
  *                       type: string
  *                       format: date-time
  *                       example: "2026-01-01T00:00:00.000Z"
@@ -717,10 +696,6 @@ router.get("/:id", getCompanyById);
  *                       type: string
  *                       format: date-time
  *                       example: "2026-01-01T00:00:00.000Z"
- *                     updated_at:
- *                       type: string
- *                       format: date-time
- *                       example: "2026-01-01T00:00:00.000Z"
  *       401:
  *         description: Unauthenticated
  *         content:
@@ -761,104 +736,9 @@ router.get("/:id", getCompanyById);
  *                   type: string
  *                   example: "Company not found"
  */
-router.put("/:id", validate(updateCompanySchema), updateCompany);
+router.patch("/:id", validate(updateCompanySchema), updateCompany);
 
-/**
- * @swagger
- * /admin/companies/{id}:
- *   delete:
- *     summary: Deactivate a company (soft delete)
- *     description: Sets is_active = false. All users lose login access. Data is not physically deleted. Returns the number of affected users.
- *     tags: [Admin - Companies]
- *     security:
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: Company ID
- *     responses:
- *       200:
- *         description: Company deactivated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: "Company deactivated successfully"
- *                 data:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: integer
- *                       example: 1
- *                     is_active:
- *                       type: boolean
- *                       example: false
- *                     affected_users:
- *                       type: integer
- *                       example: 52
- *       404:
- *         description: Company not found
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: "Company not found"
- *       409:
- *         description: Company is already deactivated
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: "Company is already deactivated"
- *       401:
- *         description: Unauthenticated
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: "Access token is missing"
- *       403:
- *         description: Forbidden
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: "Access denied"
- */
-router.delete("/:id", deactivateCompany);
+// Note: DELETE endpoint removed. Use PATCH /:id with { is_active: false } to deactivate a company.
 
 /**
  * @swagger
@@ -934,10 +814,6 @@ router.delete("/:id", deactivateCompany);
  *                       type: string
  *                       format: date-time
  *                       example: "2026-01-01T00:00:00.000Z"
- *                     updated_at:
- *                       type: string
- *                       format: date-time
- *                       example: "2026-01-01T00:00:00.000Z"
  *                     total_objectives:
  *                       type: integer
  *                       example: 120
@@ -949,6 +825,7 @@ router.delete("/:id", deactivateCompany);
  *                       example: 340
  *                     active_objectives:
  *                       type: integer
+ *                       description: Count of objectives with status 'Active' only
  *                       example: 45
  *                     completion_rate:
  *                       type: number
