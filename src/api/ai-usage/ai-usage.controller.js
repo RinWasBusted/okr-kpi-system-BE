@@ -1,4 +1,4 @@
-import * as aiUsageService from "./ai-usage-service.js";
+import * as aiUsageService from "./ai-usage.service.js";
 import AppError from "../../utils/appError.js";
 
 // Get company AI plan info
