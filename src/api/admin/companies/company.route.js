@@ -8,6 +8,7 @@ import {
     uploadLogo,
     deleteLogo,
     getMyCompany,
+    getCompanyById,
 } from "./company.controller.js";
 import adminCompanyRoutes from "../AdminCompany/adminCompany.route.js";
 import { authenticate, authorize } from "../../../middlewares/auth.js";
@@ -92,8 +93,12 @@ const router = express.Router();
  *                       type: string
  *                       format: date-time
  *                       example: "2026-01-01T00:00:00.000Z"
- *       400:
- *         description: Company ID not found in token
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2026-01-01T00:00:00.000Z"
+ *       401:
+ *         description: Unauthenticated or Company ID not found in token
  *         content:
  *           application/json:
  *             schema:
@@ -105,8 +110,6 @@ const router = express.Router();
  *                 message:
  *                   type: string
  *                   example: "Company ID not found in token"
- *       401:
- *         description: Unauthenticated
  *       403:
  *         description: Forbidden - requires ADMIN_COMPANY role
  *       404:
@@ -140,7 +143,7 @@ router.use("/:company_id/admins", adminCompanyRoutes);
  * /admin/companies:
  *   get:
  *     summary: Get list of companies with pagination and filters
- *     description: Returns a paginated list of companies with optional filters by status or search keyword.
+ *     description: Returns a paginated list of companies with optional filters by status, AI plan, search keyword, and date range. Results can be sorted by various fields.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -151,11 +154,43 @@ router.use("/:company_id/admins", adminCompanyRoutes);
  *           type: boolean
  *         description: "true = active, false = inactive (deactivated)"
  *       - in: query
+ *         name: ai_plan
+ *         schema:
+ *           type: string
+ *           enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
+ *         description: Filter by AI plan type
+ *       - in: query
  *         name: search
  *         schema:
  *           type: string
  *           maxLength: 255
- *         description: Search by name or slug (partial match)
+ *         description: Search by name or slug (partial match, case-insensitive)
+ *       - in: query
+ *         name: from_date
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Filter companies created from this date (ISO 8601)
+ *       - in: query
+ *         name: to_date
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Filter companies created until this date (ISO 8601)
+ *       - in: query
+ *         name: sort_by
+ *         schema:
+ *           type: string
+ *           enum: [name, created_at, updated_at]
+ *           default: created_at
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sort_order
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Sort direction
  *       - in: query
  *         name: page
  *         schema:
@@ -194,9 +229,17 @@ router.use("/:company_id/admins", adminCompanyRoutes);
  *                       slug:
  *                         type: string
  *                         example: "acme-corp"
+ *                       logo_url:
+ *                         type: string
+ *                         nullable: true
+ *                         example: "https://res.cloudinary.com/.../image.jpg"
  *                       is_active:
  *                         type: boolean
  *                         example: true
+ *                       ai_plan:
+ *                         type: string
+ *                         enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
+ *                         example: "FREE"
  *                       admin_count:
  *                         type: integer
  *                         example: 2
@@ -204,6 +247,10 @@ router.use("/:company_id/admins", adminCompanyRoutes);
  *                         type: integer
  *                         example: 50
  *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         example: "2026-01-01T00:00:00.000Z"
+ *                       updated_at:
  *                         type: string
  *                         format: date-time
  *                         example: "2026-01-01T00:00:00.000Z"
@@ -216,6 +263,9 @@ router.use("/:company_id/admins", adminCompanyRoutes);
  *                     page:
  *                       type: integer
  *                       example: 1
+ *                     per_page:
+ *                       type: integer
+ *                       example: 20
  *                     last_page:
  *                       type: integer
  *                       example: 5
@@ -253,7 +303,7 @@ router.get("/", getCompanies);
  * /admin/companies:
  *   post:
  *     summary: Create a new company
- *     description: Creating a new company requires a unique slug. The slug is used as a unique identifier for the company across the platform, especially during login. If the slug already exists, an error will be returned. Optionally upload a logo image file.
+ *     description: Creating a new company requires a unique slug. The slug is used as a unique identifier for the company across the platform, especially during login. Slug format must be lowercase letters, numbers, and hyphens (3-60 characters). Optionally upload a logo image file.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -272,14 +322,20 @@ router.get("/", getCompanies);
  *                 example: "Acme Corp"
  *               slug:
  *                 type: string
- *                 minLength: 1
- *                 maxLength: 255
+ *                 minLength: 3
+ *                 maxLength: 60
+ *                 pattern: ^[a-z0-9-]+$
  *                 example: "acme-corp"
- *                 description: Unique identifier slug across the platform. Used during login.
+ *                 description: Unique identifier slug across the platform. Must contain only lowercase letters, numbers, and hyphens (3-60 characters).
+ *               ai_plan:
+ *                 type: string
+ *                 enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
+ *                 default: FREE
+ *                 description: Optional AI plan type (defaults to FREE)
  *               file:
  *                 type: string
  *                 format: binary
- *                 description: Optional company logo image file
+ *                 description: Optional company logo image file (max 2MB, must be image)
  *     responses:
  *       201:
  *         description: Company created successfully
@@ -311,10 +367,28 @@ router.get("/", getCompanies);
  *                           nullable: true
  *                           example: "okr-kpi-system/companies/logos/1234567890"
  *                           description: Cloudinary public_id or null
+ *                         logo_url:
+ *                           type: string
+ *                           nullable: true
+ *                           example: "https://res.cloudinary.com/.../image.jpg"
  *                         is_active:
  *                           type: boolean
  *                           example: true
+ *                         ai_plan:
+ *                           type: string
+ *                           enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
+ *                           example: "FREE"
+ *                         admin_count:
+ *                           type: integer
+ *                           example: 0
+ *                         employee_count:
+ *                           type: integer
+ *                           example: 0
  *                         created_at:
+ *                           type: string
+ *                           format: date-time
+ *                           example: "2026-01-01T00:00:00.000Z"
+ *                         updated_at:
  *                           type: string
  *                           format: date-time
  *                           example: "2026-01-01T00:00:00.000Z"
@@ -330,7 +404,20 @@ router.get("/", getCompanies);
  *                   example: false
  *                 message:
  *                   type: string
- *                   example: "Slug already exists"
+ *                   example: "Slug already exists on this platform"
+ *       400:
+ *         description: Invalid file format or file too large
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "File must be an image (max 2MB)"
  *       401:
  *         description: Unauthenticated
  *         content:
@@ -358,7 +445,7 @@ router.get("/", getCompanies);
  *                   type: string
  *                   example: "Access denied"
  *       422:
- *         description: Validation error
+ *         description: Validation error (invalid slug format, name too short, etc.)
  *         content:
  *           application/json:
  *             schema:
@@ -369,7 +456,7 @@ router.get("/", getCompanies);
  *                   example: false
  *                 message:
  *                   type: string
- *                   example: "name and slug are required"
+ *                   example: "slug must contain only lowercase letters, numbers, and hyphens"
  */
 router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(createCompanySchema), createCompany);
 
@@ -378,7 +465,7 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(crea
  * /admin/companies/{id}:
  *   put:
  *     summary: Update company information
- *     description: Update company name, slug, or lock/unlock status.
+ *     description: Update company name, slug, activation status, AI plan, or usage limit. Note - token_usage and credit_cost cannot be modified directly via this endpoint; use the AI usage management endpoint instead.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -404,28 +491,20 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(crea
  *                 description: New company name
  *               slug:
  *                 type: string
- *                 minLength: 1
- *                 maxLength: 255
+ *                 minLength: 3
+ *                 maxLength: 60
+ *                 pattern: ^[a-z0-9-]+$
  *                 example: "acme-corporation"
- *                 description: New slug. Must be unique across the platform.
+ *                 description: New slug. Must be unique across the platform and contain only lowercase letters, numbers, and hyphens (3-60 characters).
  *               is_active:
  *                 type: boolean
  *                 example: false
- *                 description: "false = lock the entire company, all users will lose login access"
+ *                 description: "false = deactivate the company, all users will lose login access; true = reactivate"
  *               ai_plan:
  *                 type: string
  *                 enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
  *                 example: "SUBSCRIPTION"
  *                 description: AI plan type for the company
- *               token_usage:
- *                 type: integer
- *                 example: 1500
- *                 description: Current token usage count
- *               credit_cost:
- *                 type: number
- *                 format: float
- *                 example: 0.05
- *                 description: Cost per token credit
  *               usage_limit:
  *                 type: integer
  *                 example: 10000
@@ -441,41 +520,59 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(crea
  *                 success:
  *                   type: boolean
  *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Company updated successfully"
  *                 data:
  *                   type: object
  *                   properties:
- *                     company:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: integer
- *                           example: 1
- *                         name:
- *                           type: string
- *                           example: "Acme Corporation"
- *                         slug:
- *                           type: string
- *                           example: "acme-corp"
- *                         is_active:
- *                           type: boolean
- *                           example: false
- *                         ai_plan:
- *                           type: string
- *                           example: "SUBSCRIPTION"
- *                         token_usage:
- *                           type: integer
- *                           example: 1500
- *                         credit_cost:
- *                           type: number
- *                           format: float
- *                           example: 0.05
- *                         usage_limit:
- *                           type: integer
- *                           example: 10000
- *                         created_at:
- *                           type: string
- *                           format: date-time
- *                           example: "2026-01-01T00:00:00.000Z"
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     name:
+ *                       type: string
+ *                       example: "Acme Corporation"
+ *                     slug:
+ *                       type: string
+ *                       example: "acme-corporation"
+ *                     logo:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "okr-kpi-system/companies/logos/123456"
+ *                     logo_url:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "https://res.cloudinary.com/.../image.jpg"
+ *                     is_active:
+ *                       type: boolean
+ *                       example: true
+ *                     ai_plan:
+ *                       type: string
+ *                       example: "SUBSCRIPTION"
+ *                     token_usage:
+ *                       type: integer
+ *                       example: 1500
+ *                     credit_cost:
+ *                       type: number
+ *                       format: float
+ *                       example: 0.05
+ *                     usage_limit:
+ *                       type: integer
+ *                       example: 10000
+ *                     admin_count:
+ *                       type: integer
+ *                       example: 2
+ *                     employee_count:
+ *                       type: integer
+ *                       example: 50
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2026-01-01T00:00:00.000Z"
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2026-01-01T00:00:00.000Z"
  *       409:
  *         description: Slug already exists on the platform
  *         content:
@@ -488,7 +585,7 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(crea
  *                   example: false
  *                 message:
  *                   type: string
- *                   example: "Slug already exists"
+ *                   example: "Slug already exists on this platform"
  *       404:
  *         description: Company not found
  *         content:
@@ -502,6 +599,19 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(crea
  *                 message:
  *                   type: string
  *                   example: "Company not found"
+ *       422:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "slug must be at least 3 characters"
  *       401:
  *         description: Unauthenticated
  *         content:
@@ -529,14 +639,14 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(crea
  *                   type: string
  *                   example: "Access denied"
  */
-router.put("/:id", validate(updateCompanySchema), updateCompany);
+router.get("/:id", getCompanyById);
 
 /**
  * @swagger
  * /admin/companies/{id}:
- *   delete:
- *     summary: Deactivate a company (soft delete)
- *     description: Sets is_active = false. All users lose login access. Data is not physically deleted.
+ *   get:
+ *     summary: Get company details by ID
+ *     description: Returns detailed information about a specific company by ID. Use /stats endpoint instead if OKR/KPI statistics are needed.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -548,8 +658,95 @@ router.put("/:id", validate(updateCompanySchema), updateCompany);
  *           type: integer
  *         description: Company ID
  *     responses:
- *       204:
- *         description: Company deactivated successfully. No response body is returned.
+ *       200:
+ *         description: Company retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Company retrieved successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     name:
+ *                       type: string
+ *                       example: "Acme Corp"
+ *                     slug:
+ *                       type: string
+ *                       example: "acme-corp"
+ *                     logo:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "okr-kpi-system/companies/logos/123456"
+ *                     logo_url:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "https://res.cloudinary.com/.../image.jpg"
+ *                     is_active:
+ *                       type: boolean
+ *                       example: true
+ *                     ai_plan:
+ *                       type: string
+ *                       example: "FREE"
+ *                     token_usage:
+ *                       type: integer
+ *                       example: 1500
+ *                     credit_cost:
+ *                       type: number
+ *                       format: float
+ *                       example: 0.05
+ *                     usage_limit:
+ *                       type: integer
+ *                       example: 10000
+ *                     admin_count:
+ *                       type: integer
+ *                       example: 2
+ *                     employee_count:
+ *                       type: integer
+ *                       example: 50
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2026-01-01T00:00:00.000Z"
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2026-01-01T00:00:00.000Z"
+ *       401:
+ *         description: Unauthenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Access token is missing"
+ *       403:
+ *         description: Forbidden
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Access denied"
  *       404:
  *         description: Company not found
  *         content:
@@ -563,6 +760,77 @@ router.put("/:id", validate(updateCompanySchema), updateCompany);
  *                 message:
  *                   type: string
  *                   example: "Company not found"
+ */
+router.put("/:id", validate(updateCompanySchema), updateCompany);
+
+/**
+ * @swagger
+ * /admin/companies/{id}:
+ *   delete:
+ *     summary: Deactivate a company (soft delete)
+ *     description: Sets is_active = false. All users lose login access. Data is not physically deleted. Returns the number of affected users.
+ *     tags: [Admin - Companies]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Company ID
+ *     responses:
+ *       200:
+ *         description: Company deactivated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Company deactivated successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     is_active:
+ *                       type: boolean
+ *                       example: false
+ *                     affected_users:
+ *                       type: integer
+ *                       example: 52
+ *       404:
+ *         description: Company not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Company not found"
+ *       409:
+ *         description: Company is already deactivated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Company is already deactivated"
  *       401:
  *         description: Unauthenticated
  *         content:
@@ -596,8 +864,8 @@ router.delete("/:id", deactivateCompany);
  * @swagger
  * /admin/companies/{id}/stats:
  *   get:
- *     summary: Get company details with AI usage info
- *     description: Returns company information including AI plan, token usage, credit cost, and usage limit.
+ *     summary: Get company details with comprehensive statistics
+ *     description: Returns company information including AI plan, token usage, and comprehensive OKR/KPI statistics for the company.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -631,9 +899,6 @@ router.delete("/:id", deactivateCompany);
  *                     slug:
  *                       type: string
  *                       example: "acme-corp"
- *                     is_active:
- *                       type: boolean
- *                       example: true
  *                     logo:
  *                       type: string
  *                       nullable: true
@@ -642,16 +907,9 @@ router.delete("/:id", deactivateCompany);
  *                       type: string
  *                       nullable: true
  *                       example: "https://res.cloudinary.com/.../image.jpg"
- *                     created_at:
- *                       type: string
- *                       format: date-time
- *                       example: "2026-01-01T00:00:00.000Z"
- *                     admin_count:
- *                       type: integer
- *                       example: 2
- *                     employee_count:
- *                       type: integer
- *                       example: 50
+ *                     is_active:
+ *                       type: boolean
+ *                       example: true
  *                     ai_plan:
  *                       type: string
  *                       enum: [FREE, SUBSCRIPTION, PAY_AS_YOU_GO]
@@ -666,9 +924,37 @@ router.delete("/:id", deactivateCompany);
  *                     usage_limit:
  *                       type: integer
  *                       example: 10000
+ *                     admin_count:
+ *                       type: integer
+ *                       example: 2
+ *                     employee_count:
+ *                       type: integer
+ *                       example: 50
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2026-01-01T00:00:00.000Z"
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2026-01-01T00:00:00.000Z"
  *                     total_objectives:
  *                       type: integer
  *                       example: 120
+ *                     total_cycles:
+ *                       type: integer
+ *                       example: 6
+ *                     total_key_results:
+ *                       type: integer
+ *                       example: 340
+ *                     active_objectives:
+ *                       type: integer
+ *                       example: 45
+ *                     completion_rate:
+ *                       type: number
+ *                       format: float
+ *                       description: Completion rate of objectives (0.0 to 1.0)
+ *                       example: 0.72
  *       404:
  *         description: Company not found
  *         content:
@@ -716,7 +1002,7 @@ router.get("/:id/stats", getCompanyStats);
  * /admin/companies/{id}/logo:
  *   patch:
  *     summary: Upload or update company logo
- *     description: Upload a new logo for the company. Logo must be an image file. Send empty request (no file) to delete current logo.
+ *     description: Upload a new logo for the company. Logo must be an image file (max 2MB). To delete a logo, use the DELETE /logo endpoint instead.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -728,19 +1014,20 @@ router.get("/:id/stats", getCompanyStats);
  *           type: integer
  *         description: Company ID
  *     requestBody:
- *       required: false
+ *       required: true
  *       content:
  *         multipart/form-data:
  *           schema:
  *             type: object
+ *             required: [file]
  *             properties:
  *               file:
  *                 type: string
  *                 format: binary
- *                 description: Logo image file (optional - omit to delete current logo)
+ *                 description: Logo image file (required, max 2MB, must be image - jpg, png, gif, webp)
  *     responses:
  *       200:
- *         description: Logo uploaded/deleted successfully
+ *         description: Logo uploaded successfully
  *         content:
  *           application/json:
  *             schema:
@@ -763,17 +1050,64 @@ router.get("/:id/stats", getCompanyStats);
  *                       example: "Acme Corp"
  *                     logo:
  *                       type: string
- *                       nullable: true
  *                       example: "okr-kpi-system/companies/logos/1234567890"
- *                       description: Cloudinary public_id or null
+ *                       description: Cloudinary public_id
+ *                     logo_url:
+ *                       type: string
+ *                       example: "https://res.cloudinary.com/.../image.jpg"
+ *                       description: Full Cloudinary URL for display
  *       400:
- *         description: Invalid company ID
+ *         description: Invalid file format or file too large
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "File must be an image (max 2MB)"
  *       404:
  *         description: Company not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Company not found"
  *       401:
  *         description: Unauthenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Access token is missing"
  *       403:
  *         description: Forbidden
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Access denied"
  */
 router.patch("/:id/logo", wrapMulter(requestContext, uploadSingle("file")), uploadLogo);
 
@@ -782,7 +1116,7 @@ router.patch("/:id/logo", wrapMulter(requestContext, uploadSingle("file")), uplo
  * /admin/companies/{id}/logo:
  *   delete:
  *     summary: Delete company logo
- *     description: Remove the logo from a company.
+ *     description: Delete the company's logo. This operation is idempotent - returns 200 whether logo exists or not.
  *     tags: [Admin - Companies]
  *     security:
  *       - cookieAuth: []
@@ -795,7 +1129,7 @@ router.patch("/:id/logo", wrapMulter(requestContext, uploadSingle("file")), uplo
  *         description: Company ID
  *     responses:
  *       200:
- *         description: Logo deleted successfully
+ *         description: Logo deleted successfully (or was already deleted)
  *         content:
  *           application/json:
  *             schema:
@@ -820,14 +1154,51 @@ router.patch("/:id/logo", wrapMulter(requestContext, uploadSingle("file")), uplo
  *                       type: string
  *                       nullable: true
  *                       example: null
- *       400:
- *         description: Invalid company ID
+ *                       description: Always null after deletion
+ *                     logo_url:
+ *                       type: string
+ *                       nullable: true
+ *                       example: null
+ *                       description: Always null after deletion
  *       404:
  *         description: Company not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Company not found"
  *       401:
  *         description: Unauthenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Access token is missing"
  *       403:
  *         description: Forbidden
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Access denied"
  */
 router.delete("/:id/logo", deleteLogo);
 
