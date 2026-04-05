@@ -90,15 +90,11 @@ const objectiveBaseSelect = {
     visibility: true,
     progress_percentage: true,
     cycle_id: true,
-    unit_id: true,
-    owner_id: true,
-    parent_objective_id: true,
     created_at: true,
     cycle: { select: { id: true, name: true, start_date: true, end_date: true } },
     owner: { select: ownerSelect },
     unit: { select: unitSelect },
     parent_objective: { select: { id: true, title: true } },
-    approver: { select: { id: true, full_name: true, email: true, avatar_url: true } },
 };
 
 const keyResultSelect = {
@@ -134,7 +130,19 @@ const calculateProgressStatus = (progress) => {
     return "DANGER";
 };
 
-const formatObjective = (objective, includeKeyResults = false) => {
+// Helper to calculate permission for an objective
+const calculateObjectivePermission = async (user, objective) => {
+    const canEdit = await canEditObjective(user, objective);
+    const canApprove = await canApproveObjective(user, objective);
+    return {
+        view: true, // If user can see it in list, they can view
+        edit: canEdit,
+        approve: canApprove,
+        delete: canEdit, // Same as edit permission
+    };
+};
+
+const formatObjective = (objective, includeKeyResults = false, permission = null) => {
     const now = new Date();
     const formatUserAvatar = (user) => {
         if (!user) return null;
@@ -153,14 +161,11 @@ const formatObjective = (objective, includeKeyResults = false) => {
         progress_percentage: objective.progress_percentage,
         progress_status: calculateProgressStatus(objective.progress_percentage),
         cycle: objective.cycle ?? null,
-        unit_id: objective.unit_id,
-        owner_id: objective.owner_id,
-        parent_objective_id: objective.parent_objective_id,
         created_at: objective.created_at,
         owner: formatUserAvatar(objective.owner),
         unit: objective.unit ?? null,
         parent_objective: objective.parent_objective ?? null,
-        approved_by: formatUserAvatar(objective.approver),
+        ...(permission && { permission }),
         ...(includeKeyResults && {
             key_results: (objective.key_results || []).map((kr) => formatKeyResult(kr, now)),
         }),
@@ -338,8 +343,17 @@ export const listObjectives = async ({
         select,
     });
 
-    let formattedObjectives = allObjectives.map((objective) =>
-        formatObjective(objective, include_key_results)
+    // Calculate permissions for each objective
+    const objectivesWithPermission = await Promise.all(
+        allObjectives.map(async (objective) => {
+            objective.access_path = objective.access_path ?? await getObjectiveAccessPath(objective.id);
+            const permission = await calculateObjectivePermission(user, objective);
+            return { objective, permission };
+        })
+    );
+
+    let formattedObjectives = objectivesWithPermission.map(({ objective, permission }) =>
+        formatObjective(objective, include_key_results, permission)
     );
 
     // Filter by progress_status if provided

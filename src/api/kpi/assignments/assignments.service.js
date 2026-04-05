@@ -56,7 +56,17 @@ const assignmentSelect = {
     cycle_id: true,
 };
 
-const formatAssignment = async (assignment) => {
+// Helper to calculate permission for a KPI assignment
+const calculateAssignmentPermission = async (user, assignment) => {
+    const canEdit = await canUpdateKPIAssignment(user, assignment);
+    return {
+        view: true, // If user can see it in list, they can view
+        edit: canEdit,
+        delete: canEdit,
+    };
+};
+
+const formatAssignment = async (assignment, user = null) => {
     const [dictionary, owner, unit, parentAssignment, latestRecord, cycle] = await Promise.all([
         prisma.kPIDictionaries.findUnique({
             where: { id: assignment.kpi_dictionary_id },
@@ -93,7 +103,10 @@ const formatAssignment = async (assignment) => {
             : null,
     ]);
 
-    return {
+    // Calculate permission if user is provided
+    const permission = user ? await calculateAssignmentPermission(user, assignment) : null;
+
+    const result = {
         id: assignment.id,
         kpi_dictionary: dictionary,
         target_value: assignment.target_value,
@@ -108,6 +121,12 @@ const formatAssignment = async (assignment) => {
         parent_assignment: parentAssignment,
         latest_record: latestRecord,
     };
+
+    if (permission) {
+        result.permission = permission;
+    }
+
+    return result;
 };
 
 const canViewAssignment = async (user, assignment) => {
@@ -409,7 +428,7 @@ export const listKPIAssignments = async (user, filters, mode = "tree") => {
                 ...a,
                 access_path: pathResult[0]?.access_path || null,
             };
-            return await formatAssignment(assignmentWithPath);
+            return await formatAssignment(assignmentWithPath, user);
         })
     );
 
