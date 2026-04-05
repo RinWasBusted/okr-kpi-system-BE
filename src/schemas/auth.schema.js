@@ -4,10 +4,6 @@ export const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters long' }),
   company_slug: z.string().optional(),
-  device_info: z.object({
-    name: z.string().optional(),
-    fingerprint: z.string().optional(),
-  }).optional(),
   remember_me: z.boolean().optional(),
 });
 
