@@ -12,6 +12,7 @@ import { validate } from "../../../middlewares/validate.js";
 import {
     createKPIAssignmentSchema,
     updateKPIAssignmentSchema,
+    listKPIAssignmentsQuerySchema,
 } from "../../../schemas/kpi.schema.js";
 
 const router = express.Router();
@@ -163,6 +164,16 @@ router.use(authenticate);
  *                       latest_record:
  *                         type: object
  *                         nullable: true
+ *                       permission:
+ *                         type: object
+ *                         description: User permissions for this KPI assignment
+ *                         properties:
+ *                           view:
+ *                             type: boolean
+ *                           edit:
+ *                             type: boolean
+ *                           delete:
+ *                             type: boolean
  *                 meta:
  *                   type: object
  *                   properties:
@@ -175,7 +186,7 @@ router.use(authenticate);
  *                     last_page:
  *                       type: integer
  */
-router.get("/kpi-assignments", getKPIAssignments);
+router.get("/kpi-assignments", validate(listKPIAssignmentsQuerySchema, "query"), getKPIAssignments);
 
 /**
  * @swagger
@@ -314,6 +325,16 @@ router.get("/kpi-assignments/available-parents", getAvailableParentKPIs);
  *                           type: object
  *                         latest_record:
  *                           type: object
+ *                         permission:
+ *                           type: object
+ *                           description: User permissions for this KPI assignment
+ *                           properties:
+ *                             view:
+ *                               type: boolean
+ *                             edit:
+ *                               type: boolean
+ *                             delete:
+ *                               type: boolean
  *       400:
  *         description: Invalid assignment ID
  *       403:

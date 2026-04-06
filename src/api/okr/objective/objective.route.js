@@ -157,6 +157,22 @@ router.use(authenticate);
  *                       parent_objective:
  *                         type: object
  *                         nullable: true
+ *                       permission:
+ *                         type: object
+ *                         description: User permissions for this objective
+ *                         properties:
+ *                           view:
+ *                             type: boolean
+ *                           edit:
+ *                             type: boolean
+ *                           submit:
+ *                             type: boolean
+ *                           approve:
+ *                             type: boolean
+ *                           reject:
+ *                             type: boolean
+ *                           delete:
+ *                             type: boolean
  *                 meta:
  *                   type: object
  *                   properties:
@@ -227,6 +243,22 @@ router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjec
  *                           type: object
  *                         key_results:
  *                           type: array
+ *                         permission:
+ *                           type: object
+ *                           description: User permissions for this objective
+ *                           properties:
+ *                             view:
+ *                               type: boolean
+ *                             edit:
+ *                               type: boolean
+ *                             submit:
+ *                               type: boolean
+ *                             approve:
+ *                               type: boolean
+ *                             reject:
+ *                               type: boolean
+ *                             delete:
+ *                               type: boolean
  *       400:
  *         description: Invalid objective ID
  *       403:

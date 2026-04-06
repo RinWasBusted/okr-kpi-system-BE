@@ -14,6 +14,7 @@ import {
     getUnitPath,
     isAncestorUnit,
     getUnitAncestors,
+    isUnitManager,
 } from "../../../utils/path.js";
 
 // Visibility hierarchy: PUBLIC (1) < INTERNAL (2) < PRIVATE (3)
@@ -136,18 +137,80 @@ const calculateProgressStatus = (progress) => {
     return "DANGER";
 };
 
-const formatObjective = (objective, includeKeyResults = false) => {
+// Calculate permissions for an objective based on user and objective state
+const calculateObjectivePermissions = async (user, objective) => {
+    const permissions = {
+        view: false,
+        edit: false,
+        submit: false,
+        approve: false,
+        reject: false,
+        delete: false,
+    };
+
+    if (!objective || !user) return permissions;
+
+    // ADMIN_COMPANY has all permissions
+    if (user.role === UserRole.ADMIN_COMPANY) {
+        permissions.view = true;
+        permissions.edit = true;
+        permissions.submit = true;
+        permissions.approve = true;
+        permissions.reject = true;
+        permissions.delete = true;
+        return permissions;
+    }
+
+    // Check view permission
+    const canView = await canViewObjective(user, objective);
+    permissions.view = canView;
+
+    if (!canView) return permissions;
+
+    // Edit permission: owner or unit manager
+    const isOwner = objective.owner_id && objective.owner_id === user.id;
+    const isUnitManager = objective.unit_id && await isUnitManager(user.id, objective.unit_id);
+    const canEdit = isOwner || isUnitManager;
+    permissions.edit = canEdit;
+
+    // Submit permission: can edit and status is Draft or Rejected
+    const canSubmitStatuses = ["Draft", "Rejected"];
+    permissions.submit = canEdit && canSubmitStatuses.includes(objective.status);
+
+    // Approve/Reject permission: from ancestor unit (not same unit)
+    let canApproveReject = false;
+    if (user.unit_id) {
+        const userPath = await getUnitPath(user.unit_id);
+        const objectivePath = objective.access_path ?? (objective.id ? await getObjectiveAccessPath(objective.id) : null);
+        if (userPath && objectivePath) {
+            canApproveReject = objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath);
+        }
+    }
+    permissions.approve = canApproveReject && objective.status === "Pending_Approval";
+    permissions.reject = canApproveReject && objective.status === "Pending_Approval";
+
+    // Delete permission: same as edit
+    permissions.delete = canEdit;
+
+    return permissions;
+};
+
+const formatObjective = async (objective, includeKeyResults = false, user = null) => {
     const now = new Date();
-    const formatUserAvatar = (user) => {
-        if (!user) return null;
+    const formatUserAvatar = (userData) => {
+        if (!userData) return null;
         return {
-            ...user,
-            avatar_url: user.avatar_url
-                ? getCloudinaryImageUrl(user.avatar_url, 50, 50, "fill")
+            ...userData,
+            avatar_url: userData.avatar_url
+                ? getCloudinaryImageUrl(userData.avatar_url, 50, 50, "fill")
                 : null,
         };
     };
-    return {
+
+    // Calculate permissions if user is provided
+    const permissions = user ? await calculateObjectivePermissions(user, objective) : null;
+
+    const result = {
         id: objective.id,
         title: objective.title,
         description: objective.description ?? null,
@@ -168,6 +231,12 @@ const formatObjective = (objective, includeKeyResults = false) => {
             key_results: (objective.key_results || []).map((kr) => formatKeyResult(kr, now)),
         }),
     };
+
+    if (permissions) {
+        result.permission = permissions;
+    }
+
+    return result;
 };
 
 const getVisibleObjectiveIds = async (user) => {
@@ -323,8 +392,8 @@ export const listObjectives = async ({
         select,
     });
 
-    let formattedObjectives = allObjectives.map((objective) =>
-        formatObjective(objective, include_key_results)
+    let formattedObjectives = await Promise.all(
+        allObjectives.map((objective) => formatObjective(objective, include_key_results, user))
     );
 
     // Filter by progress_status if provided
@@ -496,7 +565,7 @@ export const createObjective = async (user, payload) => {
         select: objectiveBaseSelect,
     });
 
-    return formatObjective(objective);
+    return await formatObjective(objective, false, user);
 };
 
 export const updateObjective = async (user, objectiveId, updates) => {
@@ -569,7 +638,7 @@ export const updateObjective = async (user, objectiveId, updates) => {
         select: objectiveBaseSelect,
     });
 
-    return formatObjective(updated);
+    return await formatObjective(updated, false, user);
 };
 
 export const submitObjective = async (user, objectiveId) => {
@@ -589,7 +658,7 @@ export const submitObjective = async (user, objectiveId) => {
         select: objectiveBaseSelect,
     });
 
-    return formatObjective(updated);
+    return await formatObjective(updated, false, user);
 };
 
 export const approveObjective = async (user, objectiveId, updates) => {
@@ -658,7 +727,7 @@ export const approveObjective = async (user, objectiveId, updates) => {
 
     await recalculateObjectiveProgress(objectiveId);
 
-    return formatObjective(updated);
+    return await formatObjective(updated, false, user);
 };
 
 export const rejectObjective = async (user, objectiveId, comment) => {
@@ -692,7 +761,7 @@ export const rejectObjective = async (user, objectiveId, comment) => {
         });
     }
 
-    return formatObjective(updated);
+    return await formatObjective(updated, false, user);
 };
 
 export const ensureObjectiveVisible = async (user, objectiveId) => {
@@ -722,7 +791,7 @@ export const getObjectiveById = async (user, objectiveId) => {
         throw new AppError("You do not have permission to view this objective", 403);
     }
 
-    return formatObjective(objective, true);
+    return await formatObjective(objective, true, user);
 };
 
 export const deleteObjective = async (user, objectiveId) => {
@@ -829,8 +898,8 @@ export const getAvailableParentObjectives = async (user, unitId, cycleId, includ
     });
 
     // Group objectives by unit for better organization in response
-    const formattedObjectives = visibleObjectives.map((objective) =>
-        formatObjective(objective, includeKeyResults)
+    const formattedObjectives = await Promise.all(
+        visibleObjectives.map((objective) => formatObjective(objective, includeKeyResults, user))
     );
 
     // Group by unit

@@ -21,33 +21,36 @@ const parseNumber = (value) => {
     return parsed;
 };
 
-const parseMode = (value) => {
-    if (value === undefined || value === null || value === "") return "tree";
-    const lower = String(value).toLowerCase();
-    if (["tree", "list"].includes(lower)) return lower;
-    return "tree";
-};
-
 // GET /kpi-assignments
 export const getKPIAssignments = async (req, res) => {
     try {
+        const {
+            cycle_id,
+            unit_id,
+            owner_id,
+            visibility,
+            parent_assignment_id,
+            progress_status,
+            kpi_status,
+            status,
+            page,
+            per_page,
+            mode,
+        } = req.validated.query;
+
         const filters = {
-            cycle_id: parseOptionalInt(req.query.cycle_id),
-            unit_id: parseOptionalInt(req.query.unit_id),
-            owner_id: parseOptionalInt(req.query.owner_id),
-            visibility: req.query.visibility,
-            parent_assignment_id:
-                req.query.parent_assignment_id === "null"
-                    ? null
-                    : parseOptionalInt(req.query.parent_assignment_id),
-            progress_status: req.query.progress_status,
-            kpi_status: req.query.kpi_status,
-            status: req.query.status || "active",
-            page: parsePositiveInt(req.query.page, 1),
-            per_page: parsePositiveInt(req.query.per_page, 20),
+            cycle_id,
+            unit_id,
+            owner_id,
+            visibility,
+            parent_assignment_id: parent_assignment_id === "null" ? null : parent_assignment_id,
+            progress_status,
+            kpi_status,
+            status: status || "active",
+            page,
+            per_page,
         };
 
-        const mode = parseMode(req.query.mode);
         const data = await assignmentsService.listKPIAssignments(req.user, filters, mode);
         res.success("KPI Assignments retrieved successfully", 200, data.data, data.meta);
     } catch (error) {

@@ -43,6 +43,78 @@ const calculateProgressStatus = (progress) => {
     return "CRITICAL";
 };
 
+// Calculate permissions for a KPI assignment based on user
+const calculateAssignmentPermissions = async (user, assignment) => {
+    const permissions = {
+        view: false,
+        edit: false,
+        delete: false,
+    };
+
+    if (!assignment || !user) return permissions;
+
+    // ADMIN_COMPANY has all permissions
+    if (user.role === UserRole.ADMIN_COMPANY) {
+        permissions.view = true;
+        permissions.edit = true;
+        permissions.delete = true;
+        return permissions;
+    }
+
+    // Check view permission using existing logic
+    const canView = await canViewAssignment(user, assignment);
+    permissions.view = canView;
+
+    if (!canView) return permissions;
+
+    // Edit/Delete permission: from ancestor unit (not same unit) OR is manager
+    let canEditDelete = false;
+
+    // Check if user is from ancestor unit (not same unit)
+    if (assignment.unit_id && user.unit_id) {
+        if (user.unit_id !== assignment.unit_id && await isAncestorUnit(user.unit_id, assignment.unit_id)) {
+            canEditDelete = true;
+        }
+    }
+
+    // Check if user is manager of the unit
+    if (!canEditDelete && assignment.unit_id) {
+        const unit = await prisma.units.findUnique({
+            where: { id: assignment.unit_id },
+            select: { manager_id: true },
+        });
+        if (unit?.manager_id === user.id) {
+            canEditDelete = true;
+        }
+    }
+
+    // For user assignment, check if user is from ancestor of owner's unit
+    if (!canEditDelete && assignment.owner_id) {
+        const owner = await prisma.users.findUnique({
+            where: { id: assignment.owner_id },
+            select: { unit_id: true },
+        });
+        if (owner?.unit_id && user.unit_id) {
+            if (user.unit_id !== owner.unit_id && await isAncestorUnit(user.unit_id, owner.unit_id)) {
+                canEditDelete = true;
+            }
+            // Check if user is manager of owner's unit
+            const ownerUnit = await prisma.units.findUnique({
+                where: { id: owner.unit_id },
+                select: { manager_id: true },
+            });
+            if (ownerUnit?.manager_id === user.id) {
+                canEditDelete = true;
+            }
+        }
+    }
+
+    permissions.edit = canEditDelete;
+    permissions.delete = canEditDelete;
+
+    return permissions;
+};
+
 const assignmentSelect = {
     id: true,
     kpi_dictionary_id: true,
@@ -56,7 +128,7 @@ const assignmentSelect = {
     cycle_id: true,
 };
 
-const formatAssignment = async (assignment) => {
+const formatAssignment = async (assignment, user = null) => {
     const [dictionary, owner, unit, parentAssignment, latestRecord, cycle] = await Promise.all([
         prisma.kPIDictionaries.findUnique({
             where: { id: assignment.kpi_dictionary_id },
@@ -93,7 +165,10 @@ const formatAssignment = async (assignment) => {
             : null,
     ]);
 
-    return {
+    // Calculate permissions if user is provided
+    const permissions = user ? await calculateAssignmentPermissions(user, assignment) : null;
+
+    const result = {
         id: assignment.id,
         kpi_dictionary: dictionary,
         target_value: assignment.target_value,
@@ -108,6 +183,12 @@ const formatAssignment = async (assignment) => {
         parent_assignment: parentAssignment,
         latest_record: latestRecord,
     };
+
+    if (permissions) {
+        result.permission = permissions;
+    }
+
+    return result;
 };
 
 const canViewAssignment = async (user, assignment) => {
@@ -409,7 +490,7 @@ export const listKPIAssignments = async (user, filters, mode = "tree") => {
                 ...a,
                 access_path: pathResult[0]?.access_path || null,
             };
-            return await formatAssignment(assignmentWithPath);
+            return await formatAssignment(assignmentWithPath, user);
         })
     );
 
@@ -616,7 +697,7 @@ export const createKPIAssignment = async (user, payload) => {
             created_at
     `;
 
-    const result = await formatAssignment(created[0]);
+    const result = await formatAssignment(created[0], user);
 
     // If parent_assignment_id is provided, recalculate parent's current_value
     if (payload.parent_assignment_id) {
@@ -728,7 +809,7 @@ export const updateKPIAssignment = async (user, assignmentId, payload) => {
         access_path: pathResult[0]?.access_path || null,
     };
 
-    return await formatAssignment(updatedWithPath);
+    return await formatAssignment(updatedWithPath, user);
 };
 
 export const deleteKPIAssignment = async (user, assignmentId, cascade = false) => {
@@ -805,7 +886,7 @@ export const getKPIAssignmentById = async (user, assignmentId) => {
         throw new AppError("You do not have permission to view this KPI assignment", 403);
     }
 
-    return await formatAssignment(assignmentWithPath);
+    return await formatAssignment(assignmentWithPath, user);
 };
 
 /**
@@ -910,7 +991,7 @@ export const getAvailableParentKPIs = async (user, unitId, kpiDictionaryId) => {
                 ...a,
                 access_path: pathResult[0]?.access_path || null,
             };
-            return await formatAssignment(assignmentWithPath);
+            return await formatAssignment(assignmentWithPath, user);
         })
     );
 
