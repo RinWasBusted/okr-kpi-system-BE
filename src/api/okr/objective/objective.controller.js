@@ -197,6 +197,39 @@ export const approveObjective = async (req, res) => {
     }
 };
 
+// PATCH /objectives/:id/publish - Publish Draft objective directly to Active
+export const publishObjective = async (req, res) => {
+    try {
+        const objectiveId = parsePositiveInt(req.params.id, null);
+        if (!objectiveId) throw new AppError("Invalid objective ID", 400);
+
+        const { title, parent_objective_id, visibility, description } = req.validated.body || {};
+        const updates = {};
+
+        if (title !== undefined) {
+            updates.title = title.trim();
+        }
+
+        if (description !== undefined) {
+            updates.description = description ? description.trim() : null;
+        }
+
+        if (parent_objective_id !== undefined) {
+            updates.parent_objective_id = parent_objective_id;
+        }
+
+        if (visibility !== undefined) {
+            updates.visibility = visibility;
+        }
+
+        const objective = await objectiveService.publishObjective(req.user, objectiveId, updates);
+
+        res.success("Objective published successfully", 200, { objective });
+    } catch (error) {
+        throw error;
+    }
+};
+
 // POST /objectives/:id/reject
 export const rejectObjective = async (req, res) => {
     try {

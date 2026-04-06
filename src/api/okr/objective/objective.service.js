@@ -730,6 +730,78 @@ export const approveObjective = async (user, objectiveId, updates) => {
     return await formatObjective(updated, false, user);
 };
 
+// Publish/Activate objective directly from Draft to Active (bypass approval workflow)
+// For admin or high-level managers
+export const publishObjective = async (user, objectiveId, updates = {}) => {
+    const objective = await getObjectiveOrThrow(objectiveId);
+
+    // Only admin or managers with approval permission can publish directly
+    if (!await canApproveObjective(user, objective)) {
+        throw new AppError("You do not have permission to publish this objective", 403);
+    }
+
+    // Must be in Draft status to publish directly
+    if (objective.status !== "Draft") {
+        throw new AppError("Only Draft objectives can be published directly. Use approve endpoint for Pending_Approval objectives.", 400);
+    }
+
+    // Validate parent objective and visibility if provided
+    if (updates.parent_objective_id !== undefined && updates.parent_objective_id !== null) {
+        if (updates.parent_objective_id === objectiveId) {
+            throw new AppError("Objective cannot be its own parent", 400);
+        }
+        const parent = await prisma.objectives.findFirst({
+            where: { id: updates.parent_objective_id },
+            select: { id: true, visibility: true },
+        });
+        if (!parent) throw new AppError("Parent objective not found", 404);
+
+        const childVisibility = updates.visibility !== undefined ? updates.visibility : objective.visibility;
+        if (!validateChildVisibility(childVisibility, parent.visibility)) {
+            throw new AppError(
+                `Child objective visibility (${childVisibility}) cannot be more public than parent visibility (${parent.visibility})`,
+                422
+            );
+        }
+    } else if (objective.parent_objective_id && updates.visibility !== undefined) {
+        const parent = await prisma.objectives.findFirst({
+            where: { id: objective.parent_objective_id },
+            select: { id: true, visibility: true },
+        });
+        if (parent && !validateChildVisibility(updates.visibility, parent.visibility)) {
+            throw new AppError(
+                `Child objective visibility (${updates.visibility}) cannot be more public than parent visibility (${parent.visibility})`,
+                422
+            );
+        }
+    }
+
+    // Validate PRIVATE visibility requires owner_id
+    const finalVisibility = updates.visibility !== undefined ? updates.visibility : objective.visibility;
+    if (finalVisibility === "PRIVATE" && !objective.owner_id) {
+        throw new AppError("owner_id is required for PRIVATE objectives", 422);
+    }
+
+    const updated = await prisma.objectives.update({
+        where: { id: objectiveId },
+        data: {
+            ...(updates.title !== undefined && { title: updates.title }),
+            ...(updates.description !== undefined && { description: updates.description ?? null }),
+            ...(updates.parent_objective_id !== undefined && {
+                parent_objective_id: updates.parent_objective_id,
+            }),
+            ...(updates.visibility !== undefined && { visibility: updates.visibility }),
+            status: "Active",
+            approved_by: user.id,
+        },
+        select: objectiveBaseSelect,
+    });
+
+    await recalculateObjectiveProgress(objectiveId);
+
+    return await formatObjective(updated, false, user);
+};
+
 export const rejectObjective = async (user, objectiveId, comment) => {
     const objective = await getObjectiveOrThrow(objectiveId);
 

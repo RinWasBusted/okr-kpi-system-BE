@@ -6,11 +6,26 @@
 export const validate = (schema, source = "body") => {
     return async (req, res, next) => {
         try {
-            const data = req[source];
+            // Use Object.getOwnPropertyDescriptor to safely read without triggering getter-only errors
+            const data = source === "query"
+                ? { ...req.query }  // Clone query object to avoid getter issues
+                : source === "params"
+                    ? { ...req.params }  // Clone params as well for consistency
+                    : req.body;
+
             const validData = await schema.parseAsync(data);
-            
-            if(!req.validated) req.validated = {};
-            req.validated[source] = validData; 
+
+            // Initialize validated container if not exists
+            if (!req.validated) {
+                Object.defineProperty(req, "validated", {
+                    value: {},
+                    writable: true,
+                    configurable: true,
+                });
+            }
+
+            // Store validated data - never try to overwrite req.query/req.params directly
+            req.validated[source] = validData;
 
             next();
         } catch (error) {
