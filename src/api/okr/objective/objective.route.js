@@ -9,6 +9,7 @@ import {
     deleteObjective,
     getAvailableParentObjectives,
     getObjectiveById,
+    publishObjective,
 } from "./objective.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
 import { validate } from "../../../middlewares/validate.js";
@@ -531,6 +532,60 @@ router.post("/objectives/:id/submit", submitObjective);
  *         description: Validation error (e.g., child visibility more public than parent)
  */
 router.post("/objectives/:id/approve", approveObjective);
+
+/**
+ * @swagger
+ * /objectives/{id}/publish:
+ *   patch:
+ *     summary: Publish objective (Draft → Active)
+ *     description: |
+ *       Publish a Draft objective directly to Active status.
+ *       This bypasses the Pending_Approval workflow for admin/high-level users.
+ *       Only users with approval permission (ADMIN_COMPANY or unit managers) can publish.
+ *       Can optionally update title, parent, or visibility during publish.
+ *     tags: [Objectives]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
+ *                 description: Objective title (1-255 characters)
+ *               parent_objective_id:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: Set parent objective (child visibility must be >= parent visibility)
+ *               visibility:
+ *                 type: string
+ *                 enum: [PUBLIC, INTERNAL, PRIVATE]
+ *                 description: |
+ *                   Visibility level (must be >= parent visibility if parent changes)
+ *                   - PUBLIC (1) < INTERNAL (2) < PRIVATE (3)
+ *               description:
+ *                 type: string
+ *                 maxLength: 1000
+ *                 description: Optional description for the objective (max 1000 characters)
+ *     responses:
+ *       200:
+ *         description: Objective published successfully
+ *       400:
+ *         description: Objective not in Draft status or invalid parent
+ *       403:
+ *         description: No permission to publish
+ *       422:
+ *         description: Validation error (e.g., child visibility more public than parent)
+ */
+router.patch("/objectives/:id/publish", publishObjective);
 
 /**
  * @swagger

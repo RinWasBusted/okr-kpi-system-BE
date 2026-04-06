@@ -40,13 +40,13 @@ export const updateKPIDictionarySchema = z.object({
 
 // KPI Assignment schemas
 export const createKPIAssignmentSchema = z.object({
-    kpi_dictionary_id: z.number().int().positive("kpi_dictionary_id is required"),
-    cycle_id: z.number().int().positive("cycle_id is required"),
-    target_value: z.number().positive("target_value must be positive"),
-    current_value: z.number().min(0).default(0),
-    unit_id: z.number().int().positive().nullable().optional(),
-    owner_id: z.number().int().positive().nullable().optional(),
-    parent_assignment_id: z.number().int().positive().nullable().optional(),
+    kpi_dictionary_id: z.coerce.number().int().positive("kpi_dictionary_id is required"),
+    cycle_id: z.coerce.number().int().positive("cycle_id is required"),
+    target_value: z.coerce.number().positive("target_value must be positive"),
+    current_value: z.coerce.number().min(0).default(0),
+    unit_id: z.coerce.number().int().positive().nullable().optional(),
+    owner_id: z.coerce.number().int().positive().nullable().optional(),
+    parent_assignment_id: z.coerce.number().int().positive().nullable().optional(),
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
 }).refine(
     (data) => (data.unit_id && !data.owner_id) || (!data.unit_id && data.owner_id),
@@ -56,9 +56,9 @@ export const createKPIAssignmentSchema = z.object({
 );
 
 export const updateKPIAssignmentSchema = z.object({
-    cycle_id: z.number().int().positive().optional(),
-    target_value: z.number().positive().optional(),
-    current_value: z.number().min(0).optional(),
+    cycle_id: z.coerce.number().int().positive().optional(),
+    target_value: z.coerce.number().positive().optional(),
+    current_value: z.coerce.number().min(0).optional(),
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
@@ -70,13 +70,13 @@ export const createKeyResultSchema = z.object({
         .string()
         .min(LIMITS.title.min, "title is required")
         .max(LIMITS.title.max, `title must not exceed ${LIMITS.title.max} characters`),
-    target_value: z.number().positive("target_value must be positive"),
-    current_value: z.number().min(0).default(0),
+    target_value: z.coerce.number().positive("target_value must be positive"),
+    current_value: z.coerce.number().min(0).default(0),
     unit: z
         .string()
         .min(LIMITS.unit.min, "unit is required")
         .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`),
-    weight: z.number().min(0).max(100).default(100),
+    weight: z.coerce.number().min(0).max(100).default(100),
     due_date: z.string().datetime().optional(),
 });
 
@@ -86,13 +86,13 @@ export const updateKeyResultSchema = z.object({
         .min(LIMITS.title.min, "title cannot be empty")
         .max(LIMITS.title.max, `title must not exceed ${LIMITS.title.max} characters`)
         .optional(),
-    target_value: z.number().positive().optional(),
+    target_value: z.coerce.number().positive().optional(),
     unit: z
         .string()
         .min(LIMITS.unit.min)
         .max(LIMITS.unit.max)
         .optional(),
-    weight: z.number().min(0).max(100).optional(),
+    weight: z.coerce.number().min(0).max(100).optional(),
     due_date: z.string().datetime().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
@@ -107,12 +107,12 @@ export const kpiAssignmentIdSchema = z.object({
 export const createKPIRecordSchema = z.object({
     period_start: z.string().datetime(),
     period_end: z.string().datetime(),
-    actual_value: z.number().min(0),
+    actual_value: z.coerce.number().min(0),
 });
 
 // CheckIn schemas
 export const createCheckInSchema = z.object({
-    achieved_value: z.number(),
+    achieved_value: z.coerce.number(),
     evidence_url: z.string().url("evidence_url must be a valid URL").max(2048, "evidence_url must not exceed 2048 characters"),
     comment: z.string().max(1000).optional(),
 });
