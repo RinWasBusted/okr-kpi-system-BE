@@ -190,21 +190,36 @@ router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjec
 
 /**
  * @swagger
- * /objectives/{id}:
+ * /objectives/available-parents:
  *   get:
- *     summary: Get objective details by ID
- *     description: Retrieve a single objective with its key results. User must have permission to view the objective based on visibility rules.
+ *     summary: Get available parent objectives for a unit
+ *     description: |
+ *       Retrieve objectives that can be set as parent for a new objective in the specified unit.
+ *       Returns objectives from the specified unit and all its ancestor units.
+ *       Only includes objectives with status "Active" or "Completed".
+ *       Results are filtered by visibility permissions.
  *     tags: [Objectives]
  *     parameters:
- *       - in: path
- *         name: id
+ *       - in: query
+ *         name: unit_id
  *         required: true
  *         schema:
  *           type: integer
- *         description: Objective ID
+ *         description: The unit ID for which to find available parent objectives
+ *       - in: query
+ *         name: cycle_id
+ *         schema:
+ *           type: integer
+ *         description: Optional - filter by cycle
+ *       - in: query
+ *         name: include_key_results
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Include associated key results in response
  *     responses:
  *       200:
- *         description: Objective retrieved successfully
+ *         description: Available parent objectives retrieved successfully
  *         content:
  *           application/json:
  *             schema:
@@ -215,60 +230,45 @@ router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjec
  *                 message:
  *                   type: string
  *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       unit:
+ *                         type: object
+ *                         nullable: true
+ *                       objectives:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             title:
+ *                               type: string
+ *                             status:
+ *                               type: string
+ *                             visibility:
+ *                               type: string
+ *                             progress_percentage:
+ *                               type: number
+ *                 meta:
  *                   type: object
  *                   properties:
- *                     objective:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: integer
- *                         title:
- *                           type: string
- *                         description:
- *                           type: string
- *                         status:
- *                           type: string
- *                         visibility:
- *                           type: string
- *                         progress_percentage:
- *                           type: number
- *                         progress_status:
- *                           type: string
- *                         cycle:
- *                           type: object
- *                         owner:
- *                           type: object
- *                         unit:
- *                           type: object
- *                         parent_objective:
- *                           type: object
- *                         key_results:
- *                           type: array
- *                         permission:
- *                           type: object
- *                           description: User permissions for this objective
- *                           properties:
- *                             view:
- *                               type: boolean
- *                             edit:
- *                               type: boolean
- *                             submit:
- *                               type: boolean
- *                             approve:
- *                               type: boolean
- *                             reject:
- *                               type: boolean
- *                             delete:
- *                               type: boolean
+ *                     unit_id:
+ *                       type: integer
+ *                     unit_ids_searched:
+ *                       type: array
+ *                       items:
+ *                         type: integer
+ *                     total:
+ *                       type: integer
  *       400:
- *         description: Invalid objective ID
- *       403:
- *         description: No permission to view this objective
+ *         description: Invalid unit_id
  *       404:
- *         description: Objective not found
+ *         description: Unit not found
  */
-router.get("/objectives/:id", getObjectiveById);
-
+router.get("/objectives/available-parents", validate(getAvailableParentObjectivesSchema, "query"), getAvailableParentObjectives);
 /**
  * @swagger
  * /objectives/available-parents:
@@ -350,6 +350,88 @@ router.get("/objectives/:id", getObjectiveById);
  *         description: Unit not found
  */
 router.get("/objectives/available-parents", validate(getAvailableParentObjectivesSchema, "query"), getAvailableParentObjectives);
+
+
+/**
+ * @swagger
+ * /objectives/{id}:
+ *   get:
+ *     summary: Get objective details by ID
+ *     description: Retrieve a single objective with its key results. User must have permission to view the objective based on visibility rules.
+ *     tags: [Objectives]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Objective ID
+ *     responses:
+ *       200:
+ *         description: Objective retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     objective:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         title:
+ *                           type: string
+ *                         description:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                         visibility:
+ *                           type: string
+ *                         progress_percentage:
+ *                           type: number
+ *                         progress_status:
+ *                           type: string
+ *                         cycle:
+ *                           type: object
+ *                         owner:
+ *                           type: object
+ *                         unit:
+ *                           type: object
+ *                         parent_objective:
+ *                           type: object
+ *                         key_results:
+ *                           type: array
+ *                         permission:
+ *                           type: object
+ *                           description: User permissions for this objective
+ *                           properties:
+ *                             view:
+ *                               type: boolean
+ *                             edit:
+ *                               type: boolean
+ *                             submit:
+ *                               type: boolean
+ *                             approve:
+ *                               type: boolean
+ *                             reject:
+ *                               type: boolean
+ *                             delete:
+ *                               type: boolean
+ *       400:
+ *         description: Invalid objective ID
+ *       403:
+ *         description: No permission to view this objective
+ *       404:
+ *         description: Objective not found
+ */
+router.get("/objectives/:id", getObjectiveById);
 
 /**
  * @swagger
