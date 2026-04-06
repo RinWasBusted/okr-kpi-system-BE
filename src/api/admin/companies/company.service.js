@@ -21,7 +21,7 @@ export const getCompanies = async (filters, pagination) => {
     const { page, per_page } = pagination;
 
     // Validate sort parameters to prevent Prisma errors on unexpected values
-    const allowedSortBy    = ["name", "created_at", "updated_at"];
+    const allowedSortBy    = ["name", "created_at"];
     const allowedSortOrder = ["asc", "desc"];
     const safeSortBy    = allowedSortBy.includes(sort_by)    ? sort_by    : "created_at";
     const safeSortOrder = allowedSortOrder.includes(sort_order) ? sort_order : "desc";
@@ -68,7 +68,6 @@ export const getCompanies = async (filters, pagination) => {
     const orderByMap = {
         name:       { name:       safeSortOrder },
         created_at: { created_at: safeSortOrder },
-        updated_at: { updated_at: safeSortOrder },
     };
 
     const [companies, total] = await Promise.all([
@@ -84,7 +83,6 @@ export const getCompanies = async (filters, pagination) => {
                 is_active: true,
                 ai_plan: true,
                 created_at: true,
-                updated_at: true,
                 _count: {
                     select: {
                         users: {
@@ -126,7 +124,6 @@ export const getCompanies = async (filters, pagination) => {
         admin_count: company._count.users,
         employee_count: employeeCountMap[company.id] ?? 0,
         created_at: company.created_at,
-        updated_at: company.updated_at,
     }));
     const meta = {
         total,
@@ -156,7 +153,6 @@ export const createCompany = async ({ name, slug, logo, ai_plan = "FREE" }) => {
                 is_active: true,
                 ai_plan: true,
                 created_at: true,
-                updated_at: true,
             },
         });
 
@@ -188,7 +184,6 @@ export const getCompanyById = async (id) => {
             credit_cost: true,
             usage_limit: true,
             created_at: true,
-            updated_at: true,
         },
     });
 
@@ -253,7 +248,6 @@ export const updateCompany = async (id, { name, slug, is_active, ai_plan, usage_
                 credit_cost: true,
                 usage_limit: true,
                 created_at: true,
-                updated_at: true,
             },
         });
 
@@ -385,7 +379,6 @@ export const getCompanyStats = async (id) => {
             credit_cost: true,
             usage_limit: true,
             created_at: true,
-            updated_at: true,
         },
     });
 
@@ -424,7 +417,6 @@ export const getCompanyStats = async (id) => {
         admin_count,
         employee_count,
         created_at: company.created_at,
-        updated_at: company.updated_at,
         total_objectives,
         total_cycles,
         total_key_results,
@@ -448,7 +440,6 @@ export const getMyCompanyDetails = async (companyId) => {
             credit_cost: true,
             usage_limit: true,
             created_at: true,
-            updated_at: true,
         },
     });
 
@@ -475,6 +466,5 @@ export const getMyCompanyDetails = async (companyId) => {
         admin_count,
         employee_count,
         created_at: company.created_at,
-        updated_at: company.updated_at,
     };
 };

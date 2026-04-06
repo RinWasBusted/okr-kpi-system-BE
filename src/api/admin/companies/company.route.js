@@ -93,10 +93,6 @@ const router = express.Router();
  *                       type: string
  *                       format: date-time
  *                       example: "2026-01-01T00:00:00.000Z"
- *                     updated_at:
- *                       type: string
- *                       format: date-time
- *                       example: "2026-01-01T00:00:00.000Z"
  *       401:
  *         description: Unauthenticated or Company ID not found in token
  *         content:
@@ -181,7 +177,7 @@ router.use("/:company_id/admins", adminCompanyRoutes);
  *         name: sort_by
  *         schema:
  *           type: string
- *           enum: [name, created_at, updated_at]
+ *           enum: [name, created_at]
  *           default: created_at
  *         description: Field to sort by
  *       - in: query
@@ -247,10 +243,6 @@ router.use("/:company_id/admins", adminCompanyRoutes);
  *                         type: integer
  *                         example: 50
  *                       created_at:
- *                         type: string
- *                         format: date-time
- *                         example: "2026-01-01T00:00:00.000Z"
- *                       updated_at:
  *                         type: string
  *                         format: date-time
  *                         example: "2026-01-01T00:00:00.000Z"
@@ -385,10 +377,6 @@ router.get("/", getCompanies);
  *                           type: integer
  *                           example: 0
  *                         created_at:
- *                           type: string
- *                           format: date-time
- *                           example: "2026-01-01T00:00:00.000Z"
- *                         updated_at:
  *                           type: string
  *                           format: date-time
  *                           example: "2026-01-01T00:00:00.000Z"
@@ -569,10 +557,6 @@ router.post("/", wrapMulter(requestContext, uploadSingle("file")), validate(crea
  *                       type: string
  *                       format: date-time
  *                       example: "2026-01-01T00:00:00.000Z"
- *                     updated_at:
- *                       type: string
- *                       format: date-time
- *                       example: "2026-01-01T00:00:00.000Z"
  *       409:
  *         description: Slug already exists on the platform
  *         content:
@@ -714,10 +698,6 @@ router.get("/:id", getCompanyById);
  *                       type: integer
  *                       example: 50
  *                     created_at:
- *                       type: string
- *                       format: date-time
- *                       example: "2026-01-01T00:00:00.000Z"
- *                     updated_at:
  *                       type: string
  *                       format: date-time
  *                       example: "2026-01-01T00:00:00.000Z"
@@ -931,10 +911,6 @@ router.delete("/:id", deactivateCompany);
  *                       type: integer
  *                       example: 50
  *                     created_at:
- *                       type: string
- *                       format: date-time
- *                       example: "2026-01-01T00:00:00.000Z"
- *                     updated_at:
  *                       type: string
  *                       format: date-time
  *                       example: "2026-01-01T00:00:00.000Z"

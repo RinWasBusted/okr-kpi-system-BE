@@ -33,7 +33,7 @@ export const updateCompanySchema = z.object({
         .optional(),
     // Note: is_active is intentionally excluded - use separate deactivate/reactivate endpoints
     ai_plan: z.enum(["FREE", "SUBSCRIPTION", "PAY_AS_YOU_GO"]).optional(),
-    usage_limit: z.number().int().min(0).optional(),
+    usage_limit: z.coerce.number().int().min(0).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
 });

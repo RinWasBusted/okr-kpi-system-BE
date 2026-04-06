@@ -10,7 +10,7 @@ export const createFeedbackSchema = z.object({
         .min(LIMITS.content.min, "content is required")
         .max(LIMITS.content.max, `content must not exceed ${LIMITS.content.max} characters`),
     type: z.enum(["PRAISE", "CONCERN", "SUGGESTION", "QUESTION", "BLOCKER"]),
-    kr_tag_id: z.number().int().positive().nullable().optional(),
+    kr_tag_id: z.coerce.number().int().positive().nullable().optional(),
 });
 
 export const updateFeedbackSchema = z.object({
@@ -21,7 +21,7 @@ export const updateFeedbackSchema = z.object({
         .optional(),
     type: z.enum(["PRAISE", "CONCERN", "SUGGESTION", "QUESTION", "BLOCKER"]).optional(),
     status: z.enum(["ACTIVE", "RESOLVED", "FLAGGED"]).optional(),
-    kr_tag_id: z.number().int().positive().nullable().optional(),
+    kr_tag_id: z.coerce.number().int().positive().nullable().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
 });
