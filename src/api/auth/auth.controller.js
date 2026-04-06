@@ -2,12 +2,25 @@ import { loginSchema, changePasswordSchema } from "../../schemas/auth.schema.js"
 import client from "../../utils/redis.js";
 import * as authService from "./auth.service.js";
 import AppError from "../../utils/appError.js";
+import { incrementLoginAttempts, clearLoginAttempts } from "../../middlewares/rateLimit.js";
 
 export const login = async (req, res) => {
     try {
         const { email, password, company_slug, device_info, remember_me } = loginSchema.parse(req.body);
 
-        const { user, accessToken, refreshToken, expires_in } = await authService.loginService(email, password, company_slug ? company_slug : '', device_info, remember_me);
+        let result;
+        try {
+            result = await authService.loginService(email, password, company_slug ? company_slug : '', device_info, remember_me);
+        } catch (err) {
+            if (err instanceof AppError && err.statusCode === 401) {
+                await incrementLoginAttempts(req.ip);
+            }
+            throw err;
+        }
+
+        await clearLoginAttempts(req.ip);
+
+        const { user, accessToken, refreshToken, expires_in } = result;
 
         const cookieOptions = {
             httpOnly: true,
@@ -42,7 +55,9 @@ export const refreshToken = async (req, res) => {
             throw new AppError("Refresh token not found", 401);
         }
         
-        const { accessToken, refreshToken: newRefreshToken, expires_in } = await authService.refreshTokenService(refreshToken);
+        const { accessToken, refreshToken: newRefreshToken, expires_in, remember_me } = await authService.refreshTokenService(refreshToken);
+
+        const refreshMaxAge = remember_me ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
 
         res.cookie('accessToken', accessToken, {
             httpOnly: true,
@@ -55,7 +70,7 @@ export const refreshToken = async (req, res) => {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'Lax',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+            maxAge: refreshMaxAge
         });
 
         res.success("Access token refreshed", 200, { expires_in });
@@ -69,7 +84,13 @@ export const logout = async (req, res) => {
         const { refreshToken } = req.cookies;
         
         if (refreshToken) {
-            await client.del(`refreshToken:${refreshToken}`);
+            const tokenKey = `refreshToken:${refreshToken}`;
+            const tokenData = await client.get(tokenKey);
+            if (tokenData) {
+                const parsed = JSON.parse(tokenData);
+                await client.del(tokenKey);
+                await client.sRem(`userSessions:${parsed.id}`, tokenKey);
+            }
         }
 
         res.clearCookie('accessToken');
@@ -90,7 +111,7 @@ export const getCurrentUser = async (req, res) => {
         const user = await authService.getCurrentUser(id);
 
         if (!user) {
-            throw new appError("User not found", 404);
+            throw new AppError("User not found", 404);
         }
 
         res.success("Current user retrieved successfully", 200, { user });
@@ -101,11 +122,8 @@ export const getCurrentUser = async (req, res) => {
 
 export const changePassword = async (req, res) => {
     try {
-        const { id } = req.user; 
-        const { currentPassword, newPassword } = req.body;
-
-        if(! changePasswordSchema.parse({ currentPassword, newPassword }))
-            throw new appError("Invalid input", 400)    
+        const { id } = req.user;
+        const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
         
         const result = await authService.changePassword(id, currentPassword, newPassword);
 
@@ -119,7 +137,7 @@ export const logoutAll = async (req, res) => {
         const { id } = req.user;
         const { refreshToken } = req.cookies;
 
-        const result = await authService.logoutAll(id, refreshToken);
+        const result = await authService.logoutAll(id);
 
         res.clearCookie('accessToken');
         res.clearCookie('refreshToken');

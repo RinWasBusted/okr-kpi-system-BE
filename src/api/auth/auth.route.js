@@ -232,19 +232,6 @@ router.post("/login", loginRateLimit, login);
  *                 message:
  *                   type: string
  *                   example: "Refresh token not found"
- *       403:
- *         description: Session revoked
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: "Session has been revoked. Please login again."
  */
 router.post("/refresh-token", refreshToken);
 
@@ -581,8 +568,8 @@ router.get("/sessions", authenticate, getSessions);
  *         required: true
  *         schema:
  *           type: string
- *         description: The session ID to revoke
- *         example: "refreshToken:abc123..."
+ *         description: The raw session ID to revoke, as returned by the sessions list endpoint, without the `refreshToken:` prefix
+ *         example: "abc123..."
  *     responses:
  *       200:
  *         description: Session revoked successfully

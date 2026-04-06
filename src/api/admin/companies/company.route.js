@@ -738,7 +738,8 @@ router.get("/:id", getCompanyById);
  */
 router.patch("/:id", validate(updateCompanySchema), updateCompany);
 
-// Note: DELETE endpoint removed. Use PATCH /:id with { is_active: false } to deactivate a company.
+// Note: PATCH /:id is validated by `updateCompanySchema` and does not accept `is_active`.
+// Use the dedicated deactivate/reactivate endpoint(s) for activation status changes, if available.
 
 /**
  * @swagger

@@ -90,6 +90,8 @@ const objectiveBaseSelect = {
     visibility: true,
     progress_percentage: true,
     cycle_id: true,
+    owner_id: true,
+    unit_id: true,
     created_at: true,
     cycle: { select: { id: true, name: true, start_date: true, end_date: true } },
     owner: { select: ownerSelect },
@@ -343,14 +345,69 @@ export const listObjectives = async ({
         select,
     });
 
+    if (allObjectives.length === 0) {
+        return { total: 0, data: [], last_page: 0 };
+    }
+
+    // Batch-fetch access paths for objectives that are missing them (avoids N+1)
+    const missingAccessPathIds = allObjectives
+        .filter((o) => !o.access_path)
+        .map((o) => o.id);
+    if (missingAccessPathIds.length > 0) {
+        const rows = await prisma.$queryRaw`
+            SELECT id, access_path::text AS access_path
+            FROM "Objectives"
+            WHERE id = ANY(${missingAccessPathIds}::int[])
+        `;
+        const accessPathMap = new Map(rows.map((r) => [r.id, r.access_path]));
+        for (const obj of allObjectives) {
+            if (!obj.access_path) {
+                obj.access_path = accessPathMap.get(obj.id) ?? null;
+            }
+        }
+    }
+
+    // Batch-fetch unit manager IDs for all unique unit_ids (avoids N+1 in canEditObjective)
+    const uniqueUnitIds = [...new Set(allObjectives.map((o) => o.unit_id).filter(Boolean))];
+    const unitManagerMap = new Map();
+    if (uniqueUnitIds.length > 0) {
+        const units = await prisma.units.findMany({
+            where: { id: { in: uniqueUnitIds } },
+            select: { id: true, manager_id: true },
+        });
+        units.forEach((u) => unitManagerMap.set(u.id, u.manager_id));
+    }
+
+    // Fetch user's own unit path once for permission calculation
+    const userUnitPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
+
+    // Compute permissions using pre-fetched data (no extra DB calls per objective)
+    const computePermission = (objective) => {
+        if (user.role === UserRole.ADMIN_COMPANY) {
+            return { view: true, edit: true, approve: true, delete: true };
+        }
+        const isOwner = objective.owner_id === user.id;
+        const isUnitMgr = objective.unit_id
+            ? unitManagerMap.get(objective.unit_id) === user.id
+            : false;
+        const canEdit = isOwner || isUnitMgr;
+
+        // canApprove: user is ancestor unit of objective's unit (not same unit)
+        const objectivePath = objective.access_path;
+        const canApprove =
+            userUnitPath && objectivePath
+                ? objectivePath !== userUnitPath &&
+                  isDescendantOrEqual(objectivePath, userUnitPath)
+                : false;
+
+        return { view: true, edit: canEdit, approve: canApprove, delete: canEdit };
+    };
+
     // Calculate permissions for each objective
-    const objectivesWithPermission = await Promise.all(
-        allObjectives.map(async (objective) => {
-            objective.access_path = objective.access_path ?? await getObjectiveAccessPath(objective.id);
-            const permission = await calculateObjectivePermission(user, objective);
-            return { objective, permission };
-        })
-    );
+    const objectivesWithPermission = allObjectives.map((objective) => ({
+        objective,
+        permission: computePermission(objective),
+    }));
 
     let formattedObjectives = objectivesWithPermission.map(({ objective, permission }) =>
         formatObjective(objective, include_key_results, permission)

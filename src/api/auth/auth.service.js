@@ -54,14 +54,19 @@ export const loginService = async (email, password, company_slug = '', device_in
                 company_id: user.company_id,
                 unit_id: user.unit_id,
                 unit_path: unit_path,
-                device_info: device_info
+                device_info: device_info,
+                remember_me: remember_me,
             }
 
             const accessToken = generateToken(tokenPayload, '15m');
             const refreshTokenExpiry = remember_me ? '30d' : '7d';
+            const refreshTokenTtlSeconds = remember_me ? 30 * 24 * 60 * 60 : 7 * 24 * 60 * 60;
             const refreshToken = generateToken(tokenPayload, refreshTokenExpiry);
 
-            await client.setEx(`refreshToken:${refreshToken}`, remember_me ? 30 * 24 * 60 * 60 : 7 * 24 * 60 * 60, JSON.stringify(tokenPayload));
+            const tokenKey = `refreshToken:${refreshToken}`;
+            const userSessionsKey = `userSessions:${user.id}`;
+            await client.setEx(tokenKey, refreshTokenTtlSeconds, JSON.stringify(tokenPayload));
+            await client.sAdd(userSessionsKey, tokenKey);
 
             // Transform avatar_url to Cloudinary URL with 50x50 pixels
             const avatarUrl = user.avatar_url
@@ -95,26 +100,31 @@ export const loginService = async (email, password, company_slug = '', device_in
 
 export const refreshTokenService = async (refreshToken) => {
     try {
-        const tokenData = await client.get(`refreshToken:${refreshToken}`);
+        const tokenKey = `refreshToken:${refreshToken}`;
+        const tokenData = await client.get(tokenKey);
 
         if (!tokenData) {
             throw new AppError("Refresh token not found", 401);
         }
 
         const parsedData = JSON.parse(tokenData);
-        const { id, role, company_id, unit_id, unit_path } = parsedData;
-
-        // Check if token is expired (by checking if it exists, since we set expiry)
-        // But since Redis handles expiry, if it exists, it's valid
+        const { id, role, company_id, unit_id, unit_path, remember_me } = parsedData;
 
         const accessToken = generateToken({ id, role, company_id, unit_id, unit_path }, '15m');
 
-        // Token rotation: invalidate old refresh token and create new one
-        await client.del(`refreshToken:${refreshToken}`);
-        const newRefreshToken = generateToken({ id, role, company_id, unit_id, unit_path }, '7d');
-        await client.setEx(`refreshToken:${newRefreshToken}`, 7 * 24 * 60 * 60, JSON.stringify(parsedData));
+        // Token rotation: invalidate old refresh token and create new one with same TTL
+        const userSessionsKey = `userSessions:${id}`;
+        await client.del(tokenKey);
+        await client.sRem(userSessionsKey, tokenKey);
 
-        return { accessToken, refreshToken: newRefreshToken, expires_in: 15 * 60 };
+        const newTtlSeconds = remember_me ? 30 * 24 * 60 * 60 : 7 * 24 * 60 * 60;
+        const newRefreshTokenExpiry = remember_me ? '30d' : '7d';
+        const newRefreshToken = generateToken({ id, role, company_id, unit_id, unit_path, remember_me }, newRefreshTokenExpiry);
+        const newTokenKey = `refreshToken:${newRefreshToken}`;
+        await client.setEx(newTokenKey, newTtlSeconds, JSON.stringify(parsedData));
+        await client.sAdd(userSessionsKey, newTokenKey);
+
+        return { accessToken, refreshToken: newRefreshToken, expires_in: 15 * 60, remember_me: !!remember_me };
     } catch (error) {
         throw error;
     }
@@ -196,19 +206,15 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
             data: { password: hashedNewPassword }
         });
 
-        // Invalidate all refresh tokens for this user
-        const keys = await client.keys(`refreshToken:*`);
+        // Invalidate all refresh tokens for this user via per-user session set
+        const userSessionsKey = `userSessions:${userId}`;
+        const tokenKeys = await client.sMembers(userSessionsKey);
         let revokedCount = 0;
-        for (const key of keys) {
-            const tokenData = await client.get(key);
-            if (tokenData) {
-                const parsed = JSON.parse(tokenData);
-                if (parsed.id === userId) {
-                    await client.del(key);
-                    revokedCount++;
-                }
-            }
+        for (const key of tokenKeys) {
+            await client.del(key);
+            revokedCount++;
         }
+        await client.del(userSessionsKey);
 
         return { sessions_revoked: revokedCount };
     } catch (error) {
@@ -216,25 +222,17 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
     }
 };
 
-export const logoutAll = async (userId, currentRefreshToken) => {
+export const logoutAll = async (userId) => {
     try {
-        const keys = await client.keys(`refreshToken:*`);
+        const userSessionsKey = `userSessions:${userId}`;
+        const tokenKeys = await client.sMembers(userSessionsKey);
         let revokedCount = 0;
-        for (const key of keys) {
-            const tokenData = await client.get(key);
-            if (tokenData) {
-                const parsed = JSON.parse(tokenData);
-                if (parsed.id === userId && key !== `refreshToken:${currentRefreshToken}`) {
-                    await client.del(key);
-                    revokedCount++;
-                }
-            }
+        for (const key of tokenKeys) {
+            await client.del(key);
+            revokedCount++;
         }
-        // Also revoke current session
-        if (currentRefreshToken) {
-            await client.del(`refreshToken:${currentRefreshToken}`);
-        }
-        return { sessions_revoked: revokedCount + (currentRefreshToken ? 1 : 0) };
+        await client.del(userSessionsKey);
+        return { sessions_revoked: revokedCount };
     } catch (error) {
         throw error;
     }
@@ -242,22 +240,23 @@ export const logoutAll = async (userId, currentRefreshToken) => {
 
 export const getSessions = async (userId, currentRefreshToken) => {
     try {
-        const keys = await client.keys(`refreshToken:*`);
+        const userSessionsKey = `userSessions:${userId}`;
+        const tokenKeys = await client.sMembers(userSessionsKey);
         const sessions = [];
-        for (const key of keys) {
+        for (const key of tokenKeys) {
             const tokenData = await client.get(key);
             if (tokenData) {
                 const parsed = JSON.parse(tokenData);
-                if (parsed.id === userId) {
-                    // Note: In a real implementation, you'd store device_info in Redis
-                    // For now, we'll return basic session info
-                    sessions.push({
-                        id: key.replace('refreshToken:', ''),
-                        device_info: parsed.device_info || { name: 'Unknown', fingerprint: 'unknown' },
-                        last_seen: new Date().toISOString(), // This should be stored in Redis
-                        current: key === `refreshToken:${currentRefreshToken}`
-                    });
-                }
+                const sessionId = key.replace('refreshToken:', '');
+                sessions.push({
+                    id: sessionId,
+                    device_info: parsed.device_info || { name: 'Unknown', fingerprint: 'unknown' },
+                    last_seen: new Date().toISOString(),
+                    current: key === `refreshToken:${currentRefreshToken}`
+                });
+            } else {
+                // Token expired; clean up stale entry from the set
+                await client.sRem(userSessionsKey, key);
             }
         }
         return sessions;
@@ -278,6 +277,7 @@ export const deleteSession = async (userId, sessionId) => {
             throw new AppError("Unauthorized to delete this session", 403);
         }
         await client.del(key);
+        await client.sRem(`userSessions:${userId}`, key);
     } catch (error) {
         throw error;
     }

@@ -20,6 +20,11 @@ export const getCompanies = async (filters, pagination) => {
     const { is_active, search, ai_plan, sort_by = "created_at", sort_order = "desc", from_date, to_date } = filters;
     const { page, per_page } = pagination;
 
+    // Validate ai_plan filter
+    if (ai_plan && !Object.values(AIPlan).includes(ai_plan)) {
+        throw new AppError(`Invalid ai_plan. Allowed values: ${Object.values(AIPlan).join(", ")}`, 422);
+    }
+
     // Validate sort parameters to prevent Prisma errors on unexpected values
     const allowedSortBy    = ["name", "created_at"];
     const allowedSortOrder = ["asc", "desc"];

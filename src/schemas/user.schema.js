@@ -23,7 +23,10 @@ export const createUserSchema = z.object({
         .string()
         .min(LIMITS.password.min, `Password must be at least ${LIMITS.password.min} characters`)
         .max(LIMITS.password.max, `Password must not exceed ${LIMITS.password.max} characters`),
-    unit_id: z.coerce.number().int().positive().nullable().optional(),
+    unit_id: z.preprocess(
+        (val) => (val === null || val === "" ? null : val),
+        z.number().int().positive().nullable().optional()
+    ),
 });
 
 export const updateUserSchema = z.object({
@@ -32,7 +35,10 @@ export const updateUserSchema = z.object({
         .min(LIMITS.full_name.min, "full_name cannot be empty")
         .max(LIMITS.full_name.max, `full_name must not exceed ${LIMITS.full_name.max} characters`)
         .optional(),
-    unit_id: z.coerce.number().int().positive().nullable().optional(),
+    unit_id: z.preprocess(
+        (val) => (val === null || val === "" ? null : val),
+        z.number().int().positive().nullable().optional()
+    ),
     password: z
         .string()
         .min(LIMITS.password.min, `Password must be at least ${LIMITS.password.min} characters`)

@@ -66,7 +66,95 @@ const calculateAssignmentPermission = async (user, assignment) => {
     };
 };
 
-const formatAssignment = async (assignment, user = null) => {
+/**
+ * Batch-compute permissions for a list of assignments.
+ * Pre-fetches unit manager data to avoid N+1 DB queries.
+ */
+const batchComputeAssignmentPermissions = async (user, assignments) => {
+    if (user.role === UserRole.ADMIN_COMPANY) {
+        return assignments.map(() => ({ view: true, edit: true, delete: true }));
+    }
+
+    // Collect all unique unit IDs (from assignments + owner units)
+    const assignmentUnitIds = [...new Set(assignments.map((a) => a.unit_id).filter(Boolean))];
+    const ownerIds = [...new Set(assignments.map((a) => a.owner_id).filter(Boolean))];
+
+    // Batch-fetch managers for all assignment units
+    const [unitRows, ownerRows] = await Promise.all([
+        assignmentUnitIds.length > 0
+            ? prisma.units.findMany({
+                  where: { id: { in: assignmentUnitIds } },
+                  select: { id: true, manager_id: true },
+              })
+            : [],
+        ownerIds.length > 0
+            ? prisma.users.findMany({
+                  where: { id: { in: ownerIds } },
+                  select: { id: true, unit_id: true },
+              })
+            : [],
+    ]);
+
+    const unitManagerMap = new Map(unitRows.map((u) => [u.id, u.manager_id]));
+    const ownerUnitMap = new Map(ownerRows.map((u) => [u.id, u.unit_id]));
+
+    // Collect all owner unit IDs so we can batch-fetch their managers too
+    const ownerUnitIds = [...new Set(ownerRows.map((u) => u.unit_id).filter(Boolean))];
+    const ownerUnitRows = ownerUnitIds.length > 0
+        ? await prisma.units.findMany({
+              where: { id: { in: ownerUnitIds } },
+              select: { id: true, manager_id: true },
+          })
+        : [];
+    const ownerUnitManagerMap = new Map(ownerUnitRows.map((u) => [u.id, u.manager_id]));
+
+    // Fetch user's unit path once for ancestor checks
+    const userUnitPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
+
+    // For each unique target unit, batch-check ancestor relationships
+    const allTargetUnitIds = [
+        ...new Set([...assignmentUnitIds, ...ownerUnitIds]),
+    ].filter((id) => id !== user.unit_id);
+
+    const ancestorCheckMap = new Map();
+    if (user.unit_id && userUnitPath && allTargetUnitIds.length > 0) {
+        await Promise.all(
+            allTargetUnitIds.map(async (unitId) => {
+                const result = await isAncestorUnit(user.unit_id, unitId);
+                ancestorCheckMap.set(unitId, result);
+            })
+        );
+    }
+
+    const canEdit = (assignment) => {
+        if (assignment.unit_id) {
+            const isFromAncestorUnit =
+                user.unit_id &&
+                user.unit_id !== assignment.unit_id &&
+                (ancestorCheckMap.get(assignment.unit_id) ?? false);
+            const isManager = unitManagerMap.get(assignment.unit_id) === user.id;
+            return isFromAncestorUnit || isManager;
+        }
+        if (assignment.owner_id) {
+            const ownerUnitId = ownerUnitMap.get(assignment.owner_id);
+            if (!ownerUnitId) return false;
+            const isFromAncestorUnit =
+                user.unit_id &&
+                user.unit_id !== ownerUnitId &&
+                (ancestorCheckMap.get(ownerUnitId) ?? false);
+            const isManager = ownerUnitManagerMap.get(ownerUnitId) === user.id;
+            return isFromAncestorUnit || isManager;
+        }
+        return false;
+    };
+
+    return assignments.map((a) => {
+        const edit = canEdit(a);
+        return { view: true, edit, delete: edit };
+    });
+};
+
+const formatAssignment = async (assignment, user = null, preComputedPermission = undefined) => {
     const [dictionary, owner, unit, parentAssignment, latestRecord, cycle] = await Promise.all([
         prisma.kPIDictionaries.findUnique({
             where: { id: assignment.kpi_dictionary_id },
@@ -103,8 +191,10 @@ const formatAssignment = async (assignment, user = null) => {
             : null,
     ]);
 
-    // Calculate permission if user is provided
-    const permission = user ? await calculateAssignmentPermission(user, assignment) : null;
+    // Use pre-computed permission if provided; otherwise compute it (single-item calls)
+    const permission = preComputedPermission !== undefined
+        ? preComputedPermission
+        : (user ? await calculateAssignmentPermission(user, assignment) : null);
 
     const result = {
         id: assignment.id,
@@ -416,20 +506,30 @@ export const listKPIAssignments = async (user, filters, mode = "tree") => {
     });
 
     // Format all assignments first
+    // Batch-fetch access paths for all assignments in one query (avoids N+1)
+    const allAssignmentIds = allAssignments.map((a) => a.id);
+    const accessPathRows = allAssignmentIds.length > 0
+        ? await prisma.$queryRaw`
+            SELECT id, access_path::text AS access_path
+            FROM "KPIAssignments"
+            WHERE id = ANY(${allAssignmentIds}::int[])
+          `
+        : [];
+    const accessPathMap = new Map(accessPathRows.map((r) => [r.id, r.access_path]));
+    const assignmentsWithPath = allAssignments.map((a) => ({
+        ...a,
+        access_path: accessPathMap.get(a.id) ?? null,
+    }));
+
+    // Batch-compute permissions to avoid N+1 DB calls per assignment
+    const permissions = user
+        ? await batchComputeAssignmentPermissions(user, assignmentsWithPath)
+        : assignmentsWithPath.map(() => null);
+
     const formattedAssignments = await Promise.all(
-        allAssignments.map(async (a) => {
-            // Fetch access_path using raw SQL for ltree type support
-            const pathResult = await prisma.$queryRaw`
-                SELECT access_path::text AS access_path
-                FROM "KPIAssignments"
-                WHERE id = ${a.id}
-            `;
-            const assignmentWithPath = {
-                ...a,
-                access_path: pathResult[0]?.access_path || null,
-            };
-            return await formatAssignment(assignmentWithPath, user);
-        })
+        assignmentsWithPath.map((a, idx) =>
+            formatAssignment(a, user, permissions[idx])
+        )
     );
 
     // Filter by progress_status if provided
