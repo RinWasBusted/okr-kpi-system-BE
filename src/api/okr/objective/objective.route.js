@@ -6,6 +6,7 @@ import {
     submitObjective,
     approveObjective,
     rejectObjective,
+    revertToDraft,
     deleteObjective,
     getAvailableParentObjectives,
     getObjectiveById,
@@ -696,6 +697,47 @@ router.patch("/objectives/:id/publish", publishObjective);
  *         description: Objective rejected successfully
  */
 router.post("/objectives/:id/reject", rejectObjective);
+
+/**
+ * @swagger
+ * /objectives/{id}/revert-to-draft:
+ *   post:
+ *     summary: Revert objective to draft status
+ *     description: |
+ *       Revert an objective from Rejected, Pending_Approval, Active, or Completed status back to Draft.
+ *       Only the objective owner, unit manager, or company admin can perform this action.
+ *     tags: [Objectives]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Objective reverted to draft successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     objective:
+ *                       type: object
+ *       400:
+ *         description: Invalid objective ID or cannot revert from current status
+ *       403:
+ *         description: No permission to revert this objective
+ *       404:
+ *         description: Objective not found
+ */
+router.post("/objectives/:id/revert-to-draft", revertToDraft);
 
 /**
  * @swagger

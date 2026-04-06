@@ -836,6 +836,33 @@ export const rejectObjective = async (user, objectiveId, comment) => {
     return await formatObjective(updated, false, user);
 };
 
+export const revertToDraft = async (user, objectiveId) => {
+    const objective = await getObjectiveOrThrow(objectiveId);
+
+    // Check if user can edit this objective (owner or unit manager)
+    const isOwner = objective.owner_id && objective.owner_id === user.id;
+    const isManager = objective.unit_id && await isUnitManager(user.id, objective.unit_id);
+    const isCompanyAdmin = user.role === UserRole.ADMIN_COMPANY;
+
+    if (!isOwner && !isManager && !isCompanyAdmin) {
+        throw new AppError("You do not have permission to revert this objective", 403);
+    }
+
+    // Can only revert from certain statuses
+    const revertibleStatuses = ["Rejected", "Pending_Approval", "Active", "Completed"];
+    if (!revertibleStatuses.includes(objective.status)) {
+        throw new AppError(`Cannot revert objective from ${objective.status} status`, 400);
+    }
+
+    const updated = await prisma.objectives.update({
+        where: { id: objectiveId },
+        data: { status: "Draft", approved_by: null },
+        select: objectiveBaseSelect,
+    });
+
+    return await formatObjective(updated, false, user);
+};
+
 export const ensureObjectiveVisible = async (user, objectiveId) => {
     const objective = await getObjectiveOrThrow(objectiveId);
     const canView = await canViewObjective(user, objective);

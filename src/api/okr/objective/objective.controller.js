@@ -249,6 +249,20 @@ export const rejectObjective = async (req, res) => {
     }
 };
 
+// POST /objectives/:id/revert-to-draft
+export const revertToDraft = async (req, res) => {
+    try {
+        const objectiveId = parsePositiveInt(req.params.id, null);
+        if (!objectiveId) throw new AppError("Invalid objective ID", 400);
+
+        const objective = await objectiveService.revertToDraft(req.user, objectiveId);
+
+        res.success("Objective reverted to draft successfully", 200, { objective });
+    } catch (error) {
+        throw error;
+    }
+};
+
 // DELETE /objectives/:id
 export const deleteObjective = async (req, res) => {
     try {
