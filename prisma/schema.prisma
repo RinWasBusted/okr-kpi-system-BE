@@ -160,6 +160,7 @@ model KPIAssignments {
   target_value         Float
   current_value        Float   @default(0)
   progress_percentage  Float   @default(0)
+  due_date             DateTime?
   deleted_at           DateTime?
   created_at           DateTime @default(now())
 

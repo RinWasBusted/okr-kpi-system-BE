@@ -179,6 +179,7 @@ const formatAssignment = async (assignment, user = null) => {
         progress_status: calculateProgressStatus(assignment.progress_percentage),
         status: latestRecord?.status || null,
         visibility: assignment.visibility,
+        due_date: assignment.due_date ?? null,
         owner: owner,
         unit: unit,
         cycle: cycle,
@@ -668,6 +669,7 @@ export const createKPIAssignment = async (user, payload) => {
             parent_assignment_id,
             visibility,
             access_path,
+            due_date,
             progress_percentage,
             created_at
         ) VALUES (
@@ -681,6 +683,7 @@ export const createKPIAssignment = async (user, payload) => {
             ${payload.parent_assignment_id ?? null},
             ${visibility},
             ${accessPath}::ltree,
+            ${payload.due_date ? new Date(payload.due_date) : null},
             0,
             NOW()
         )
@@ -695,6 +698,7 @@ export const createKPIAssignment = async (user, payload) => {
             owner_id,
             unit_id,
             parent_assignment_id,
+            due_date,
             access_path::text,
             created_at
     `;
@@ -758,6 +762,10 @@ export const updateKPIAssignment = async (user, assignmentId, payload) => {
 
     if (payload.visibility !== undefined) {
         updates.visibility = payload.visibility;
+    }
+
+    if (payload.due_date !== undefined) {
+        updates.due_date = payload.due_date ? new Date(payload.due_date) : null;
     }
 
     if (Object.keys(updates).length === 0) {

@@ -44,9 +44,9 @@ export const createKPIAssignmentSchema = z.object({
     cycle_id: z.coerce.number().int().positive("cycle_id is required"),
     target_value: z.coerce.number().positive("target_value must be positive"),
     current_value: z.coerce.number().min(0).default(0),
-    unit_id: z.coerce.number().int().min(0).nullable().optional(),
+    unit_id: z.coerce.number().int().positive().nullable().optional(),
     owner_id: z.coerce.number().int().positive().nullable().optional(),
-    parent_assignment_id: z.coerce.number().int().min(0).nullable().optional(),
+    parent_assignment_id: z.coerce.number().int().positive().nullable().optional(),
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
     due_date: z.string().datetime().optional(),
 }).refine(
