@@ -58,8 +58,10 @@ const formatUser = (user, currentUser = null) => {
         unit: user.unit ?? null,
         is_active: user.is_active,
         created_at: user.created_at,
-        editable: isAdmin || isOwner,
-        deletable: isAdmin,
+        permission: {
+            editable: isAdmin || isOwner,
+            deletable: isAdmin,
+        },
     };
 };
 
