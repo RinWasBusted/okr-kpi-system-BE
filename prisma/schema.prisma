@@ -124,13 +124,19 @@ enum Visibility {
   INTERNAL
 }
 
+enum KPIEvaluationType {
+  MAXIMIZE
+  MINIMIZE      
+  TARGET
+}
+
 model KPIDictionaries {
   id                Int     @id @default(autoincrement())
   company_id        Int?
   name              String
   description       String?
   unit              String
-  evaluation_method String
+  evaluation_method KPIEvaluationType
   unit_id           Int?
   deleted_at        DateTime?
 
@@ -154,6 +160,7 @@ model KPIAssignments {
   target_value         Float
   current_value        Float   @default(0)
   progress_percentage  Float   @default(0)
+  due_date             DateTime?
   deleted_at           DateTime?
   created_at           DateTime @default(now())
 
@@ -169,10 +176,21 @@ model KPIAssignments {
   @@index([company_id])
 }
 
-enum KPIStatus {
+enum ProgressStatus {
+  Draft
+  Pending_Approval
+  Rejected
+  NOT_STARTED
   ON_TRACK
   AT_RISK
   CRITICAL
+  COMPLETED
+}
+
+enum KPITrend {
+  Upward
+  Downward
+  Stable
 }
 
 model KPIRecords {
@@ -183,22 +201,14 @@ model KPIRecords {
   period_end          DateTime @db.Date
   actual_value        Float
   progress_percentage Float
-  status              KPIStatus
-  trend               String
+  status              ProgressStatus
+  trend               KPITrend
   created_at          DateTime @default(now())
 
   company        Companies     @relation(fields: [company_id], references: [id])
   kpi_assignment KPIAssignments @relation(fields: [kpi_assignment_id], references: [id])
 
   @@index([company_id])
-}
-
-enum ObjectiveProgressStatus {
-  NOT_STARTED
-  ON_TRACK
-  WARNING
-  DANGER
-  COMPLETED
 }
 
 model Objectives {
@@ -212,7 +222,7 @@ model Objectives {
   parent_objective_id Int?
   visibility          Visibility
   access_path         Unsupported("ltree")
-  status              String
+  status              ProgressStatus @default(Draft)
   approved_by         Int?
   progress_percentage Float   @default(0)
   deleted_at          DateTime?

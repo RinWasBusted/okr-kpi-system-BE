@@ -17,7 +17,7 @@ export const createKPIDictionarySchema = z.object({
         .string()
         .min(LIMITS.unit.min, "unit is required")
         .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`),
-    evaluation_method: z.enum(["Positive", "Negative", "Stabilizing"]),
+    evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]),
     description: z.string().max(1000).optional(),
 });
 
@@ -32,7 +32,7 @@ export const updateKPIDictionarySchema = z.object({
         .min(LIMITS.unit.min, "unit cannot be empty")
         .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`)
         .optional(),
-    evaluation_method: z.enum(["Positive", "Negative", "Stabilizing"]).optional(),
+    evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]).optional(),
     description: z.string().max(1000).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
@@ -48,6 +48,7 @@ export const createKPIAssignmentSchema = z.object({
     owner_id: z.coerce.number().int().positive().nullable().optional(),
     parent_assignment_id: z.coerce.number().int().positive().nullable().optional(),
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
+    due_date: z.string().datetime().optional(),
 }).refine(
     (data) => (data.unit_id && !data.owner_id) || (!data.unit_id && data.owner_id),
     {
@@ -60,6 +61,7 @@ export const updateKPIAssignmentSchema = z.object({
     target_value: z.coerce.number().positive().optional(),
     current_value: z.coerce.number().min(0).optional(),
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
+    due_date: z.string().datetime().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
 });

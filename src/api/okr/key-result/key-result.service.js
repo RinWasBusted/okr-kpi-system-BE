@@ -244,8 +244,10 @@ export const deleteKeyResult = async (user, keyResultId) => {
         throw new AppError("You do not have permission to edit this objective", 403);
     }
 
-    if (keyResult.objective.status === "Active") {
-        throw new AppError("Cannot delete KR when objective is active", 400);
+    // Can only delete KR when objective is in Draft or Rejected status
+    const deletableStatuses = ["Draft", "Rejected"];
+    if (!deletableStatuses.includes(keyResult.objective.status)) {
+        throw new AppError("Cannot delete KR when objective is not in Draft or Rejected status", 400);
     }
 
     await prisma.$transaction([

@@ -59,14 +59,14 @@ router.use(authenticate);
  *         name: status
  *         schema:
  *           type: string
- *           enum: [Draft, Active, Pending_Approval, Rejected, Completed]
- *           example: Active
+ *           enum: [Draft, Pending_Approval, Rejected, NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED]
+ *           example: ON_TRACK
  *       - in: query
  *         name: progress_status
  *         schema:
  *           type: string
- *           enum: [NOT_STARTED, DANGER, WARNING, ON_TRACK, COMPLETED]
- *           description: Filter by progress status
+ *           enum: [NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED]
+ *           description: Filter by progress status (calculated from progress_percentage)
  *       - in: query
  *         name: visibility
  *         schema:
@@ -128,7 +128,8 @@ router.use(authenticate);
  *                         nullable: true
  *                       status:
  *                         type: string
- *                         enum: [Draft, Active, Pending_Approval, Rejected, Completed]
+ *                         enum: [Draft, Pending_Approval, Rejected, NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED]
+ *                         description: Workflow status (Draft, Pending_Approval, Rejected) or progress-based status (NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED)
  *                       visibility:
  *                         type: string
  *                         enum: [PUBLIC, INTERNAL, PRIVATE]
@@ -136,6 +137,8 @@ router.use(authenticate);
  *                         type: number
  *                       progress_status:
  *                         type: string
+ *                         enum: [NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED]
+ *                         description: Calculated from progress_percentage
  *                       cycle:
  *                         type: object
  *                         nullable: true
@@ -197,7 +200,7 @@ router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjec
  *     description: |
  *       Retrieve objectives that can be set as parent for a new objective in the specified unit.
  *       Returns objectives from the specified unit and all its ancestor units.
- *       Only includes objectives with status "Active" or "Completed".
+ *       Only includes objectives with progress-based status (NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED).
  *       Results are filtered by visibility permissions.
  *     tags: [Objectives]
  *     parameters:
@@ -278,7 +281,7 @@ router.get("/objectives/available-parents", validate(getAvailableParentObjective
  *     description: |
  *       Retrieve objectives that can be set as parent for a new objective in the specified unit.
  *       Returns objectives from the specified unit and all its ancestor units.
- *       Only includes objectives with status "Active" or "Completed".
+ *       Only includes objectives with progress-based status (NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED).
  *       Results are filtered by visibility permissions.
  *     tags: [Objectives]
  *     parameters:
@@ -498,9 +501,8 @@ router.post("/objectives", validate(createObjectiveSchema), createObjective);
  *     summary: Update an objective
  *     description: |
  *       Update objective with visibility hierarchy enforcement.
- *       Allowed when status is Draft, Rejected, or Active.
+ *       Allowed when status is Draft or Rejected.
  *       When parent_objective_id changes, child visibility must be >= parent visibility (more private or equal).
- *       For Active objectives, title/parent/visibility can change without resetting to Draft (supports iteration after feedback).
  *     tags: [Objectives]
  *     parameters:
  *       - in: path
@@ -620,9 +622,9 @@ router.post("/objectives/:id/approve", approveObjective);
  * @swagger
  * /objectives/{id}/publish:
  *   patch:
- *     summary: Publish objective (Draft → Active)
+ *     summary: Publish objective (Draft → progress-based status)
  *     description: |
- *       Publish a Draft objective directly to Active status.
+ *       Publish a Draft objective directly to a progress-based status (NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, or COMPLETED).
  *       This bypasses the Pending_Approval workflow for admin/high-level users.
  *       Only users with approval permission (ADMIN_COMPANY or unit managers) can publish.
  *       Can optionally update title, parent, or visibility during publish.
@@ -704,7 +706,7 @@ router.post("/objectives/:id/reject", rejectObjective);
  *   post:
  *     summary: Revert objective to draft status
  *     description: |
- *       Revert an objective from Rejected, Pending_Approval, Active, or Completed status back to Draft.
+ *       Revert an objective from Rejected, Pending_Approval, or any progress-based status (NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED) back to Draft.
  *       Only the objective owner, unit manager, or company admin can perform this action.
  *     tags: [Objectives]
  *     parameters:

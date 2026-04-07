@@ -78,6 +78,17 @@ export const calculateKeyResultProgress = (currentValue, targetValue) => {
     return (current / target) * 100;
 };
 
+// Calculate progress status based on progress_percentage
+// Returns ProgressStatus enum values
+const calculateProgressStatus = (progress) => {
+    const p = Number(progress) || 0;
+    if (p === 0) return "NOT_STARTED";
+    if (p >= 100) return "COMPLETED";
+    if (p >= 80) return "ON_TRACK";
+    if (p >= 30) return "AT_RISK";
+    return "CRITICAL";
+};
+
 export const recalculateObjectiveProgress = async (objectiveId) => {
     const keyResults = await prisma.keyResults.findMany({
         where: { objective_id: objectiveId },
@@ -89,9 +100,24 @@ export const recalculateObjectiveProgress = async (objectiveId) => {
         0,
     );
 
+    // Get current objective status
+    const objective = await prisma.objectives.findUnique({
+        where: { id: objectiveId },
+        select: { status: true },
+    });
+
+    // Only update status if objective is in a progress-based status (not Draft, Pending_Approval, or Rejected)
+    const progressBasedStatuses = ["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"];
+    const updateData = { progress_percentage: progress };
+
+    if (progressBasedStatuses.includes(objective?.status)) {
+        const newStatus = calculateProgressStatus(progress);
+        updateData.status = newStatus;
+    }
+
     await prisma.objectives.update({
         where: { id: objectiveId },
-        data: { progress_percentage: progress },
+        data: updateData,
     });
 
     return progress;

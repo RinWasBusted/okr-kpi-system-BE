@@ -128,13 +128,14 @@ const formatKeyResult = (kr, now) => ({
 });
 
 // Calculate progress status based on progress_percentage
+// Returns ProgressStatus enum values
 const calculateProgressStatus = (progress) => {
     const p = Number(progress) || 0;
     if (p === 0) return "NOT_STARTED";
     if (p >= 100) return "COMPLETED";
     if (p >= 80) return "ON_TRACK";
-    if (p >= 30) return "WARNING";
-    return "DANGER";
+    if (p >= 30) return "AT_RISK";
+    return "CRITICAL";
 };
 
 // Calculate permissions for an objective based on user and objective state
@@ -575,12 +576,11 @@ export const updateObjective = async (user, objectiveId, updates) => {
         throw new AppError("You do not have permission to update this objective", 403);
     }
 
-    const editableStatuses = ["Draft", "Rejected", "Active"];
+    // Only Draft and Rejected statuses can be edited
+    const editableStatuses = ["Draft", "Rejected"];
     if (!editableStatuses.includes(objective.status)) {
         throw new AppError("Objective cannot be updated in its current status", 400);
     }
-
-    const keepActiveState = objective.status === "Active";
 
     if (updates.parent_objective_id !== undefined && updates.parent_objective_id !== null) {
         if (updates.parent_objective_id === objectiveId) {
@@ -625,12 +625,9 @@ export const updateObjective = async (user, objectiveId, updates) => {
             parent_objective_id: updates.parent_objective_id,
         }),
         ...(updates.visibility !== undefined && { visibility: updates.visibility }),
+        status: "Draft",
+        approved_by: null,
     };
-
-    if (!keepActiveState) {
-        data.status = "Draft";
-        data.approved_by = null;
-    }
 
     const updated = await prisma.objectives.update({
         where: { id: objectiveId },
@@ -710,6 +707,9 @@ export const approveObjective = async (user, objectiveId, updates) => {
         throw new AppError("owner_id is required for PRIVATE objectives", 422);
     }
 
+    // Calculate progress-based status after approval
+    const newStatus = calculateProgressStatus(objective.progress_percentage);
+
     const updated = await prisma.objectives.update({
         where: { id: objectiveId },
         data: {
@@ -719,7 +719,7 @@ export const approveObjective = async (user, objectiveId, updates) => {
                 parent_objective_id: updates.parent_objective_id,
             }),
             ...(updates.visibility !== undefined && { visibility: updates.visibility }),
-            status: "Active",
+            status: newStatus,
             approved_by: user.id,
         },
         select: objectiveBaseSelect,
@@ -730,7 +730,7 @@ export const approveObjective = async (user, objectiveId, updates) => {
     return await formatObjective(updated, false, user);
 };
 
-// Publish/Activate objective directly from Draft to Active (bypass approval workflow)
+// Publish/Activate objective directly from Draft to progress-based status (bypass approval workflow)
 // For admin or high-level managers
 export const publishObjective = async (user, objectiveId, updates = {}) => {
     const objective = await getObjectiveOrThrow(objectiveId);
@@ -782,6 +782,9 @@ export const publishObjective = async (user, objectiveId, updates = {}) => {
         throw new AppError("owner_id is required for PRIVATE objectives", 422);
     }
 
+    // Calculate progress-based status
+    const newStatus = calculateProgressStatus(objective.progress_percentage);
+
     const updated = await prisma.objectives.update({
         where: { id: objectiveId },
         data: {
@@ -791,7 +794,7 @@ export const publishObjective = async (user, objectiveId, updates = {}) => {
                 parent_objective_id: updates.parent_objective_id,
             }),
             ...(updates.visibility !== undefined && { visibility: updates.visibility }),
-            status: "Active",
+            status: newStatus,
             approved_by: user.id,
         },
         select: objectiveBaseSelect,
@@ -848,8 +851,8 @@ export const revertToDraft = async (user, objectiveId) => {
         throw new AppError("You do not have permission to revert this objective", 403);
     }
 
-    // Can only revert from certain statuses
-    const revertibleStatuses = ["Rejected", "Pending_Approval", "Active", "Completed"];
+    // Can only revert from certain statuses (includes all progress-based statuses)
+    const revertibleStatuses = ["Rejected", "Pending_Approval", "NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"];
     if (!revertibleStatuses.includes(objective.status)) {
         throw new AppError(`Cannot revert objective from ${objective.status} status`, 400);
     }
@@ -940,7 +943,7 @@ export const getAvailableParentObjectives = async (user, unitId, cycleId, includ
     const where = {
         deleted_at: null,
         unit_id: { in: relevantUnitIds },
-        status: { in: ["Active", "Completed"] },
+        status: { in: ["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"] },
         ...(cycleId !== undefined && { cycle_id: cycleId }),
     };
 

@@ -35,11 +35,11 @@ export const listObjectivesQuerySchema = z.object({
     cycle_id: z.string().regex(/^\d+$/).transform(Number).optional(),
     unit_id: z.string().regex(/^\d+$/).transform(Number).optional(),
     owner_id: z.string().regex(/^\d+$/).transform(Number).optional(),
-    status: z.enum(["Draft", "Active", "Pending_Approval", "Rejected", "Completed"]).optional(),
+    status: z.enum(["Draft", "Pending_Approval", "Rejected", "NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"]).optional(),
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
     parent_objective_id: z.string().regex(/^\d+$/).transform(Number).optional(),
     // Progress status filter based on progress_percentage
-    progress_status: z.enum(["NOT_STARTED", "DANGER", "WARNING", "ON_TRACK", "COMPLETED"]).optional(),
+    progress_status: z.enum(["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"]).optional(),
     page: z.string().regex(/^\d+$/).transform(Number).optional().default("1"),
     per_page: z.string().regex(/^\d+$/).transform(Number).optional().default("20"),
     include_key_results: z.enum(["true", "false"]).transform((v) => v === "true").optional().default("false"),
