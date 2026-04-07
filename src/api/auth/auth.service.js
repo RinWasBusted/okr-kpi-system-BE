@@ -16,7 +16,7 @@ const SESSION_TTL_30D = 30 * 24 * 60 * 60;
  * Store a new session in Redis.
  * Keys:
  *   refreshToken:{token}  → { userId, sessionId, ttl_seconds }
- *   session:{sessionId}   → { userId, created_at, ttl_seconds, token }
+ *   session:{sessionId}   → { userId, created_at, ttl_seconds, token }e
  *   userSessions:{userId} → Set<sessionId>
  */
 const storeSession = async (userId, refreshToken, sessionId, ttlSeconds) => {
@@ -167,56 +167,49 @@ export const loginService = async (email, password, company_slug = '', remember_
 
 export const refreshTokenService = async (refreshToken) => {
     const tokenMeta = await client.get(`refreshToken:${refreshToken}`);
-
-    if (!tokenMeta) {
-        throw new AppError("Refresh token not found", 401);
-    }
+    if (!tokenMeta) throw new AppError("Refresh token not found", 401);
 
     const { userId, sessionId, ttl_seconds } = JSON.parse(tokenMeta);
-
-    // Fetch full user payload from the session record
     const sessionInfo = await client.get(`session:${sessionId}`);
     const sessionData = sessionInfo ? JSON.parse(sessionInfo) : {};
 
-    const user = await prisma.users.findUnique({
-        where: { id: userId },
-        select: { id: true, role: true, company_id: true, unit_id: true },
+    return await requestContext.run({ company_id: '', role: 'ADMIN' }, async () => {
+        const user = await prisma.users.findUnique({
+            where: { id: userId },
+            select: { id: true, role: true, company_id: true, unit_id: true },
+        });
+
+        if (!user) throw new AppError("User not found", 401);
+
+        let unit_path = null;
+        if (user.unit_id) {
+            const unitData = await prisma.$queryRaw`
+                SELECT path::text as unit_path FROM "Units" WHERE id = ${user.unit_id}
+            `;
+            unit_path = unitData[0]?.unit_path || null;
+        }
+
+        const tokenPayload = { id: user.id, role: user.role, company_id: user.company_id, unit_id: user.unit_id, unit_path };
+        const accessToken = generateToken(tokenPayload, '15m');
+
+        const ttlDays = Math.ceil(ttl_seconds / (24 * 60 * 60));
+        const newRefreshToken = generateToken(tokenPayload, `${ttlDays}d`);
+
+        await client.del(`refreshToken:${refreshToken}`);
+        const updatedSessionMeta = JSON.stringify({
+            userId: user.id,
+            created_at: sessionData.created_at || new Date().toISOString(),
+            ttl_seconds,
+            token: newRefreshToken,
+        });
+
+        await Promise.all([
+            client.setEx(`refreshToken:${newRefreshToken}`, ttl_seconds, JSON.stringify({ userId: user.id, sessionId, ttl_seconds })),
+            client.setEx(`session:${sessionId}`, ttl_seconds, updatedSessionMeta),
+        ]);
+
+        return { accessToken, refreshToken: newRefreshToken, cookie_max_age: ttl_seconds * 1000, expires_in: 15 * 60 };
     });
-
-    if (!user) {
-        throw new AppError("User not found", 401);
-    }
-
-    // Resolve current unit_path
-    let unit_path = null;
-    if (user.unit_id) {
-        const unitData = await prisma.$queryRaw`
-            SELECT path::text as unit_path FROM "Units" WHERE id = ${user.unit_id}
-        `;
-        unit_path = unitData[0]?.unit_path || null;
-    }
-
-    const tokenPayload = { id: user.id, role: user.role, company_id: user.company_id, unit_id: user.unit_id, unit_path };
-    const accessToken = generateToken(tokenPayload, '15m');
-
-    // Token rotation: use the SAME TTL as the original session so remember_me sessions aren't shortened
-    const ttlDays = Math.ceil(ttl_seconds / (24 * 60 * 60));
-    const newRefreshToken = generateToken(tokenPayload, `${ttlDays}d`);
-
-    // Replace old token with new one, keeping the same sessionId and TTL
-    await client.del(`refreshToken:${refreshToken}`);
-    const updatedSessionMeta = JSON.stringify({
-        userId: user.id,
-        created_at: sessionData.created_at || new Date().toISOString(),
-        ttl_seconds,
-        token: newRefreshToken,
-    });
-    await Promise.all([
-        client.setEx(`refreshToken:${newRefreshToken}`, ttl_seconds, JSON.stringify({ userId: user.id, sessionId, ttl_seconds })),
-        client.setEx(`session:${sessionId}`, ttl_seconds, updatedSessionMeta),
-    ]);
-
-    return { accessToken, refreshToken: newRefreshToken, cookie_max_age: ttl_seconds * 1000, expires_in: 15 * 60 };
 };
 
 export const getCurrentUser = async (userId) => {
