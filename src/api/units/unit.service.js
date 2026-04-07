@@ -173,6 +173,23 @@ export const createUnit = async (companyId, { name, parent_id, manager_id }) => 
                 LIMIT 1
             `;
             if (manager.length === 0) throw new AppError("Manager not found or is not eligible to be assigned as a unit manager", 404);
+
+            // Check if manager is already managing another unit, if so, remove them from that unit
+            const currentManagedUnit = await tx.$queryRaw`
+                SELECT id FROM "Units" WHERE manager_id = ${manager_id} LIMIT 1
+            `;
+            if (currentManagedUnit.length > 0) {
+                const oldUnitId = currentManagedUnit[0].id;
+                await tx.$executeRaw`
+                    UPDATE "Units" SET manager_id = null WHERE id = ${oldUnitId}
+                `;
+                // Update unit_id for the old manager's user record
+                await tx.$executeRaw`
+                    UPDATE "Users" SET unit_id = null WHERE id = ${manager_id}
+                `;
+                // Update access_path for old manager's owned items
+                await updateAccessPathForUserOwnedItems(tx, manager_id, null);
+            }
         }
 
         const nextIdRows = await tx.$queryRaw`
@@ -231,6 +248,23 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
                 LIMIT 1
             `;
             if (manager.length === 0) throw new AppError("Manager not found or is not eligible to be assigned as a unit manager", 404);
+
+            // Check if manager is already managing another unit (not this unit)
+            const currentManagedUnit = await tx.$queryRaw`
+                SELECT id FROM "Units" WHERE manager_id = ${manager_id} AND id != ${unitId} LIMIT 1
+            `;
+            if (currentManagedUnit.length > 0) {
+                const oldUnitId = currentManagedUnit[0].id;
+                await tx.$executeRaw`
+                    UPDATE "Units" SET manager_id = null WHERE id = ${oldUnitId}
+                `;
+                // Update unit_id for the old manager's user record
+                await tx.$executeRaw`
+                    UPDATE "Users" SET unit_id = null WHERE id = ${manager_id}
+                `;
+                // Update access_path for old manager's owned items
+                await updateAccessPathForUserOwnedItems(tx, manager_id, null);
+            }
         }
 
         const nameProvided = name !== undefined && name !== null;

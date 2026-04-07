@@ -15,7 +15,7 @@ export const createObjectiveSchema = z.object({
     owner_id: z.coerce.number().int().positive().nullable().optional(),
     parent_objective_id: z.coerce.number().int().positive().nullable().optional(),
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
-    description: z.string().max(LIMITS.description.max).optional(),
+    description: z.string().max(LIMITS.description.max).nullable().optional(),
 });
 
 export const updateObjectiveSchema = z.object({
@@ -26,7 +26,7 @@ export const updateObjectiveSchema = z.object({
         .optional(),
     parent_objective_id: z.coerce.number().int().positive().nullable().optional(),
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
-    description: z.string().max(LIMITS.description.max).optional(),
+    description: z.string().max(LIMITS.description.max).nullable().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
 });

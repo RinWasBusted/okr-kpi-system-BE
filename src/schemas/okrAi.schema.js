@@ -6,8 +6,8 @@ export const generateKeyResultsSchema = z.object({
   // Optional hints to steer generation
   constraints: z
     .object({
-      due_date: z.string().date().optional(), // YYYY-MM-DD
-      unit: z.string().min(1).max(32).optional(),
+      due_date: z.string().date().nullable().optional(), // YYYY-MM-DD
+      unit: z.string().min(1).max(32).nullable().optional(),
     })
     .optional(),
 });
@@ -19,8 +19,8 @@ export const generateTestKeyResultsSchema = z.object({
   language: z.enum(["vi", "en"]).optional().default("vi"),
   constraints: z
     .object({
-      due_date: z.string().date().optional(), // YYYY-MM-DD
-      unit: z.string().min(1).max(32).optional(),
+      due_date: z.string().date().nullable().optional(), // YYYY-MM-DD
+      unit: z.string().min(1).max(32).nullable().optional(),
     })
     .optional(),
 });
