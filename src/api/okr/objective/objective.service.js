@@ -128,14 +128,13 @@ const formatKeyResult = (kr, now) => ({
 });
 
 // Calculate progress status based on progress_percentage
-// Returns ProgressStatus enum values
 const calculateProgressStatus = (progress) => {
     const p = Number(progress) || 0;
     if (p === 0) return "NOT_STARTED";
     if (p >= 100) return "COMPLETED";
     if (p >= 80) return "ON_TRACK";
-    if (p >= 30) return "AT_RISK";
-    return "CRITICAL";
+    if (p >= 30) return "WARNING";
+    return "DANGER";
 };
 
 // Calculate permissions for an objective based on user and objective state
@@ -218,7 +217,6 @@ const formatObjective = async (objective, includeKeyResults = false, user = null
         status: objective.status,
         visibility: objective.visibility,
         progress_percentage: objective.progress_percentage,
-        progress_status: calculateProgressStatus(objective.progress_percentage),
         cycle: objective.cycle ?? null,
         unit_id: objective.unit_id,
         owner_id: objective.owner_id,
@@ -397,12 +395,6 @@ export const listObjectives = async ({
         allObjectives.map((objective) => formatObjective(objective, include_key_results, user))
     );
 
-    // Filter by progress_status if provided
-    if (filters.progress_status) {
-        formattedObjectives = formattedObjectives.filter(
-            (o) => o.progress_status === filters.progress_status
-        );
-    }
 
     // Flat list mode: return all objectives as flat list with pagination
     if (mode === "list") {

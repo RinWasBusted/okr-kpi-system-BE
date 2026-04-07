@@ -37,14 +37,6 @@ const parseStatus = (value) => {
     throw new AppError("Invalid status", 422);
 };
 
-const parseProgressStatus = (value) => {
-    if (value === undefined || value === null || value === "") return undefined;
-    const normalized = String(value).toUpperCase();
-    const allowed = ["NOT_STARTED", "DANGER", "WARNING", "ON_TRACK", "COMPLETED"];
-    if (allowed.includes(normalized)) return normalized;
-    throw new AppError("Invalid progress_status", 422);
-};
-
 // GET /objectives
 export const getObjectives = async (req, res) => {
     try {
@@ -53,7 +45,6 @@ export const getObjectives = async (req, res) => {
             unit_id,
             owner_id,
             status,
-            progress_status,
             parent_objective_id,
             visibility,
             include_key_results,
@@ -67,7 +58,6 @@ export const getObjectives = async (req, res) => {
             unit_id,
             owner_id,
             status,
-            progress_status,
             parent_objective_id,
             visibility,
         };

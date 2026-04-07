@@ -358,21 +358,36 @@ router.get("/objectives/available-parents", validate(getAvailableParentObjective
 
 /**
  * @swagger
- * /objectives/{id}:
+ * /objectives/available-parents:
  *   get:
- *     summary: Get objective details by ID
- *     description: Retrieve a single objective with its key results. User must have permission to view the objective based on visibility rules.
+ *     summary: Get available parent objectives for a unit
+ *     description: |
+ *       Retrieve objectives that can be set as parent for a new objective in the specified unit.
+ *       Returns objectives from the specified unit and all its ancestor units.
+ *       Only includes objectives with progress-based status (NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED).
+ *       Results are filtered by visibility permissions.
  *     tags: [Objectives]
  *     parameters:
- *       - in: path
- *         name: id
+ *       - in: query
+ *         name: unit_id
  *         required: true
  *         schema:
  *           type: integer
- *         description: Objective ID
+ *         description: The unit ID for which to find available parent objectives
+ *       - in: query
+ *         name: cycle_id
+ *         schema:
+ *           type: integer
+ *         description: Optional - filter by cycle
+ *       - in: query
+ *         name: include_key_results
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Include associated key results in response
  *     responses:
  *       200:
- *         description: Objective retrieved successfully
+ *         description: Available parent objectives retrieved successfully
  *         content:
  *           application/json:
  *             schema:
@@ -383,6 +398,29 @@ router.get("/objectives/available-parents", validate(getAvailableParentObjective
  *                 message:
  *                   type: string
  *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       unit:
+ *                         type: object
+ *                         nullable: true
+ *                       objectives:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             title:
+ *                               type: string
+ *                             status:
+ *                               type: string
+ *                             visibility:
+ *                               type: string
+ *                             progress_percentage:
+ *                               type: number
+ *                 meta:
  *                   type: object
  *                   properties:
  *                     objective:
@@ -429,11 +467,9 @@ router.get("/objectives/available-parents", validate(getAvailableParentObjective
  *                             delete:
  *                               type: boolean
  *       400:
- *         description: Invalid objective ID
- *       403:
- *         description: No permission to view this objective
+ *         description: Invalid unit_id
  *       404:
- *         description: Objective not found
+ *         description: Unit not found
  */
 router.get("/objectives/:id", getObjectiveById);
 
