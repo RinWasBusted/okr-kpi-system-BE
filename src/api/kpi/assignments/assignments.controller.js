@@ -61,7 +61,7 @@ export const getKPIAssignments = async (req, res) => {
 // POST /kpi-assignments
 export const createKPIAssignment = async (req, res) => {
     try {
-        const { kpi_dictionary_id, cycle_id, target_value, current_value, owner_id, unit_id, parent_assignment_id, visibility } = req.validated.body;
+        const { kpi_dictionary_id, cycle_id, target_value, current_value, owner_id, unit_id, parent_assignment_id, visibility, due_date } = req.validated.body;
 
         const assignment = await assignmentsService.createKPIAssignment(req.user, {
             kpi_dictionary_id,
@@ -72,6 +72,7 @@ export const createKPIAssignment = async (req, res) => {
             unit_id,
             parent_assignment_id,
             visibility,
+            due_date,
         });
 
         res.success("KPI Assignment created successfully", 201, { kpi_assignment: assignment });
@@ -86,7 +87,7 @@ export const updateKPIAssignment = async (req, res) => {
         const assignmentId = parsePositiveInt(req.params.id, null);
         if (!assignmentId) throw new AppError("Invalid assignment ID", 400);
 
-        const { cycle_id, target_value, current_value, visibility } = req.validated.body;
+        const { cycle_id, target_value, current_value, visibility, due_date } = req.validated.body;
         const updates = {};
 
         if (cycle_id !== undefined) {
@@ -103,6 +104,10 @@ export const updateKPIAssignment = async (req, res) => {
 
         if (visibility !== undefined) {
             updates.visibility = visibility;
+        }
+
+        if (due_date !== undefined) {
+            updates.due_date = due_date;
         }
 
         if (Object.keys(updates).length === 0) {

@@ -33,7 +33,8 @@ const calculateProgressPercentage = (currentValue, targetValue, evaluationMethod
     return Math.min((currentValue / targetValue) * 100, 100);
 };
 
-// Calculate progress status for KPI (different enum than Objective)
+// Calculate progress status for KPI
+// Returns ProgressStatus enum values
 const calculateProgressStatus = (progress) => {
     const p = Number(progress) || 0;
     if (p === 0) return "NOT_STARTED";
@@ -126,6 +127,7 @@ const assignmentSelect = {
     unit_id: true,
     parent_assignment_id: true,
     cycle_id: true,
+    due_date: true,
 };
 
 const formatAssignment = async (assignment, user = null) => {

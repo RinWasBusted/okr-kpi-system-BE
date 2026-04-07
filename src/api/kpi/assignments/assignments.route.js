@@ -161,6 +161,11 @@ router.use(authenticate);
  *                       parent_assignment:
  *                         type: object
  *                         nullable: true
+ *                       due_date:
+ *                         type: string
+ *                         format: date-time
+ *                         nullable: true
+ *                         description: Due date for this KPI assignment
  *                       latest_record:
  *                         type: object
  *                         nullable: true
@@ -323,6 +328,11 @@ router.get("/kpi-assignments/available-parents", getAvailableParentKPIs);
  *                           type: object
  *                         parent_assignment:
  *                           type: object
+ *                         due_date:
+ *                           type: string
+ *                           format: date-time
+ *                           nullable: true
+ *                           description: Due date for this KPI assignment
  *                         latest_record:
  *                           type: object
  *                         permission:
@@ -395,6 +405,10 @@ router.get("/kpi-assignments/:id", getKPIAssignmentById);
  *                 description: |
  *                   Visibility level (PUBLIC < INTERNAL < PRIVATE)
  *                   If parent_assignment_id provided, child visibility must be >= parent visibility
+ *               due_date:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Optional - due date for this KPI assignment (e.g., for weekly or short-term KPIs)
  *     responses:
  *       201:
  *         description: KPI Assignment created successfully
@@ -444,6 +458,10 @@ router.post("/kpi-assignments", validate(createKPIAssignmentSchema), createKPIAs
  *                 type: string
  *                 enum: [PUBLIC, INTERNAL, PRIVATE]
  *                 description: Visibility level (PUBLIC < INTERNAL < PRIVATE). If parent assignment exists, child visibility must be >= parent visibility
+ *               due_date:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Due date for this KPI assignment (e.g., for weekly or short-term KPIs)
  *     responses:
  *       200:
  *         description: KPI Assignment updated successfully
