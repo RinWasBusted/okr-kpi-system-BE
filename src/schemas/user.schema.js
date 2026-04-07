@@ -38,7 +38,7 @@ export const updateUserSchema = z.object({
         .min(LIMITS.password.min, `Password must be at least ${LIMITS.password.min} characters`)
         .max(LIMITS.password.max, `Password must not exceed ${LIMITS.password.max} characters`)
         .optional(),
-    is_active: z.boolean().optional(),
+    is_active: z.boolean().nullable().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
 });
