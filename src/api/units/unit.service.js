@@ -166,13 +166,21 @@ export const createUnit = async (companyId, { name, parent_id, manager_id }) => 
 
         if (manager_id !== undefined && manager_id !== null) {
             const manager = await tx.$queryRaw`
-                SELECT id
+                SELECT id, unit_id
                 FROM "Users"
                 WHERE id = ${manager_id}
                   AND role != ${UserRole.ADMIN}::"UserRole"
                 LIMIT 1
             `;
             if (manager.length === 0) throw new AppError("Manager not found or is not eligible to be assigned as a unit manager", 404);
+
+            // Check if manager already belongs to a unit
+            // For new units, manager must not belong to any other unit
+            // (since the unit doesn't exist yet, they can't have this unit_id)
+            const managerUnitId = manager[0].unit_id;
+            if (managerUnitId !== null) {
+                throw new AppError("Manager must not be assigned to any unit before becoming a manager", 400);
+            }
 
             // Check if manager is already managing another unit, if so, remove them from that unit
             const currentManagedUnit = await tx.$queryRaw`
@@ -241,7 +249,7 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
 
         if (manager_id !== undefined && manager_id !== null) {
             const manager = await tx.$queryRaw`
-                SELECT id
+                SELECT id, unit_id
                 FROM "Users"
                 WHERE id = ${manager_id}
                   AND role != ${UserRole.ADMIN}::"UserRole"
@@ -249,22 +257,16 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
             `;
             if (manager.length === 0) throw new AppError("Manager not found or is not eligible to be assigned as a unit manager", 404);
 
-            // Check if manager is already managing another unit (not this unit)
-            const currentManagedUnit = await tx.$queryRaw`
-                SELECT id FROM "Units" WHERE manager_id = ${manager_id} AND id != ${unitId} LIMIT 1
-            `;
-            if (currentManagedUnit.length > 0) {
-                const oldUnitId = currentManagedUnit[0].id;
-                await tx.$executeRaw`
-                    UPDATE "Units" SET manager_id = null WHERE id = ${oldUnitId}
-                `;
-                // Update unit_id for the old manager's user record
-                await tx.$executeRaw`
-                    UPDATE "Users" SET unit_id = null WHERE id = ${manager_id}
-                `;
-                // Update access_path for old manager's owned items
-                await updateAccessPathForUserOwnedItems(tx, manager_id, null);
+            // Check if manager belongs to this unit
+            // A person can only become manager of a unit if they have that unit_id
+            // Manager cannot be transferred directly from another unit - must be moved manually first
+            const managerUnitId = manager[0].unit_id;
+            if (managerUnitId !== unitId) {
+                throw new AppError("Manager must be a member of this unit (have matching unit_id). Transfer manager from another unit by first updating their unit_id via user management.", 400);
             }
+
+            // Note: We do NOT automatically transfer manager from another unit.
+            // Manager must first be moved to this unit (via user update), then can be assigned as manager.
         }
 
         const nameProvided = name !== undefined && name !== null;
@@ -284,18 +286,10 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
         `;
 
         if (managerProvided && newManagerId !== oldManagerId) {
-            if (oldManagerId !== null) {
-                await tx.$executeRaw`
-                    UPDATE "Users" SET unit_id = null WHERE id = ${oldManagerId}
-                `;
-                // Update access_path for old manager's owned items (now without unit)
-                await updateAccessPathForUserOwnedItems(tx, oldManagerId, null);
-            }
+            // When manager changes:
+            // - Old manager: remains as member of the unit (unit_id unchanged, access_path unchanged)
+            // - New manager: must already be a member of this unit (validated above), update access_path
             if (newManagerId !== null) {
-                await tx.$executeRaw`
-                    UPDATE "Users" SET unit_id = ${unitId} WHERE id = ${newManagerId}
-                `;
-                // Update access_path for new manager's owned items (now with this unit)
                 await updateAccessPathForUserOwnedItems(tx, newManagerId, unitId);
             }
         }

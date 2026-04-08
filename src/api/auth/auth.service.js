@@ -249,14 +249,15 @@ export const getCurrentUser = async (userId) => {
             ? getCloudinaryImageUrl(user.avatar_url, 50, 50, "fill")
             : null;
 
+        // eslint-disable-next-line no-unused-vars
+        const { company, unit, unit_id, unit_name, ...userRest } = user;
+
         return {
-            ...user,
+            ...userRest,
             avatar_url: avatarUrl,
-            company_slug: user.company?.slug || null,
-            company_name: user.company?.name || null,
-            unit_name: user.unit?.name || null,
-            company: undefined,
-            unit: undefined
+            company_slug: company?.slug || null,
+            company_name: company?.name || null,
+            unit: unit_id ? { id: unit_id, name: unit?.name || null } : null
         };
     } catch (error) {
         throw new AppError("Error occurred while fetching user", 500);
