@@ -1,6 +1,6 @@
 import prisma from "../../../utils/prisma.js";
 import AppError from "../../../utils/appError.js";
-import { getUnitPath, getUnitAncestors, getUnitDescendants } from "../../../utils/path.js";
+import { getUnitPath, getUnitAncestors, getUnitDescendants, isUnitManager } from "../../../utils/path.js";
 import { UserRole } from "@prisma/client";
 
 const dictionarySelect = {
@@ -10,9 +10,15 @@ const dictionarySelect = {
     evaluation_method: true,
     description: true,
     unit_id: true,
+    unit_ref: {
+        select: {
+            id: true,
+            name: true,
+        },
+    },
 };
 
-const formatDictionary = (dict, currentUser = null) => {
+const formatDictionary = (dict, currentUser = null, userManagedUnitIds = []) => {
     const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
 
     const result = {
@@ -22,13 +28,29 @@ const formatDictionary = (dict, currentUser = null) => {
         evaluation_method: dict.evaluation_method,
         description: dict.description ?? null,
         unit_id: dict.unit_id,
+        org_unit: dict.unit_ref ? { id: dict.unit_ref.id, name: dict.unit_ref.name } : null,
     };
 
-    // Only add permission for ADMIN_COMPANY
+    // Determine if user can edit/delete this dictionary
+    let isEditable = false;
+    let isDeletable = false;
+
     if (isAdmin) {
+        // Admin can edit/delete all dictionaries
+        isEditable = true;
+        isDeletable = true;
+    } else if (dict.unit_id) {
+        // For unit-specific dictionary, check if user manages this unit
+        isEditable = userManagedUnitIds.includes(dict.unit_id);
+        isDeletable = userManagedUnitIds.includes(dict.unit_id);
+    }
+    // For company-wide dictionary (unit_id is null), non-admin cannot edit/delete
+
+    // Only add permission if user has at least one of editable/deletable rights
+    if (isEditable || isDeletable) {
         result.permission = {
-            editable: true,
-            deletable: true,
+            editable: isEditable,
+            deletable: isDeletable,
         };
     }
 
@@ -36,8 +58,89 @@ const formatDictionary = (dict, currentUser = null) => {
 };
 
 export const listKPIDictionaries = async (user, forUnitId = null) => {
-    // If forUnitId is provided, filter dictionaries accessible to that specific unit
-    // (company-wide + unit itself + ancestor units)
+    // Get all units managed by current user for permission checking
+    const userManagedUnits = await prisma.units.findMany({
+        where: { manager_id: user.id, deleted_at: null },
+        select: { id: true },
+    });
+    const userManagedUnitIds = userManagedUnits.map(u => u.id);
+
+    // Determine which unit to use for filtering
+    const targetUnitId = forUnitId || user.unit_id;
+
+    if (user.role === UserRole.ADMIN_COMPANY) {
+        // AdminCompany sees all non-deleted dictionaries
+        const dictionaries = await prisma.kPIDictionaries.findMany({
+            where: {
+                deleted_at: null,
+            },
+            select: dictionarySelect,
+            orderBy: { id: "asc" },
+        });
+
+        return dictionaries.map(dict => formatDictionary(dict, user, userManagedUnitIds));
+    }
+
+    // For employee: get dictionaries for target unit's entire branch (ancestors + current + descendants)
+    if (targetUnitId) {
+        // Get ancestor unit IDs
+        const ancestorUnitIds = await getUnitAncestors(targetUnitId);
+        // Get descendant unit IDs
+        const descendantUnitIds = await getUnitDescendants(targetUnitId);
+        // Combine: target + ancestors + descendants
+        const unitBranchIds = [targetUnitId, ...ancestorUnitIds, ...descendantUnitIds];
+
+        const dictionaries = await prisma.kPIDictionaries.findMany({
+            where: {
+                deleted_at: null,
+                OR: [
+                    { unit_id: null }, // Company-wide
+                    { unit_id: { in: unitBranchIds } }, // Unit branch dictionaries
+                ],
+            },
+            select: dictionarySelect,
+            orderBy: { id: "asc" },
+        });
+
+        return dictionaries.map(dict => formatDictionary(dict, user, userManagedUnitIds));
+    }
+
+    // Employee with no unit_id: only sees company-wide dictionaries
+    const dictionaries = await prisma.kPIDictionaries.findMany({
+        where: {
+            deleted_at: null,
+            unit_id: null, // Company-wide only
+        },
+        select: dictionarySelect,
+        orderBy: { id: "asc" },
+    });
+
+    return dictionaries.map(dict => formatDictionary(dict, user, userManagedUnitIds));
+};
+
+export const getKPIDictionariesForUnitAssignment = async (user, forUnitId) => {
+    // Get all units managed by current user for permission checking
+    const userManagedUnits = await prisma.units.findMany({
+        where: { manager_id: user.id, deleted_at: null },
+        select: { id: true },
+    });
+    const userManagedUnitIds = userManagedUnits.map(u => u.id);
+
+    if (user.role === UserRole.ADMIN_COMPANY) {
+        // AdminCompany sees all non-deleted dictionaries
+        const dictionaries = await prisma.kPIDictionaries.findMany({
+            where: {
+                deleted_at: null,
+            },
+            select: dictionarySelect,
+            orderBy: { id: "asc" },
+        });
+
+        return dictionaries.map(dict => formatDictionary(dict, user, userManagedUnitIds));
+    }
+
+    // For employee: get dictionaries accessible for this unit
+    // (company-wide + unit itself + ancestor units only, NOT descendants)
     if (forUnitId) {
         const unitPath = await getUnitPath(forUnitId);
         const ancestorUnitIds = unitPath ? await getUnitAncestors(forUnitId) : [];
@@ -55,54 +158,59 @@ export const listKPIDictionaries = async (user, forUnitId = null) => {
             orderBy: { id: "asc" },
         });
 
-        return dictionaries.map(dict => formatDictionary(dict, user));
+        return dictionaries.map(dict => formatDictionary(dict, user, userManagedUnitIds));
     }
 
-    if (user.role === UserRole.ADMIN_COMPANY) {
-        // AdminCompany sees all non-deleted dictionaries
-        const dictionaries = await prisma.kPIDictionaries.findMany({
-            where: {
-                deleted_at: null,
-            },
-            select: dictionarySelect,
-            orderBy: { id: "asc" },
-        });
-
-        return dictionaries.map(dict => formatDictionary(dict, user));
-    }
-
-    // Employee sees company-wide dictionaries and their unit + parent units
-    const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
-    const accessibleUnitIds = userPath ? await getUnitAncestors(user.unit_id) : [];
-    const unitIds = userPath ? [user.unit_id, ...accessibleUnitIds] : [];
-
+    // No unit specified: only company-wide
     const dictionaries = await prisma.kPIDictionaries.findMany({
         where: {
             deleted_at: null,
-            OR: [
-                { unit_id: null }, // Company-wide
-                { unit_id: { in: unitIds } }, // User's unit and parent units
-            ],
+            unit_id: null,
         },
         select: dictionarySelect,
         orderBy: { id: "asc" },
     });
 
-    return dictionaries.map(dict => formatDictionary(dict, user));
+    return dictionaries.map(dict => formatDictionary(dict, user, userManagedUnitIds));
 };
 
 export const createKPIDictionary = async (user, payload) => {
-    if (user.role !== UserRole.ADMIN_COMPANY) {
-        throw new AppError("Only admin can create KPI dictionaries", 403);
-    }
-
-    // Validate unit_id if provided
+    // Check permissions based on unit_id
     if (payload.unit_id) {
+        // For unit-specific dictionary, user must be manager of this unit or ancestor manager
         const unit = await prisma.units.findFirst({
             where: { id: payload.unit_id },
             select: { id: true },
         });
         if (!unit) throw new AppError("Unit not found", 404);
+
+        // Get ancestor unit IDs
+        const ancestorUnitIds = await getUnitAncestors(payload.unit_id);
+        const relevantUnitIds = [payload.unit_id, ...ancestorUnitIds];
+
+        // Check if user is manager of this unit or any ancestor unit
+        const userManagedUnit = await prisma.units.findFirst({
+            where: {
+                id: { in: relevantUnitIds },
+                manager_id: user.id,
+            },
+            select: { id: true },
+        });
+
+        const isManager = !!userManagedUnit;
+        const isAdmin = user.role === UserRole.ADMIN_COMPANY;
+
+        if (!isManager && !isAdmin) {
+            throw new AppError(
+                "Phải là quản lý của đơn vị hoặc cấp trên hoặc là admin công ty thì mới tạo được mẫu KPI cho đơn vị này",
+                403
+            );
+        }
+    } else {
+        // For company-wide dictionary, only admin can create
+        if (user.role !== UserRole.ADMIN_COMPANY) {
+            throw new AppError("Only admin can create company-wide KPI dictionaries", 403);
+        }
     }
 
     const created = await prisma.kPIDictionaries.create({
@@ -117,21 +225,54 @@ export const createKPIDictionary = async (user, payload) => {
         select: dictionarySelect,
     });
 
-    return formatDictionary(created);
+    // For create response, get user's managed units for permission display
+    const userManagedUnits = await prisma.units.findMany({
+        where: { manager_id: user.id, deleted_at: null },
+        select: { id: true },
+    });
+    const userManagedUnitIds = userManagedUnits.map(u => u.id);
+
+    return formatDictionary(created, user, userManagedUnitIds);
 };
 
 export const updateKPIDictionary = async (user, dictionaryId, payload) => {
-    if (user.role !== UserRole.ADMIN_COMPANY) {
-        throw new AppError("Only admin can update KPI dictionaries", 403);
-    }
-
     const dictionary = await prisma.kPIDictionaries.findFirst({
         where: { id: dictionaryId },
-        select: { id: true, deleted_at: true },
+        select: { id: true, deleted_at: true, unit_id: true },
     });
 
     if (!dictionary) throw new AppError("KPI Dictionary not found", 404);
     if (dictionary.deleted_at) throw new AppError("Cannot update deleted KPI Dictionary", 400);
+
+    // Check permissions based on dictionary's unit_id
+    if (dictionary.unit_id) {
+        // For unit-specific dictionary, user must be manager of this unit or ancestor manager
+        const ancestorUnitIds = await getUnitAncestors(dictionary.unit_id);
+        const relevantUnitIds = [dictionary.unit_id, ...ancestorUnitIds];
+
+        const userManagedUnit = await prisma.units.findFirst({
+            where: {
+                id: { in: relevantUnitIds },
+                manager_id: user.id,
+            },
+            select: { id: true },
+        });
+
+        const isManager = !!userManagedUnit;
+        const isAdmin = user.role === UserRole.ADMIN_COMPANY;
+
+        if (!isManager && !isAdmin) {
+            throw new AppError(
+                "Phải là quản lý của đơn vị hoặc cấp trên hoặc là admin công ty thì mới cập nhật được mẫu KPI cho đơn vị này",
+                403
+            );
+        }
+    } else {
+        // For company-wide dictionary, only admin can update
+        if (user.role !== UserRole.ADMIN_COMPANY) {
+            throw new AppError("Only admin can update company-wide KPI dictionaries", 403);
+        }
+    }
 
     // Validate unit_id if provided and not null
     if (payload.unit_id !== undefined && payload.unit_id !== null) {
@@ -156,21 +297,54 @@ export const updateKPIDictionary = async (user, dictionaryId, payload) => {
         select: dictionarySelect,
     });
 
-    return formatDictionary(updated);
+    // For update response, get user's managed units for permission display
+    const userManagedUnits = await prisma.units.findMany({
+        where: { manager_id: user.id, deleted_at: null },
+        select: { id: true },
+    });
+    const userManagedUnitIds = userManagedUnits.map(u => u.id);
+
+    return formatDictionary(updated, user, userManagedUnitIds);
 };
 
 export const deleteKPIDictionary = async (user, dictionaryId) => {
-    if (user.role !== UserRole.ADMIN_COMPANY) {
-        throw new AppError("Only admin can delete KPI dictionaries", 403);
-    }
-
     const dictionary = await prisma.kPIDictionaries.findFirst({
         where: { id: dictionaryId },
-        select: { id: true, deleted_at: true },
+        select: { id: true, deleted_at: true, unit_id: true },
     });
 
     if (!dictionary) throw new AppError("KPI Dictionary not found", 404);
     if (dictionary.deleted_at) throw new AppError("KPI Dictionary already deleted", 400);
+
+    // Check permissions based on dictionary's unit_id
+    if (dictionary.unit_id) {
+        // For unit-specific dictionary, user must be manager of this unit or ancestor manager
+        const ancestorUnitIds = await getUnitAncestors(dictionary.unit_id);
+        const relevantUnitIds = [dictionary.unit_id, ...ancestorUnitIds];
+
+        const userManagedUnit = await prisma.units.findFirst({
+            where: {
+                id: { in: relevantUnitIds },
+                manager_id: user.id,
+            },
+            select: { id: true },
+        });
+
+        const isManager = !!userManagedUnit;
+        const isAdmin = user.role === UserRole.ADMIN_COMPANY;
+
+        if (!isManager && !isAdmin) {
+            throw new AppError(
+                "Phải là quản lý của đơn vị hoặc cấp trên hoặc là admin công ty thì mới xóa được mẫu KPI cho đơn vị này",
+                403
+            );
+        }
+    } else {
+        // For company-wide dictionary, only admin can delete
+        if (user.role !== UserRole.ADMIN_COMPANY) {
+            throw new AppError("Only admin can delete company-wide KPI dictionaries", 403);
+        }
+    }
 
     // Check if any KPI assignments use this dictionary
     const assignment = await prisma.kPIAssignments.findFirst({

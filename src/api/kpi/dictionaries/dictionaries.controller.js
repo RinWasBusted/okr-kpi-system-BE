@@ -32,6 +32,19 @@ export const getKPIDictionaries = async (req, res) => {
     }
 };
 
+// GET /kpi-dictionaries/for-assignment/:unit_id
+export const getKPIDictionariesForAssignment = async (req, res) => {
+    try {
+        const unitId = parsePositiveInt(req.params.unit_id, null);
+        if (!unitId) throw new AppError("Invalid unit ID", 400);
+
+        const data = await dictionariesService.getKPIDictionariesForUnitAssignment(req.user, unitId);
+        res.success("KPI Dictionaries for unit assignment retrieved successfully", 200, data);
+    } catch (error) {
+        throw error;
+    }
+};
+
 // POST /kpi-dictionaries
 export const createKPIDictionary = async (req, res) => {
     try {

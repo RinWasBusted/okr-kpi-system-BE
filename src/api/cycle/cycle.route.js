@@ -132,7 +132,7 @@ router.get("/", authenticate, getCycles);
  *       422:
  *         description: Validation error (DATE_OVERLAP or invalid dates)
  */
-router.post("/", createCycle);
+router.post("/", authorize("ADMIN_COMPANY"),createCycle);
 
 /**
  * @swagger
