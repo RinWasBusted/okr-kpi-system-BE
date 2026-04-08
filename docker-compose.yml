@@ -116,7 +116,7 @@ services:
 
 networks:
   okr-kpi-system-network:
-    driver: overlay
+    external: true
 
 volumes:
   pgdata:

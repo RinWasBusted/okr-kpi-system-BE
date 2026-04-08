@@ -943,7 +943,6 @@ export const getAvailableParentObjectives = async (user, unitId, cycleId, includ
     const where = {
         deleted_at: null,
         unit_id: { in: relevantUnitIds },
-        status: { in: ["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"] },
         ...(cycleId !== undefined && { cycle_id: cycleId }),
     };
 
@@ -961,6 +960,8 @@ export const getAvailableParentObjectives = async (user, unitId, cycleId, includ
         ],
         select,
     });
+
+    console.log(`Found ${objectives.length} potential parent objectives for unit ${unitId} (including ancestors)`);
 
     // Filter by visibility permissions
     const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
