@@ -121,7 +121,7 @@ export const findUserById = async (userId, currentUser = null) => {
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
-export const createUser = async (companyId, { full_name, email, password, unit_id, avatar_url }) => {
+export const createUser = async (companyId, { full_name, email, password, unit_id, avatar_url, job_title }) => {
     // email is @unique globally in schema — check globally to give a clean error
     // instead of letting Prisma throw a constraint violation
     const existing = await prisma.users.findFirst({ where: { email } });
@@ -143,6 +143,7 @@ export const createUser = async (companyId, { full_name, email, password, unit_i
             email,
             password: hashed,
             role: UserRole.EMPLOYEE,
+            job_title: job_title ?? null,
             unit_id: unit_id ?? null,
             is_active: true,
             avatar_url: avatar_url ?? null,
@@ -155,7 +156,7 @@ export const createUser = async (companyId, { full_name, email, password, unit_i
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 
-export const updateUser = async (userId, { full_name, unit_id, password, is_active }) => {
+export const updateUser = async (userId, { full_name, job_title, unit_id, password, is_active }) => {
     const existing = await prisma.users.findFirst({
         where: { id: userId, role: UserRole.EMPLOYEE },
     });
@@ -172,6 +173,7 @@ export const updateUser = async (userId, { full_name, unit_id, password, is_acti
 
     const updates = {};
     if (full_name !== undefined) updates.full_name = full_name;
+    if (job_title !== undefined) updates.job_title = job_title;
     if (unit_id !== undefined) updates.unit_id = unit_id ?? null;
     if (is_active !== undefined) updates.is_active = is_active;
     if (password !== undefined) updates.password = await hashPassword(password);
@@ -239,4 +241,25 @@ export const deleteUserAvatar = async (userId) => {
     });
 
     return formatUser(updated);
+};
+
+// ─── Soft Delete ──────────────────────────────────────────────────────────────
+
+export const softDeleteUser = async (userId) => {
+    const existing = await prisma.users.findFirst({
+        where: { id: userId },
+        select: { id: true, deleted_at: true },
+    });
+
+    if (!existing) throw new AppError("User not found", 404);
+
+    if (existing.deleted_at) {
+        throw new AppError("User already deleted", 400);
+    }
+
+    // Soft delete by setting deleted_at
+    await prisma.users.update({
+        where: { id: userId },
+        data: { deleted_at: new Date() },
+    });
 };

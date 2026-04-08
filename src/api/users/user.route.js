@@ -6,6 +6,7 @@ import {
     updateUser,
     uploadAvatar,
     deleteAvatar,
+    deleteUser,
     isOwnerOrAdmin
 } from "./user.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.js";
@@ -585,7 +586,7 @@ router.delete("/:id/avatar", authorize("ADMIN_COMPANY", "EMPLOYEE"), isOwnerOrAd
  *                       type: string
  *                       example: "Password must be at least 8 characters"
  */
-router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), validate(createUserSchema), createUser);
+router.post("/", authorize("ADMIN_COMPANY"), wrapMulter(requestContext, uploadSingle("avatar")), validate(createUserSchema), createUser);
  
 /**
  * @swagger
@@ -613,6 +614,12 @@ router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), validate(cr
  *                 minLength: 1
  *                 maxLength: 255
  *                 example: "Nguyen Van B"
+ *               job_title:
+ *                 type: string
+ *                 maxLength: 100
+ *                 nullable: true
+ *                 example: "Senior Engineer"
+ *                 description: Update job title. Set null to remove.
  *               unit_id:
  *                 type: integer
  *                 nullable: true
@@ -774,6 +781,34 @@ router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), validate(cr
  *                       type: string
  *                       example: "Password must be at least 8 characters"
  */
-router.put("/:id", validate(updateUserSchema), updateUser);
+router.put("/:id", isOwnerOrAdmin, validate(updateUserSchema), updateUser);
+
+/**
+ * @swagger
+ * /users/{id}:
+ *   delete:
+ *     summary: Soft delete a user
+ *     description: Soft delete (deactivate) a user by marking with deleted_at timestamp. Only ADMIN_COMPANY can perform this action.
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: User ID to delete
+ *     responses:
+ *       204:
+ *         description: User deleted successfully
+ *       400:
+ *         description: Invalid user ID or user already deleted
+ *       401:
+ *         description: Unauthorized - Access token missing or invalid
+ *       403:
+ *         description: Forbidden - Only ADMIN_COMPANY can delete users
+ *       404:
+ *         description: User not found
+ */
+router.delete("/:id", authorize("ADMIN_COMPANY"), deleteUser);
  
 export default router;

@@ -89,23 +89,29 @@ export const createUser = async (req, res) => {
         const companyId = req.user.company_id;
         if (!companyId) throw new AppError("Company context is required", 403);
 
-        const { full_name, email, password, unit_id } = req.validated.body;
+        const { full_name, email, password, unit_id, job_title } = req.validated.body;
 
         let avatarPublicId = null;
         // Upload avatar if file is provided
         if (req.file) {
-            const uploadResult = await uploadImageToCloudinary(
-                req.file.buffer,
-                req.file.originalname,
-                "okr-kpi-system/users/avatars"
-            );
-            avatarPublicId = uploadResult.public_id;
+            try {
+                const uploadResult = await uploadImageToCloudinary(
+                    req.file.buffer,
+                    req.file.originalname,
+                    "okr-kpi-system/users/avatars"
+                );
+                avatarPublicId = uploadResult.public_id;
+            } catch (uploadError) {
+                console.error("Avatar upload failed:", uploadError);
+                throw new AppError("Avatar upload failed", 400, "AVATAR_UPLOAD_FAILED");
+            }
         }
 
         const user = await userService.createUser(companyId, {
             full_name: full_name.trim(),
             email: email.trim().toLowerCase(),
             password,
+            job_title: job_title ? job_title.trim() : null,
             unit_id: unit_id ?? undefined,
             avatar_url: avatarPublicId,
         });
@@ -125,13 +131,17 @@ export const updateUser = async (req, res) => {
         const userId = parsePositiveInt(req.params.id, null);
         if (!userId) throw new AppError("Invalid user ID", 400);
 
-        const { full_name, unit_id, password, is_active } = req.validated.body;
+        const { full_name, job_title, unit_id, password, is_active } = req.validated.body;
 
         // Build only provided fields
         const updates = {};
 
         if (full_name !== undefined) {
             updates.full_name = full_name.trim();
+        }
+
+        if (job_title !== undefined) {
+            updates.job_title = job_title ? job_title.trim() : null;
         }
 
         if (unit_id !== undefined) {
@@ -197,3 +207,18 @@ export const deleteAvatar = async (req, res) => {
         throw error;
     }
 };
+
+// DELETE /users/:id - Soft delete user
+export const deleteUser = async (req, res) => {
+    try {
+        const userId = parsePositiveInt(req.params.id, null);
+        if (!userId) throw new AppError("Invalid user ID", 400);
+
+        await userService.softDeleteUser(userId);
+
+        res.status(204).send();
+    } catch (error) {
+        throw error;
+    }
+};
+
