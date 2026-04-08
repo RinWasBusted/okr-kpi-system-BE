@@ -96,7 +96,7 @@ model Users {
   approved_objectives Objectives[] @relation("ObjectiveApprover")
   check_ins          CheckIns[]
   feedbacks          Feedbacks[]
-  notifications      Notifications[]
+  notification_recipients NotificationRecipients[]
   ai_usage_logs      AIUsageLogs[]
 
   @@unique([email, company_id])
@@ -327,20 +327,49 @@ model Feedbacks {
   @@index([objective_id])
 }
 
+enum ReferenceType {
+  KPI
+  OBJECTIVE
+  CYCLE
+  UNIT
+  FEEDBACK
+}
+
+enum EventType {
+  CREATED
+  UPDATED
+  DELETED
+  ASSIGNED
+  STATUS_CHANGED
+  COMMENTED
+  REMINDER
+}
+
+
 model Notifications {
-  id           Int      @id @default(autoincrement())
-  company_id   Int
-  recipient_id Int
-  type         String
-  ref_type     String?
-  ref_id       Int?
-  is_read      Boolean  @default(false)
-  created_at   DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  company_id Int
+  event_type EventType
+  ref_type   ReferenceType
+  ref_id     Int?
+  title      String
+  message    String
+  created_at DateTime @default(now())
 
-  company   Companies @relation(fields: [company_id], references: [id])
-  recipient Users     @relation(fields: [recipient_id], references: [id])
+  company    Companies                @relation(fields: [company_id], references: [id])
+  recipients NotificationRecipients[]
+}
 
-  @@index([company_id])
+model NotificationRecipients {
+  notification_id Int
+  recipient_id    Int
+  read_at         DateTime?
+
+  notification Notifications @relation(fields: [notification_id], references: [id])
+  recipient    Users         @relation(fields: [recipient_id], references: [id])
+
+  @@id([notification_id, recipient_id])
+  @@index([recipient_id, read_at])
 }
 
 enum AIUsageStatus {
