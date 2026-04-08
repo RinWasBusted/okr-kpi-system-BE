@@ -126,7 +126,7 @@ enum Visibility {
 
 enum KPIEvaluationType {
   MAXIMIZE
-  MINIMIZE      
+  MINIMIZE
   TARGET
 }
 
@@ -157,6 +157,7 @@ model KPIAssignments {
   unit_id              Int
   visibility           Visibility
   access_path          Unsupported("ltree")
+  start_value          Float   @default(0)
   target_value         Float
   current_value        Float   @default(0)
   progress_percentage  Float   @default(0)
@@ -242,22 +243,24 @@ model Objectives {
 }
 
 model KeyResults {
-  id                  Int     @id @default(autoincrement())
+  id                  Int             @id @default(autoincrement())
   company_id          Int
   objective_id        Int
   title               String
+  start_value         Float           @default(0)
   target_value        Float
-  current_value       Float   @default(0)
+  current_value       Float           @default(0)
   unit                String
   weight              Float
-  due_date            DateTime @db.Date
-  progress_percentage Float   @default(0)
+  due_date            DateTime        @db.Date
+  progress_percentage Float           @default(0)
+  evaluation_method   KPIEvaluationType  @default(MAXIMIZE)
   deleted_at          DateTime?
 
   company   Companies  @relation(fields: [company_id], references: [id])
   objective Objectives @relation(fields: [objective_id], references: [id])
   check_ins CheckIns[]
-  feedbacks Feedbacks[] 
+  feedbacks Feedbacks[]
 
   @@index([company_id])
 }

@@ -57,6 +57,8 @@ export const createCheckIn = async (user, keyResultId, payload) => {
     const krProgress = calculateKeyResultProgress(
         payload.achieved_value,
         keyResult.target_value,
+        keyResult.start_value,
+        keyResult.evaluation_method,
     );
 
     const checkIn = await prisma.checkIns.create({

@@ -70,12 +70,71 @@ export const ensureCycleUnlocked = async (cycleId) => {
     if (cycle.is_locked) throw new AppError("Cycle is locked", 403, "CYCLE_LOCKED");
 };
 
-export const calculateKeyResultProgress = (currentValue, targetValue) => {
-    const target = Number(targetValue);
-    const current = Number(currentValue);
-    if (!Number.isFinite(target) || target === 0) return 0;
-    if (!Number.isFinite(current)) return 0;
-    return (current / target) * 100;
+/**
+ * Calculate progress percentage for Key Results.
+ * Uses the same formulas as KPI but bounded between 0% and 100%.
+ *
+ * @param {number} currentValue - The current actual value
+ * @param {number} targetValue - The target goal value
+ * @param {number} startValue - The baseline value at creation (from KeyResult.start_value)
+ * @param {string} evaluationMethod - The evaluation method: MAXIMIZE, MINIMIZE, or TARGET
+ * @returns {number} Progress percentage (bounded 0-100%)
+ *
+ * @example
+ * // MAXIMIZE: Sales target (start: 0, target: 100, current: 50) → 50%
+ * // MINIMIZE: Defect reduction (start: 100, target: 20, current: 60) → 50%
+ * // TARGET: Temperature control (start: 20, target: 25, current: 22.5) → 50%
+ */
+export const calculateKeyResultProgress = (currentValue, targetValue, startValue, evaluationMethod) => {
+    // Explicitly convert to numbers to handle Decimal/string types from Prisma
+    const actual = parseFloat(currentValue);
+    const target = parseFloat(targetValue);
+    const start = parseFloat(startValue);
+
+    // Validate inputs
+    if (isNaN(actual) || isNaN(target) || isNaN(start)) {
+        return 0;
+    }
+
+    // Edge case: start equals target
+    if (start === target) {
+        return actual === target ? 100 : 0;
+    }
+
+    let progress = 0;
+
+    switch (evaluationMethod) {
+        case "MAXIMIZE":
+            // Higher is better. Formula: (actual - start) / (target - start) * 100
+            // Example: start=0, target=100, actual=50 → 50%
+            progress = ((actual - start) / (target - start)) * 100;
+            break;
+
+        case "MINIMIZE":
+            // Lower is better. Formula: (start - actual) / (start - target) * 100
+            // Example: start=100, target=20, actual=60 → 50%
+            progress = ((start - actual) / (start - target)) * 100;
+            break;
+
+        case "TARGET":
+            // Closer to target is better. Formula: (1 - |actual - target| / |start - target|) * 100
+            // Example: start=20, target=25, actual=22.5 → 50%
+            // Symmetric: actual=8 and actual=12 with target=10 are equally off
+            const deviation = Math.abs(actual - target);
+            const maxDeviation = Math.abs(start - target);
+            if (maxDeviation === 0) {
+                return actual === target ? 100 : 0;
+            }
+            progress = (1 - deviation / maxDeviation) * 100;
+            break;
+
+        default:
+            // Fallback to MAXIMIZE behavior for unknown methods
+            progress = ((actual - start) / (target - start)) * 100;
+    }
+
+    // Bound between 0% and 100% for Key Results
+    return Math.max(0, Math.min(progress, 100));
 };
 
 // Calculate progress status based on progress_percentage

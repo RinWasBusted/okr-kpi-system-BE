@@ -57,23 +57,27 @@ const canViewObjective = async (user, objective, unitContext) => {
 const keyResultSelect = {
     id: true,
     title: true,
+    start_value: true,
     target_value: true,
     current_value: true,
     unit: true,
     weight: true,
     due_date: true,
     progress_percentage: true,
+    evaluation_method: true,
 };
 
 const formatKeyResult = (kr, now) => ({
     id: kr.id,
     title: kr.title,
+    start_value: kr.start_value,
     target_value: kr.target_value,
     current_value: kr.current_value,
     unit: kr.unit,
     weight: kr.weight,
     due_date: kr.due_date,
     progress_percentage: Math.round(kr.progress_percentage * 100) / 100,
+    evaluation_method: kr.evaluation_method,
     days_until_due: kr.due_date ? daysBetweenUtc(kr.due_date, now) : null,
 });
 
@@ -91,7 +95,7 @@ const getObjectiveForKeyResult = async (objectiveId) => {
 const getKeyResultOrThrow = async (keyResultId) => {
     const keyResult = await prisma.$queryRaw`
         SELECT
-            kr.id, kr.objective_id, kr.title, kr.target_value, kr.current_value, kr.unit, kr.weight, kr.due_date, kr.progress_percentage,
+            kr.id, kr.objective_id, kr.title, kr.start_value, kr.target_value, kr.current_value, kr.unit, kr.weight, kr.due_date, kr.progress_percentage, kr.evaluation_method,
             obj.id AS objective_id_obj, obj.status, obj.visibility, obj.unit_id, obj.owner_id, obj.access_path::text AS access_path
         FROM "KeyResults" kr
         JOIN "Objectives" obj ON kr.objective_id = obj.id
@@ -99,18 +103,20 @@ const getKeyResultOrThrow = async (keyResultId) => {
     `;
 
     if (!keyResult || keyResult.length === 0) throw new AppError("Key Result not found", 404);
-    
+
     const kr = keyResult[0];
     return {
         id: kr.id,
         objective_id: kr.objective_id,
         title: kr.title,
+        start_value: kr.start_value,
         target_value: kr.target_value,
         current_value: kr.current_value,
         unit: kr.unit,
         weight: kr.weight,
         due_date: kr.due_date,
         progress_percentage: kr.progress_percentage,
+        evaluation_method: kr.evaluation_method,
         objective: {
             id: kr.objective_id_obj,
             status: kr.status,
@@ -166,19 +172,31 @@ export const createKeyResult = async (user, objectiveId, payload) => {
         throw new AppError("Total KR weight cannot exceed 100", 422);
     }
 
-    const progressPercentage = calculateKeyResultProgress(payload.current_value, payload.target_value);
+    // start_value defaults to current_value if not provided (captures baseline at creation)
+    const startValue = payload.start_value ?? payload.current_value ?? 0;
+    const currentValue = payload.current_value ?? 0;
+    const evaluationMethod = payload.evaluation_method ?? "MAXIMIZE";
+
+    const progressPercentage = calculateKeyResultProgress(
+        currentValue,
+        payload.target_value,
+        startValue,
+        evaluationMethod,
+    );
 
     const created = await prisma.keyResults.create({
         data: {
             company_id: user.company_id,
             objective_id: objectiveId,
             title: payload.title,
+            start_value: startValue,
             target_value: payload.target_value,
-            current_value: payload.current_value,
+            current_value: currentValue,
             unit: payload.unit,
             weight: payload.weight,
             due_date: payload.due_date,
             progress_percentage: progressPercentage,
+            evaluation_method: evaluationMethod,
         },
         select: keyResultSelect,
     });
@@ -215,17 +233,27 @@ export const updateKeyResult = async (user, keyResultId, updates) => {
 
     const targetValue = updates.target_value ?? keyResult.target_value;
     const currentValue = updates.current_value ?? keyResult.current_value;
-    const progressPercentage = calculateKeyResultProgress(currentValue, targetValue);
+    // If start_value is being updated but not provided, use current_value as default
+    const startValue = updates.start_value ?? keyResult.start_value ?? currentValue ?? 0;
+    const evaluationMethod = updates.evaluation_method ?? keyResult.evaluation_method;
+    const progressPercentage = calculateKeyResultProgress(
+        currentValue,
+        targetValue,
+        startValue,
+        evaluationMethod,
+    );
 
     const updated = await prisma.keyResults.update({
         where: { id: keyResultId },
         data: {
             ...(updates.title !== undefined && { title: updates.title }),
+            ...(updates.start_value !== undefined && { start_value: updates.start_value }),
             ...(updates.target_value !== undefined && { target_value: updates.target_value }),
             ...(updates.current_value !== undefined && { current_value: updates.current_value }),
             ...(updates.unit !== undefined && { unit: updates.unit }),
             ...(updates.weight !== undefined && { weight: updates.weight }),
             ...(updates.due_date !== undefined && { due_date: updates.due_date }),
+            ...(updates.evaluation_method !== undefined && { evaluation_method: updates.evaluation_method }),
             progress_percentage: progressPercentage,
         },
         select: keyResultSelect,

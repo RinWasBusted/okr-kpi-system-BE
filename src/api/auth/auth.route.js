@@ -1,5 +1,14 @@
 import express from "express";
-import { login, refreshToken, logout, changePassword, getCurrentUser, logoutAll, getSessions, deleteSession } from "./auth.controller.js";
+import {
+  login,
+  refreshToken,
+  logout,
+  changePassword,
+  getCurrentUser,
+  logoutAll,
+  getSessions,
+  deleteSession,
+} from "./auth.controller.js";
 import { authenticate } from "../../middlewares/auth.js";
 import { loginRateLimit } from "../../middlewares/rateLimit.js";
 
@@ -175,6 +184,7 @@ const router = express.Router();
  *                   example: "Too many attempts. Try again after 14 minutes."
  */
 router.post("/login", loginRateLimit, login);
+// router.post("/login", login);
 
 /**
  * @swagger

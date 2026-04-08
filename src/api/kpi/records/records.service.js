@@ -37,7 +37,14 @@ const calculateTrend = (currentValue, previousValue) => {
 export const createKPIRecord = async (user, assignmentId, payload) => {
     const assignment = await prisma.kPIAssignments.findFirst({
         where: { id: assignmentId, deleted_at: null },
-        include: {
+        select: {
+            id: true,
+            target_value: true,
+            start_value: true,
+            current_value: true,
+            unit_id: true,
+            owner_id: true,
+            parent_assignment_id: true,
             kpi_dictionary: { select: { evaluation_method: true } },
         },
     });
@@ -89,6 +96,7 @@ export const createKPIRecord = async (user, assignmentId, payload) => {
     const progress = calculateProgress(
         payload.actual_value,
         assignment.target_value,
+        assignment.start_value,
         assignment.kpi_dictionary.evaluation_method,
     );
 
@@ -122,6 +130,7 @@ export const createKPIRecord = async (user, assignmentId, payload) => {
     const newProgress = calculateProgress(
         payload.actual_value,
         assignment.target_value,
+        assignment.start_value,
         assignment.kpi_dictionary.evaluation_method,
     );
 
@@ -237,15 +246,77 @@ const canViewAssignment = async (user, assignment) => {
     return false;
 };
 
-const calculateProgress = (actualValue, targetValue, evaluationMethod) => {
-    if (targetValue === 0) return 0;
-    if (evaluationMethod === "Positive") {
-        return Math.min((actualValue / targetValue) * 100, 100);
+/**
+ * Calculate progress percentage for KPI assignments.
+ * Supports values outside 0-100% (regression and over-achievement).
+ *
+ * @param {number} actualValue - The current actual value
+ * @param {number} targetValue - The target goal value
+ * @param {number} startValue - The baseline value at creation (must be provided from KPIAssignment.start_value)
+ * @param {string} evaluationMethod - The evaluation method: MAXIMIZE, MINIMIZE, or TARGET
+ * @returns {number} Progress percentage (can be negative for regression, >100% for over-achievement)
+ *
+ * @example
+ * // MAXIMIZE: Sales target (start: 0, target: 100, actual: 50) → 50%
+ * // MINIMIZE: Defect reduction (start: 100, target: 20, actual: 60) → 50%
+ * // TARGET: Temperature control (start: 20, target: 25, actual: 22.5) → 50%
+ */
+const calculateProgress = (actualValue, targetValue, startValue, evaluationMethod) => {
+    // Explicitly convert to numbers to handle Decimal/string types from Prisma
+    const actual = parseFloat(actualValue);
+    const target = parseFloat(targetValue);
+    const start = parseFloat(startValue);
+
+    // Validate inputs
+    if (isNaN(actual) || isNaN(target) || isNaN(start)) {
+        console.log("[DEBUG] Invalid inputs:", { actualValue, targetValue, startValue, evaluationMethod });
+        return 0;
     }
-    if (evaluationMethod === "Negative") {
-        return Math.max((1 - actualValue / targetValue) * 100, 0);
+
+    // Edge case: start equals target
+    if (start === target) {
+        return actual === target ? 100 : 0;
     }
-    return Math.min((actualValue / targetValue) * 100, 100);
+
+    let progress = 0;
+
+    switch (evaluationMethod) {
+        case "MAXIMIZE":
+            // Higher is better. Formula: (actual - start) / (target - start) * 100
+            // Example: start=0, target=100, actual=50 → 50%
+            // Example: start=10, target=110, actual=60 → 50%
+            // Can exceed 100% (over-achievement) or be negative (regression)
+            progress = ((actual - start) / (target - start)) * 100;
+            break;
+
+        case "MINIMIZE":
+            // Lower is better. Formula: (start - actual) / (start - target) * 100
+            // Example: start=100, target=20, actual=60 → 50%
+            // Example: start=100, target=0, actual=50 → 50%
+            // Can exceed 100% (over-achievement) or be negative (regression)
+            progress = ((start - actual) / (start - target)) * 100;
+            break;
+
+        case "TARGET":
+            // Closer to target is better. Formula: (1 - |actual - target| / |start - target|) * 100
+            // Example: start=20, target=25, actual=22.5 → 50%
+            // Example: start=0, target=100, actual=100 → 100%
+            // Symmetric: actual=8 and actual=12 with target=10 are equally off
+            // Can be negative if drifting further from start direction
+            const deviation = Math.abs(actual - target);
+            const maxDeviation = Math.abs(start - target);
+            if (maxDeviation === 0) {
+                return actual === target ? 100 : 0;
+            }
+            progress = (1 - deviation / maxDeviation) * 100;
+            break;
+
+        default:
+            // Fallback to MAXIMIZE behavior for unknown methods
+            progress = ((actual - start) / (target - start)) * 100;
+    }
+
+    return progress;
 };
 
 const getUnitPath = async (unitId) => {

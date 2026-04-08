@@ -273,87 +273,6 @@ router.get("/objectives", validate(listObjectivesQuerySchema, "query"), getObjec
  *         description: Unit not found
  */
 router.get("/objectives/available-parents", validate(getAvailableParentObjectivesSchema, "query"), getAvailableParentObjectives);
-/**
- * @swagger
- * /objectives/available-parents:
- *   get:
- *     summary: Get available parent objectives for a unit
- *     description: |
- *       Retrieve objectives that can be set as parent for a new objective in the specified unit.
- *       Returns objectives from the specified unit and all its ancestor units.
- *       Only includes objectives with progress-based status (NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED).
- *       Results are filtered by visibility permissions.
- *     tags: [Objectives]
- *     parameters:
- *       - in: query
- *         name: unit_id
- *         required: true
- *         schema:
- *           type: integer
- *         description: The unit ID for which to find available parent objectives
- *       - in: query
- *         name: cycle_id
- *         schema:
- *           type: integer
- *         description: Optional - filter by cycle
- *       - in: query
- *         name: include_key_results
- *         schema:
- *           type: boolean
- *           default: false
- *         description: Include associated key results in response
- *     responses:
- *       200:
- *         description: Available parent objectives retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       unit:
- *                         type: object
- *                         nullable: true
- *                       objectives:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             id:
- *                               type: integer
- *                             title:
- *                               type: string
- *                             status:
- *                               type: string
- *                             visibility:
- *                               type: string
- *                             progress_percentage:
- *                               type: number
- *                 meta:
- *                   type: object
- *                   properties:
- *                     unit_id:
- *                       type: integer
- *                     unit_ids_searched:
- *                       type: array
- *                       items:
- *                         type: integer
- *                     total:
- *                       type: integer
- *       400:
- *         description: Invalid unit_id
- *       404:
- *         description: Unit not found
- */
-router.get("/objectives/available-parents", validate(getAvailableParentObjectivesSchema, "query"), getAvailableParentObjectives);
 
 
 /**
@@ -706,7 +625,7 @@ router.post("/objectives/:id/approve", approveObjective);
  *       422:
  *         description: Validation error (e.g., child visibility more public than parent)
  */
-router.patch("/objectives/:id/publish", publishObjective);
+router.patch("/objectives/:id/publish", validate(updateObjectiveSchema), publishObjective);
 
 /**
  * @swagger

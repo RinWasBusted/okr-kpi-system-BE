@@ -51,9 +51,9 @@ export const createKPIAssignmentSchema = z.object({
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
     due_date: z.string().datetime().nullable().optional(),
 }).refine(
-    (data) => (data.unit_id && !data.owner_id) || (!data.unit_id && data.owner_id),
+    (data) => data.unit_id || data.owner_id,
     {
-        message: "Either unit_id or owner_id must be provided, but not both",
+        message: "At least one of unit_id or owner_id must be provided",
     }
 );
 
@@ -73,6 +73,7 @@ export const createKeyResultSchema = z.object({
         .string()
         .min(LIMITS.title.min, "title is required")
         .max(LIMITS.title.max, `title must not exceed ${LIMITS.title.max} characters`),
+    start_value: z.coerce.number().optional(),
     target_value: z.coerce.number().positive("target_value must be positive"),
     current_value: z.coerce.number().min(0).default(0),
     unit: z
@@ -81,6 +82,7 @@ export const createKeyResultSchema = z.object({
         .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`),
     weight: z.coerce.number().min(0).max(100).default(100),
     due_date: z.string().datetime().nullable().optional(),
+    evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]).default("MAXIMIZE"),
 });
 
 export const updateKeyResultSchema = z.object({
@@ -89,7 +91,9 @@ export const updateKeyResultSchema = z.object({
         .min(LIMITS.title.min, "title cannot be empty")
         .max(LIMITS.title.max, `title must not exceed ${LIMITS.title.max} characters`)
         .optional(),
+    start_value: z.coerce.number().optional(),
     target_value: z.coerce.number().positive().optional(),
+    current_value: z.coerce.number().min(0).optional(),
     unit: z
         .string()
         .min(LIMITS.unit.min)
@@ -97,6 +101,7 @@ export const updateKeyResultSchema = z.object({
         .optional(),
     weight: z.coerce.number().min(0).max(100).optional(),
     due_date: z.string().datetime().nullable().optional(),
+    evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided to update",
 });
