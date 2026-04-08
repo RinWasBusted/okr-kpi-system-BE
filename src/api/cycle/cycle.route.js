@@ -98,7 +98,7 @@ router.use(authenticate);
  *                     last_page:
  *                       type: integer
  */
-router.get("/", authorize("ADMIN_COMPANY"), getCycles);
+router.get("/", authenticate, getCycles);
 
 /**
  * @swagger
@@ -132,7 +132,7 @@ router.get("/", authorize("ADMIN_COMPANY"), getCycles);
  *       422:
  *         description: Validation error (DATE_OVERLAP or invalid dates)
  */
-router.post("/", authorize("ADMIN_COMPANY"), createCycle);
+router.post("/", createCycle);
 
 /**
  * @swagger

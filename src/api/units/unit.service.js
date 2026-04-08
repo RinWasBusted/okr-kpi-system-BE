@@ -399,14 +399,18 @@ export const getUnitDetail = async (unitId, currentUser) => {
                 u.id,
                 u.name,
                 u.parent_id,
+                u.path::text AS path,
                 u.created_at,
                 m.id AS manager_id,
                 m.full_name AS manager_full_name,
                 m.email AS manager_email,
                 m.avatar_url,
                 m.job_title,
-                COALESCE(up.total_kpis, 0) AS total_kpi,
-                COALESCE(up.total_okrs, 0) AS total_objective
+                COALESCE(up.total_users, 0) AS member_count,
+                COALESCE(up.total_kpis, 0) AS kpi_count,
+                COALESCE(up.total_okrs, 0) AS okr_count,
+                COALESCE(up.avg_okr_progress, 0) AS okr_progress,
+                COALESCE(up.avg_kpi_progress, 0) AS kpi_health
             FROM "Units" u
             LEFT JOIN "Users" m ON m.id = u.manager_id
             LEFT JOIN unit_performance up ON up.unit_id = u.id
@@ -417,12 +421,12 @@ export const getUnitDetail = async (unitId, currentUser) => {
         const unit = rows[0];
 
         const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
-        const isManager = currentUser?.id === unit.manager_id;
 
         const result = {
             id: unit.id,
             name: unit.name,
             parent_id: unit.parent_id ?? null,
+            path: unit.path,
             manager: unit.manager_id
                 ? {
                     id: unit.manager_id,
@@ -434,8 +438,12 @@ export const getUnitDetail = async (unitId, currentUser) => {
                     job_title: unit.job_title,
                   }
                 : null,
-            total_kpi: Number(unit.total_kpi),
-            total_objective: Number(unit.total_objective),
+            member_count: Number(unit.member_count ?? 0),
+            okr_count: Number(unit.okr_count ?? 0),
+            kpi_count: Number(unit.kpi_count ?? 0),
+            okr_progress: unit.okr_progress !== null ? Number(unit.okr_progress) : null,
+            kpi_health: unit.kpi_health !== null ? Number(unit.kpi_health) : null,
+            created_at: unit.created_at,
         };
 
         // Only add permission for ADMIN_COMPANY

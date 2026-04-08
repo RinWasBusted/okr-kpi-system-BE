@@ -935,7 +935,6 @@ export const getAvailableParentObjectives = async (user, unitId, cycleId, includ
     const where = {
         deleted_at: null,
         unit_id: { in: relevantUnitIds },
-        status: { in: ["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"] },
         ...(cycleId !== undefined && { cycle_id: cycleId }),
     };
 
