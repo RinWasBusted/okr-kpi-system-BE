@@ -324,129 +324,177 @@ export const lockCycle = async (companyId, cycleId) => {
 
 // ─── Clone ────────────────────────────────────────────────────────────────────
 
-export const cloneCycle = async (companyId, sourceCycleId) => {
-    const source = await prisma.cycles.findFirst({
-        where: { id: sourceCycleId, company_id: companyId },
+export const cloneCycle = async (
+    companyId,
+    targetCycleId,
+    { objective_ids, kpi_assignment_ids }
+) => {
+    // Verify target cycle exists and belongs to company
+    const targetCycle = await prisma.cycles.findFirst({
+        where: { id: targetCycleId, company_id: companyId },
+    });
+    if (!targetCycle) throw new AppError("Target cycle not found", 404);
+    if (targetCycle.is_locked) throw new AppError("Target cycle is locked and cannot be modified", 400, "CYCLE_LOCKED");
+
+    // Determine what to clone based on provided IDs
+    const shouldCloneObjectives = objective_ids?.length > 0;
+    const shouldCloneKpis = kpi_assignment_ids?.length > 0;
+
+    // Build where clauses for objectives and KPIs
+    const objectiveWhere = {
+        company_id: companyId,
+        deleted_at: null,
+        ...(shouldCloneObjectives && { id: { in: objective_ids } }),
+    };
+
+    const kpiWhere = {
+        company_id: companyId,
+        deleted_at: null,
+        ...(shouldCloneKpis && { id: { in: kpi_assignment_ids } }),
+    };
+
+    // Fetch objectives if cloning
+    const objectives = shouldCloneObjectives
+        ? await prisma.objectives.findMany({
+              where: objectiveWhere,
+              include: { key_results: true },
+              orderBy: { id: "asc" },
+          })
+        : [];
+
+    // Fetch KPI assignments if cloning
+    const assignments = shouldCloneKpis
+        ? await prisma.kPIAssignments.findMany({
+              where: kpiWhere,
+              orderBy: { id: "asc" },
+          })
+        : [];
+
+    // Fetch unit paths for access_path calculation
+    const unitIds = new Set();
+    objectives.forEach((o) => {
+        if (o.unit_id) unitIds.add(o.unit_id);
+    });
+    assignments.forEach((a) => {
+        if (a.unit_id) unitIds.add(a.unit_id);
     });
 
-    if (!source) throw new AppError("Source cycle not found", 404);
+    const units =
+        unitIds.size > 0
+            ? await prisma.units.findMany({
+                  where: { id: { in: Array.from(unitIds) }, company_id: companyId },
+                  select: { id: true, path: true },
+              })
+            : [];
 
-    const objectives = await prisma.objectives.findMany({
-        where: { company_id: companyId, cycle_id: sourceCycleId },
-        include: { key_results: true },
-        orderBy: { id: "asc" },
-    });
-
-    const assignments = await prisma.kPIAssignments.findMany({
-        where: { company_id: companyId, cycle_id: sourceCycleId },
-        orderBy: { id: "asc" },
-    });
+    const unitPathMap = new Map(units.map((u) => [u.id, u.path]));
 
     const result = await prisma.$transaction(async (tx) => {
-        const newCycle = await tx.cycles.create({
-            data: {
-                company_id: companyId,
-                name: source.name,
-                start_date: source.start_date,
-                end_date: source.end_date,
-                is_locked: false,
-            },
-            select: cycleSelect,
-        });
-
+        // ─── Clone Objectives ───────────────────────────────────────────────────
         const objectiveIdMap = new Map();
-        let clonedKeyResults = 0;
 
-        for (const objective of objectives) {
-            const created = await tx.objectives.create({
-                data: {
-                    company_id: companyId,
-                    title: objective.title,
-                    cycle_id: newCycle.id,
-                    unit_id: objective.unit_id,
-                    owner_id: objective.owner_id,
-                    parent_objective_id: null,
-                    visibility: objective.visibility,
-                    status: "Draft",
-                    approved_by: null,
-                    progress_percentage: 0,
-                },
-            });
-            objectiveIdMap.set(objective.id, created.id);
-        }
+        if (shouldCloneObjectives && objectives.length > 0) {
+            for (const objective of objectives) {
+                const accessPath = unitPathMap.get(objective.unit_id) ?? null;
 
-        for (const objective of objectives) {
-            if (objective.parent_objective_id) {
-                const newId = objectiveIdMap.get(objective.id);
-                const newParentId = objectiveIdMap.get(objective.parent_objective_id);
-                if (newId && newParentId) {
-                    await tx.objectives.update({
-                        where: { id: newId },
-                        data: { parent_objective_id: newParentId },
+                const created = await tx.objectives.create({
+                    data: {
+                        company_id: companyId,
+                        title: objective.title,
+                        cycle_id: targetCycleId,
+                        unit_id: objective.unit_id,
+                        owner_id: objective.owner_id,
+                        parent_objective_id: null,
+                        visibility: objective.visibility,
+                        access_path: accessPath,
+                        status: "Draft",
+                        approved_by: null,
+                        progress_percentage: 0,
+                    },
+                });
+                objectiveIdMap.set(objective.id, created.id);
+            }
+
+            // Link parent objectives
+            for (const objective of objectives) {
+                if (objective.parent_objective_id) {
+                    const newId = objectiveIdMap.get(objective.id);
+                    const newParentId = objectiveIdMap.get(objective.parent_objective_id);
+                    if (newId && newParentId) {
+                        await tx.objectives.update({
+                            where: { id: newId },
+                            data: { parent_objective_id: newParentId },
+                        });
+                    }
+                }
+            }
+
+            // Clone key results (automatically cloned with objectives)
+            for (const objective of objectives) {
+                const newObjectiveId = objectiveIdMap.get(objective.id);
+                if (!newObjectiveId) continue;
+
+                for (const keyResult of objective.key_results) {
+                    await tx.keyResults.create({
+                        data: {
+                            company_id: companyId,
+                            objective_id: newObjectiveId,
+                            title: keyResult.title,
+                            target_value: keyResult.target_value,
+                            current_value: 0,
+                            unit: keyResult.unit,
+                            weight: keyResult.weight,
+                            due_date: keyResult.due_date,
+                            progress_percentage: 0,
+                        },
                     });
                 }
             }
         }
 
-        for (const objective of objectives) {
-            const newObjectiveId = objectiveIdMap.get(objective.id);
-            if (!newObjectiveId) continue;
+        // ─── Clone KPI Assignments ──────────────────────────────────────────────
+        const assignmentIdMap = new Map();
 
-            for (const keyResult of objective.key_results) {
-                await tx.keyResults.create({
+        if (shouldCloneKpis && assignments.length > 0) {
+            for (const assignment of assignments) {
+                const accessPath = unitPathMap.get(assignment.unit_id) ?? null;
+
+                const created = await tx.kPIAssignments.create({
                     data: {
                         company_id: companyId,
-                        objective_id: newObjectiveId,
-                        title: keyResult.title,
-                        target_value: keyResult.target_value,
+                        parent_assignment_id: null,
+                        kpi_dictionary_id: assignment.kpi_dictionary_id,
+                        cycle_id: targetCycleId,
+                        owner_id: assignment.owner_id,
+                        unit_id: assignment.unit_id,
+                        visibility: assignment.visibility,
+                        access_path: accessPath,
+                        target_value: assignment.target_value,
                         current_value: 0,
-                        unit: keyResult.unit,
-                        weight: keyResult.weight,
-                        due_date: keyResult.due_date,
                         progress_percentage: 0,
                     },
                 });
-                clonedKeyResults += 1;
+                assignmentIdMap.set(assignment.id, created.id);
             }
-        }
 
-        const assignmentIdMap = new Map();
-
-        for (const assignment of assignments) {
-            const created = await tx.kPIAssignments.create({
-                data: {
-                    company_id: companyId,
-                    parent_assignment_id: null,
-                    kpi_dictionary_id: assignment.kpi_dictionary_id,
-                    cycle_id: newCycle.id,
-                    owner_id: assignment.owner_id,
-                    unit_id: assignment.unit_id,
-                    visibility: assignment.visibility,
-                    target_value: assignment.target_value,
-                    weight: assignment.weight,
-                },
-            });
-            assignmentIdMap.set(assignment.id, created.id);
-        }
-
-        for (const assignment of assignments) {
-            if (assignment.parent_assignment_id) {
-                const newId = assignmentIdMap.get(assignment.id);
-                const newParentId = assignmentIdMap.get(assignment.parent_assignment_id);
-                if (newId && newParentId) {
-                    await tx.kPIAssignments.update({
-                        where: { id: newId },
-                        data: { parent_assignment_id: newParentId },
-                    });
+            // Link parent assignments
+            for (const assignment of assignments) {
+                if (assignment.parent_assignment_id) {
+                    const newId = assignmentIdMap.get(assignment.id);
+                    const newParentId = assignmentIdMap.get(assignment.parent_assignment_id);
+                    if (newId && newParentId) {
+                        await tx.kPIAssignments.update({
+                            where: { id: newId },
+                            data: { parent_assignment_id: newParentId },
+                        });
+                    }
                 }
             }
         }
 
         return {
-            cycle: formatCycle(newCycle),
-            cloned_objectives: objectiveIdMap.size,
-            cloned_key_results: clonedKeyResults,
-            cloned_kpi_assignments: assignmentIdMap.size,
+            cloned_objective_ids: Array.from(objectiveIdMap.values()),
+            cloned_kpi_assignment_ids: Array.from(assignmentIdMap.values()),
         };
     });
 
