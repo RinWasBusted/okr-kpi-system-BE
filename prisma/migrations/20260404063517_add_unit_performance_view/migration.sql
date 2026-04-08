@@ -100,17 +100,22 @@ kpi_stats AS (
   GROUP BY unit_id
 ),
 
--- Đếm user thuộc từng unit (bao gồm manager)
+-- Đếm user thuộc từng unit (bao gồm user của chính unit đó và tất cả sub-units)
 user_stats AS (
   SELECT
-    u.unit_id,
+    parent_unit.id AS unit_id,
     COUNT(DISTINCT u.id) AS total_users
-  FROM "Users" u
+  FROM "Units" parent_unit
+  -- Join với các unit con (ltree @> check xem parent có chứa child không)
+  JOIN "Units" child_unit ON parent_unit.path @> child_unit.path
+  -- Join user thuộc các unit con đó
+  JOIN "Users" u ON u.unit_id = child_unit.id
   WHERE
     u.deleted_at IS NULL
     AND u.is_active = true
-    AND u.unit_id IS NOT NULL
-  GROUP BY u.unit_id
+    AND parent_unit.deleted_at IS NULL
+    AND child_unit.deleted_at IS NULL
+  GROUP BY parent_unit.id
 )
 
 -- Join tất cả vào Units

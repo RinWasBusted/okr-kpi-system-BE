@@ -961,8 +961,6 @@ export const getAvailableParentObjectives = async (user, unitId, cycleId, includ
         select,
     });
 
-    console.log(`Found ${objectives.length} potential parent objectives for unit ${unitId} (including ancestors)`);
-
     // Filter by visibility permissions
     const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
     const unitPaths = await Promise.all(
