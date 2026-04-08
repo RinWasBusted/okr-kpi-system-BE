@@ -191,12 +191,43 @@ export const cloneCycle = async (req, res) => {
         const companyId = req.user.company_id;
         if (!companyId) throw new AppError("Company context is required", 403);
 
-        const sourceCycleId = parsePositiveInt(req.params.id, null);
-        if (!sourceCycleId) throw new AppError("Invalid cycle ID", 400);
+        // targetCycleId is the cycle we're copying INTO (from URL param)
+        const targetCycleId = parsePositiveInt(req.params.id, null);
+        if (!targetCycleId) throw new AppError("Invalid target cycle ID", 400);
 
-        const result = await cycleService.cloneCycle(companyId, sourceCycleId);
+        const { objective_ids, kpi_assignment_ids } = req.body;
 
-        res.success("Cycle cloned successfully", 200, result);
+        // Parse objective_ids if provided (array of IDs to clone)
+        let parsedObjectiveIds = [];
+        if (objective_ids !== undefined) {
+            if (!Array.isArray(objective_ids)) {
+                throw new AppError("objective_ids must be an array", 422);
+            }
+            parsedObjectiveIds = objective_ids
+                .map((id) => parsePositiveInt(id, null))
+                .filter((id) => id !== null);
+        }
+
+        // Parse kpi_assignment_ids if provided (array of IDs to clone)
+        let parsedKpiIds = [];
+        if (kpi_assignment_ids !== undefined) {
+            if (!Array.isArray(kpi_assignment_ids)) {
+                throw new AppError("kpi_assignment_ids must be an array", 422);
+            }
+            parsedKpiIds = kpi_assignment_ids
+                .map((id) => parsePositiveInt(id, null))
+                .filter((id) => id !== null);
+        }
+
+        const result = await cycleService.cloneCycle(companyId, targetCycleId, {
+            objective_ids: parsedObjectiveIds,
+            kpi_assignment_ids: parsedKpiIds,
+        });
+
+        res.success("Items cloned successfully", 201, {
+            cloned_objective_ids: result.cloned_objective_ids,
+            cloned_kpi_assignment_ids: result.cloned_kpi_assignment_ids,
+        });
     } catch (error) {
         throw error;
     }

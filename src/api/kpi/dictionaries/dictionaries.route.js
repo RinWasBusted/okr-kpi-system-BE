@@ -1,6 +1,7 @@
 import express from "express";
 import {
     getKPIDictionaries,
+    getKPIDictionariesForAssignment,
     createKPIDictionary,
     updateKPIDictionary,
     deleteKPIDictionary,
@@ -35,7 +36,7 @@ router.use(authenticate);
  *         schema:
  *           type: integer
  *         required: false
- *         description: Filter KPI dictionaries accessible to a specific unit (company-wide + unit itself + ancestor units)
+ *         description: Filter KPI dictionaries accessible to a specific unit (company-wide + unit itself + ancestor units + descendant units)
  *     responses:
  *       200:
  *         description: KPI Dictionaries retrieved successfully
@@ -68,8 +69,64 @@ router.use(authenticate);
  *                       unit_id:
  *                         type: integer
  *                         nullable: true
+ *                       org_unit:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           name:
+ *                             type: string
  */
 router.get("/kpi-dictionaries", getKPIDictionaries);
+
+/**
+ * @swagger
+ * /kpi-dictionaries/for-assignment/{unit_id}:
+ *   get:
+ *     summary: Get KPI Dictionaries available for creating KPI Assignment in a specific unit
+ *     tags: [KPIDictionaries]
+ *     parameters:
+ *       - in: path
+ *         name: unit_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Unit ID to get available dictionaries for KPI assignment
+ *     responses:
+ *       200:
+ *         description: KPI Dictionaries for unit assignment retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       unit:
+ *                         type: string
+ *                       evaluation_method:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       unit_id:
+ *                         type: integer
+ *                       org_unit:
+ *                         type: object
+ *       400:
+ *         description: Invalid unit ID
+ */
+router.get("/kpi-dictionaries/for-assignment/:unit_id", getKPIDictionariesForAssignment);
 
 /**
  * @swagger

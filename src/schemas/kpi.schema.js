@@ -19,6 +19,7 @@ export const createKPIDictionarySchema = z.object({
         .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`),
     evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]),
     description: z.string().max(1000).nullable().optional(),
+    unit_id: z.coerce.number().int().positive().nullable().optional(),
 });
 
 export const updateKPIDictionarySchema = z.object({

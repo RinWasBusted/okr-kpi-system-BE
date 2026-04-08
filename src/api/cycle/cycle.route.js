@@ -132,7 +132,7 @@ router.get("/", authenticate, getCycles);
  *       422:
  *         description: Validation error (DATE_OVERLAP or invalid dates)
  */
-router.post("/", createCycle);
+router.post("/", authorize("ADMIN_COMPANY"),createCycle);
 
 /**
  * @swagger
@@ -300,8 +300,8 @@ router.patch("/:id/lock", authorize("ADMIN_COMPANY"), lockCycle);
  * @swagger
  * /cycles/{id}/clone:
  *   post:
- *     summary: Clone a cycle into a new cycle
- *     description: Clone a cycle into a brand new cycle with the same info and structure. Requires `ADMIN_COMPANY` role.
+ *     summary: Clone objectives and KPIs from another cycle into this cycle
+ *     description: Copy objectives and KPI assignments from a source cycle into the target cycle (cycle ID in URL). Requires `ADMIN_COMPANY` role.
  *     tags: [Cycles]
  *     parameters:
  *       - in: path
@@ -309,9 +309,55 @@ router.patch("/:id/lock", authorize("ADMIN_COMPANY"), lockCycle);
  *         required: true
  *         schema:
  *           type: integer
+ *         description: Target cycle ID to copy into
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               objective_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [1, 5, 12]
+ *                 description: Objective IDs to clone (if empty or not provided, no objectives will be cloned)
+ *               kpi_assignment_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [3, 8]
+ *                 description: KPI assignment IDs to clone (if empty or not provided, no KPIs will be cloned)
  *     responses:
- *       200:
- *         description: Cycle cloned successfully
+ *       201:
+ *         description: Items cloned successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cloned_objective_ids:
+ *                       type: array
+ *                       items:
+ *                         type: integer
+ *                       description: List of cloned objective IDs
+ *                     cloned_kpi_assignment_ids:
+ *                       type: array
+ *                       items:
+ *                         type: integer
+ *                       description: List of cloned KPI assignment IDs
+ *       400:
+ *         description: Invalid request (target cycle locked)
+ *       422:
+ *         description: Validation error (invalid IDs)
  */
 router.post("/:id/clone", authorize("ADMIN_COMPANY"), cloneCycle);
 

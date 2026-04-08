@@ -169,8 +169,8 @@ const calculateObjectivePermissions = async (user, objective) => {
 
     // Edit permission: owner or unit manager
     const isOwner = objective.owner_id && objective.owner_id === user.id;
-    const isUnitManager = objective.unit_id && await isUnitManager(user.id, objective.unit_id);
-    const canEdit = isOwner || isUnitManager;
+    const isManager = objective.unit_id && await isUnitManager(user.id, objective.unit_id);
+    const canEdit = isOwner || isManager;
     permissions.edit = canEdit;
 
     // Submit permission: can edit and status is Draft or Rejected
