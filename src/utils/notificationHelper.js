@@ -287,6 +287,59 @@ export const notifyFeedbackEvent = async ({
 };
 
 /**
+ * Notify about a feedback status change.
+ * Notifies the feedback author and the objective owner, if available.
+ * @param {Object} params - Notification parameters
+ * @param {number} params.companyId - Company ID
+ * @param {string} params.eventType - Event type
+ * @param {number} params.feedbackId - Feedback ID
+ * @param {string} params.feedbackPreview - Short feedback content preview
+ * @param {number} params.objectiveId - Objective ID
+ * @param {string} params.objectiveTitle - Objective title
+ * @param {number} params.feedbackAuthorId - Feedback author user ID
+ * @param {number} params.objectiveOwnerId - Objective owner user ID
+ * @param {string} params.actorName - Name of the user who triggered the event
+ * @param {number} params.actorId - ID of the user who triggered the event
+ * @param {string} params.newStatus - New feedback status
+ */
+export const notifyFeedbackStatusEvent = async ({
+  companyId,
+  eventType,
+  feedbackId,
+  feedbackPreview,
+  objectiveId,
+  objectiveTitle,
+  feedbackAuthorId,
+  objectiveOwnerId,
+  actorName,
+  actorId,
+  newStatus,
+}) => {
+  try {
+    const recipientIds = [
+      ...new Set([feedbackAuthorId, objectiveOwnerId].filter(Boolean)),
+    ].filter((id) => id !== actorId);
+
+    if (recipientIds.length === 0) return;
+
+    await createNotification({
+      companyId,
+      eventType,
+      refType: "FEEDBACK",
+      refId: feedbackId,
+      actorId,
+      actorName,
+      entityName: feedbackPreview,
+      newStatus,
+      extraContext: `Mục tiêu: ${objectiveTitle}`,
+      recipientIds,
+    });
+  } catch (error) {
+    console.error("Failed to send feedback status notification:", error);
+  }
+};
+
+/**
  * Notify about a cycle event (created, locked, etc.)
  * @param {Object} params - Notification parameters
  * @param {number} params.companyId - Company ID
@@ -349,5 +402,6 @@ export default {
   notifySpecificUsers,
   notifyKPIAssignmentEvent,
   notifyFeedbackEvent,
+  notifyFeedbackStatusEvent,
   notifyCycleEvent,
 };

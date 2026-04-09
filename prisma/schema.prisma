@@ -282,14 +282,6 @@ model CheckIns {
   @@index([company_id])
 }
 
-enum FeedbackType {
-  PRAISE
-  CONCERN
-  SUGGESTION
-  QUESTION
-  BLOCKER
-}
-
 enum FeedbackSentiment {
   POSITIVE
   NEUTRAL
@@ -299,7 +291,11 @@ enum FeedbackSentiment {
 }
 
 enum FeedbackStatus {
-  ACTIVE
+  PRAISE
+  CONCERN
+  SUGGESTION
+  QUESTION
+  BLOCKER
   RESOLVED
   FLAGGED
 }
@@ -312,9 +308,8 @@ model Feedbacks {
   user_id      Int
   parent_id    Int?
   content      String            @db.Text
-  type         FeedbackType
   sentiment    FeedbackSentiment @default(UNKNOWN)
-  status       FeedbackStatus    @default(ACTIVE)
+  status       FeedbackStatus    @default(SUGGESTION)
   created_at   DateTime          @default(now())
   updated_at   DateTime          @updatedAt
 

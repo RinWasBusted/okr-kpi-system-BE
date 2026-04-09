@@ -1,10 +1,11 @@
 import prisma from "../../../utils/prisma.js";
 import AppError from "../../../utils/appError.js";
 import { UserRole } from "@prisma/client";
-import { canViewObjective } from "../../../utils/okr.js";
+import { canEditObjective, canViewObjective } from "../../../utils/okr.js";
 import { getCloudinaryImageUrl } from "../../../utils/cloudinary.js";
 import {
   notifyFeedbackEvent,
+  notifyFeedbackStatusEvent,
   getUsersInUnitTree,
 } from "../../../utils/notificationHelper.js";
 
@@ -32,6 +33,11 @@ const canMutateFeedback = (user, feedback) => {
   return user.role === UserRole.ADMIN_COMPANY || feedback.user_id === user.id;
 };
 
+const canResolveFeedbackByReply = async (user, objective) => {
+  if (user.role === UserRole.ADMIN_COMPANY) return true;
+  return canEditObjective(user, objective);
+};
+
 // ---------------------------------------------------------------------------
 // Select shapes
 // ---------------------------------------------------------------------------
@@ -49,7 +55,6 @@ const feedbackSelect = {
   kr_tag_id: true,
   parent_id: true,
   content: true,
-  type: true,
   sentiment: true,
   status: true,
   created_at: true,
@@ -64,7 +69,6 @@ const formatFeedback = (fb) => ({
   kr_tag_id: fb.kr_tag_id ?? null,
   parent_id: fb.parent_id ?? null,
   content: fb.content,
-  type: fb.type,
   sentiment: fb.sentiment,
   status: fb.status,
   created_at: fb.created_at,
@@ -151,7 +155,6 @@ export const listFeedbacks = async (
   const where = {
     objective_id: objectiveId,
     parent_id: null, // top-level only; replies fetched separately via listReplies
-    ...(filters.type && { type: filters.type }),
     ...(filters.sentiment && { sentiment: filters.sentiment }),
     ...(filters.status && { status: filters.status }),
     ...(filters.kr_tag_id !== undefined && { kr_tag_id: filters.kr_tag_id }),
@@ -197,11 +200,10 @@ export const createFeedback = async (user, objectiveId, payload) => {
       kr_tag_id: payload.kr_tag_id ?? null,
       user_id: user.id,
       content: payload.content,
-      type: payload.type,
       sentiment: "UNKNOWN",
       // [AI — sentiment detection] When ready, call detectSentimentAsync(created.id, payload.content)
       // here as fire-and-forget. It classifies content via Claude and updates sentiment in background.
-      status: "ACTIVE",
+      status: payload.status,
     },
     select: feedbackSelect,
   });
@@ -270,12 +272,22 @@ export const updateFeedback = async (
   feedbackId,
   updates,
 ) => {
-  await getObjectiveForFeedback(objectiveId);
-
   const feedback = await getFeedbackOrThrow(feedbackId, objectiveId);
+
+  if (feedback.parent_id !== null) {
+    throw new AppError("Replies cannot be edited", 400);
+  }
 
   if (!canMutateFeedback(user, feedback)) {
     throw new AppError("You do not have permission to edit this feedback", 403);
+  }
+
+  // Replies cannot change status to RESOLVED/FLAGGED
+  if (updates.status && ["RESOLVED", "FLAGGED"].includes(updates.status)) {
+    throw new AppError(
+      "Status can only be changed to RESOLVED/FLAGGED via reply mechanism",
+      400,
+    );
   }
 
   if (updates.kr_tag_id !== undefined && updates.kr_tag_id !== null) {
@@ -286,9 +298,6 @@ export const updateFeedback = async (
     where: { id: feedbackId },
     data: {
       ...(updates.content !== undefined && { content: updates.content }),
-      ...(updates.type !== undefined && { type: updates.type }),
-      ...(updates.sentiment !== undefined && { sentiment: updates.sentiment }),
-      ...(updates.status !== undefined && { status: updates.status }),
       ...(updates.kr_tag_id !== undefined && { kr_tag_id: updates.kr_tag_id }),
     },
     select: feedbackSelect,
@@ -354,7 +363,15 @@ export const listReplies = async (user, parentFeedbackId) => {
 export const createReply = async (user, parentFeedbackId, payload) => {
   const parent = await prisma.feedbacks.findFirst({
     where: { id: parentFeedbackId },
-    select: { id: true, objective_id: true, parent_id: true },
+    select: {
+      id: true,
+      objective_id: true,
+      parent_id: true,
+      user_id: true,
+      content: true,
+      status: true,
+      kr_tag_id: true,
+    },
   });
   if (!parent) throw new AppError("Feedback not found", 404);
 
@@ -373,35 +390,63 @@ export const createReply = async (user, parentFeedbackId, payload) => {
     );
   }
 
-  const created = await prisma.feedbacks.create({
-    data: {
-      company_id: user.company_id,
-      objective_id: parent.objective_id,
-      kr_tag_id: null, // replies do not tag a KR
-      user_id: user.id,
-      parent_id: parentFeedbackId,
-      content: payload.content,
-      type: payload.type,
-      sentiment: "UNKNOWN",
-      // [AI — sentiment detection] Same hook point as createFeedback.
-      status: "ACTIVE",
-    },
-    select: feedbackSelect,
+  if (!(await canResolveFeedbackByReply(user, objective))) {
+    throw new AppError(
+      "You do not have permission to resolve or flag this feedback",
+      403,
+    );
+  }
+
+  const existingReplyCount = await prisma.feedbacks.count({
+    where: { parent_id: parentFeedbackId },
+  });
+  if (existingReplyCount > 0) {
+    throw new AppError("This feedback has already been replied to", 409);
+  }
+
+  if (payload.kr_tag_id !== undefined && payload.kr_tag_id !== null) {
+    await validateKrTagId(
+      payload.kr_tag_id,
+      parent.objective_id,
+      user.company_id,
+    );
+  }
+
+  const nextStatus = payload.status;
+
+  const created = await prisma.$transaction(async (tx) => {
+    await tx.feedbacks.update({
+      where: { id: parentFeedbackId },
+      data: {
+        status: nextStatus,
+        ...(payload.kr_tag_id !== undefined && {
+          kr_tag_id: payload.kr_tag_id,
+        }),
+      },
+    });
+
+    return tx.feedbacks.create({
+      data: {
+        company_id: user.company_id,
+        objective_id: parent.objective_id,
+        kr_tag_id: payload.kr_tag_id ?? null,
+        user_id: user.id,
+        parent_id: parentFeedbackId,
+        content: payload.content,
+        sentiment: "UNKNOWN",
+        status: nextStatus,
+      },
+      select: feedbackSelect,
+    });
   });
 
   // Notify relevant users about new reply
   try {
-    // Get the parent feedback creator
-    const parentFeedback = await prisma.feedbacks.findUnique({
-      where: { id: parentFeedbackId },
-      select: { user_id: true },
-    });
-
     let recipientIds = [];
 
     // Notify parent feedback creator (if not the actor)
-    if (parentFeedback?.user_id && parentFeedback.user_id !== user.id) {
-      recipientIds.push(parentFeedback.user_id);
+    if (parent.user_id && parent.user_id !== user.id) {
+      recipientIds.push(parent.user_id);
     }
 
     // Also notify objective owner (if different from parent creator and actor)
@@ -437,6 +482,20 @@ export const createReply = async (user, parentFeedbackId, payload) => {
         actorId: user.id,
         extraContext: replySnippet,
         recipientIds,
+      });
+
+      await notifyFeedbackStatusEvent({
+        companyId: user.company_id,
+        eventType: "STATUS_CHANGED",
+        feedbackId: parent.id,
+        feedbackPreview: parent.content?.slice(0, 80)?.trim() || "Phản hồi",
+        objectiveId: parent.objective_id,
+        objectiveTitle: objective.title,
+        feedbackAuthorId: parent.user_id,
+        objectiveOwnerId: objective.owner_id,
+        actorName: user.full_name || user.email,
+        actorId: user.id,
+        newStatus: nextStatus,
       });
     }
   } catch (error) {

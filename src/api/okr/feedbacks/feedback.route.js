@@ -1,20 +1,20 @@
 import express from "express";
 import {
-    listFeedbacks,
-    createFeedback,
-    getFeedback,
-    updateFeedback,
-    deleteFeedback,
-    listReplies,
-    createReply,
+  listFeedbacks,
+  createFeedback,
+  getFeedback,
+  updateFeedback,
+  deleteFeedback,
+  listReplies,
+  createReply,
 } from "./feedback.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
 import { validate } from "../../../middlewares/validate.js";
 import {
-    createFeedbackSchema,
-    updateFeedbackSchema,
-    createReplySchema,
-    listFeedbacksQuerySchema,
+  createFeedbackSchema,
+  updateFeedbackSchema,
+  createReplySchema,
+  listFeedbacksQuerySchema,
 } from "../../../schemas/feedback.schema.js";
 
 const router = express.Router();
@@ -42,11 +42,6 @@ router.use(authenticate);
  *         schema:
  *           type: integer
  *       - in: query
- *         name: type
- *         schema:
- *           type: string
- *           enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER]
- *       - in: query
  *         name: sentiment
  *         schema:
  *           type: string
@@ -55,7 +50,7 @@ router.use(authenticate);
  *         name: status
  *         schema:
  *           type: string
- *           enum: [ACTIVE, RESOLVED, FLAGGED]
+ *           enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER, RESOLVED, FLAGGED]
  *       - in: query
  *         name: kr_tag_id
  *         schema:
@@ -96,15 +91,12 @@ router.use(authenticate);
  *                         type: integer
  *                       content:
  *                         type: string
- *                       type:
- *                         type: string
- *                         enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER]
  *                       sentiment:
  *                         type: string
  *                         enum: [POSITIVE, NEUTRAL, NEGATIVE, MIXED, UNKNOWN]
  *                       status:
  *                         type: string
- *                         enum: [ACTIVE, RESOLVED, FLAGGED]
+ *                         enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER, RESOLVED, FLAGGED]
  *                       kr_tag_id:
  *                         type: integer
  *                         nullable: true
@@ -133,14 +125,18 @@ router.use(authenticate);
  *       404:
  *         description: Objective not found
  */
-router.get("/objectives/:objectiveId/feedbacks", validate(listFeedbacksQuerySchema, "query"), listFeedbacks);
+router.get(
+  "/objectives/:objectiveId/feedbacks",
+  validate(listFeedbacksQuerySchema, "query"),
+  listFeedbacks,
+);
 
 /**
  * @swagger
  * /objectives/{objectiveId}/feedbacks:
  *   post:
  *     summary: Create a feedback on an objective
- *     description: Any user who can view the objective can post feedback.
+ *     description: Any user who can view the objective can post feedback, including edit-capable managers/admin_company.
  *     tags: [Feedbacks]
  *     parameters:
  *       - in: path
@@ -154,17 +150,17 @@ router.get("/objectives/:objectiveId/feedbacks", validate(listFeedbacksQuerySche
  *         application/json:
  *           schema:
  *             type: object
- *             required: [content, type]
+ *             required: [content, status]
  *             properties:
  *               content:
  *                 type: string
  *                 minLength: 1
  *                 maxLength: 5000
  *                 description: Feedback content (1-5000 characters, required)
- *               type:
+ *               status:
  *                 type: string
  *                 enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER]
- *                 description: Type of feedback
+ *                 description: Required active feedback category selected by user
  *               kr_tag_id:
  *                 type: integer
  *                 nullable: true
@@ -193,8 +189,6 @@ router.get("/objectives/:objectiveId/feedbacks", validate(listFeedbacksQuerySche
  *                           type: integer
  *                         content:
  *                           type: string
- *                         type:
- *                           type: string
  *                         sentiment:
  *                           type: string
  *                         status:
@@ -218,7 +212,11 @@ router.get("/objectives/:objectiveId/feedbacks", validate(listFeedbacksQuerySche
  *       422:
  *         description: Validation error or kr_tag_id does not belong to this objective
  */
-router.post("/objectives/:objectiveId/feedbacks", validate(createFeedbackSchema), createFeedback);
+router.post(
+  "/objectives/:objectiveId/feedbacks",
+  validate(createFeedbackSchema),
+  createFeedback,
+);
 
 /**
  * @swagger
@@ -261,8 +259,6 @@ router.post("/objectives/:objectiveId/feedbacks", validate(createFeedbackSchema)
  *                           type: integer
  *                         content:
  *                           type: string
- *                         type:
- *                           type: string
  *                         sentiment:
  *                           type: string
  *                         status:
@@ -291,7 +287,7 @@ router.get("/objectives/:objectiveId/feedbacks/:feedbackId", getFeedback);
  * /objectives/{objectiveId}/feedbacks/{feedbackId}:
  *   patch:
  *     summary: Partially update a feedback
- *     description: Author or ADMIN_COMPANY only. Send only fields to change.
+ *     description: Author or ADMIN_COMPANY only. Can update content, status (between active states), or kr_tag_id. Replies cannot be edited; use reply mechanism to set RESOLVED/FLAGGED.
  *     tags: [Feedbacks]
  *     parameters:
  *       - in: path
@@ -315,20 +311,14 @@ router.get("/objectives/:objectiveId/feedbacks/:feedbackId", getFeedback);
  *                 minLength: 1
  *                 maxLength: 5000
  *                 description: Feedback content (1-5000 characters, optional for partial update)
- *               type:
- *                 type: string
- *                 enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER]
- *                 description: Type of feedback
- *               sentiment:
- *                 type: string
- *                 enum: [POSITIVE, NEUTRAL, NEGATIVE, MIXED, UNKNOWN]
- *                 description: Manual override of AI-detected sentiment
  *               status:
  *                 type: string
- *                 enum: [ACTIVE, RESOLVED, FLAGGED]
+ *                 enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER]
+ *                 description: Feedback type - can be changed between active states (optional). RESOLVED/FLAGGED are reply-only.
  *               kr_tag_id:
  *                 type: integer
  *                 nullable: true
+ *                 description: Key result tag ID (optional)
  *     responses:
  *       200:
  *         description: Feedback updated successfully
@@ -341,7 +331,11 @@ router.get("/objectives/:objectiveId/feedbacks/:feedbackId", getFeedback);
  *       422:
  *         description: Validation error
  */
-router.patch("/objectives/:objectiveId/feedbacks/:feedbackId", validate(updateFeedbackSchema), updateFeedback);
+router.patch(
+  "/objectives/:objectiveId/feedbacks/:feedbackId",
+  validate(updateFeedbackSchema),
+  updateFeedback,
+);
 
 /**
  * @swagger
@@ -424,8 +418,6 @@ router.delete("/objectives/:objectiveId/feedbacks/:feedbackId", deleteFeedback);
  *                         type: integer
  *                       content:
  *                         type: string
- *                       type:
- *                         type: string
  *                       sentiment:
  *                         type: string
  *                       status:
@@ -455,8 +447,9 @@ router.get("/feedbacks/:id/replies", listReplies);
  *   post:
  *     summary: Reply to a feedback
  *     description: >
- *       Creates a reply on a top-level feedback. Replying to a reply is not allowed.
- *       Sentiment is AI-detected asynchronously.
+ *       Creates the only allowed reply on a top-level feedback.
+ *       Only users who can edit the objective/KR (or ADMIN_COMPANY) can reply.
+ *       Reply must carry status RESOLVED or FLAGGED.
  *     tags: [Feedbacks]
  *     parameters:
  *       - in: path
@@ -471,17 +464,20 @@ router.get("/feedbacks/:id/replies", listReplies);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [content, type]
+ *             required: [content, status]
  *             properties:
  *               content:
  *                 type: string
  *                 minLength: 1
  *                 maxLength: 5000
  *                 description: Reply content (1-5000 characters, required)
- *               type:
+ *               status:
  *                 type: string
- *                 enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER]
- *                 description: Type of reply
+ *                 enum: [RESOLVED, FLAGGED]
+ *               kr_tag_id:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: Optional KR tag for resolver context
  *     responses:
  *       201:
  *         description: Reply created successfully
@@ -506,8 +502,6 @@ router.get("/feedbacks/:id/replies", listReplies);
  *                           type: integer
  *                         content:
  *                           type: string
- *                         type:
- *                           type: string
  *                         sentiment:
  *                           type: string
  *                         status:
@@ -526,8 +520,10 @@ router.get("/feedbacks/:id/replies", listReplies);
  *                           format: date-time
  *       400:
  *         description: Cannot reply to a reply
+ *       409:
+ *         description: Feedback already has a reply
  *       403:
- *         description: No permission to view the objective
+ *         description: No permission to resolve/flag this feedback
  *       404:
  *         description: Parent feedback not found
  *       422:

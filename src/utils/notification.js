@@ -20,27 +20,27 @@
 // ---------------------------------------------------------------------------
 
 const normalizeText = (value, fallback = "") => {
-    if (typeof value !== "string") return fallback;
-    return value.trim();
+  if (typeof value !== "string") return fallback;
+  return value.trim();
 };
 
 const normalizeEntityName = (value, fallback = "không xác định") => {
-    const text = normalizeText(value, fallback);
-    return text.replace(/^['"`]+|['"`]+$/g, "");
+  const text = normalizeText(value, fallback);
+  return text.replace(/^['"`]+|['"`]+$/g, "");
 };
 
 /**
  * Map a ReferenceType enum value to a Vietnamese display label.
  */
 const refLabel = (refType) => {
-    const map = {
-        OBJECTIVE: "Mục tiêu",
-        KPI: "KPI",
-        CYCLE: "Chu kỳ",
-        UNIT: "Phòng ban",
-        FEEDBACK: "Phản hồi",
-    };
-    return map[normalizeText(refType).toUpperCase()] ?? normalizeText(refType);
+  const map = {
+    OBJECTIVE: "Mục tiêu",
+    KPI: "KPI",
+    CYCLE: "Chu kỳ",
+    UNIT: "Phòng ban",
+    FEEDBACK: "Phản hồi",
+  };
+  return map[normalizeText(refType).toUpperCase()] ?? normalizeText(refType);
 };
 
 /**
@@ -48,22 +48,26 @@ const refLabel = (refType) => {
  * based on the new status value.
  */
 const resolveStatusChangedVariant = (newStatus) => {
-    switch (normalizeText(newStatus).toLowerCase()) {
-        case "pending_approval":
-            return "submitted";
-        case "rejected":
-            return "rejected";
-        case "on_track":
-        case "not_started":
-        case "warning":
-        case "danger":
-        case "at_risk":
-        case "critical":
-        case "completed":
-            return "approved";
-        default:
-            return "generic";
-    }
+  switch (normalizeText(newStatus).toLowerCase()) {
+    case "resolved":
+      return "resolved";
+    case "flagged":
+      return "flagged";
+    case "pending_approval":
+      return "submitted";
+    case "rejected":
+      return "rejected";
+    case "on_track":
+    case "not_started":
+    case "warning":
+    case "danger":
+    case "at_risk":
+    case "critical":
+    case "completed":
+      return "approved";
+    default:
+      return "generic";
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -75,70 +79,76 @@ const resolveStatusChangedVariant = (newStatus) => {
  * There is no separate title field — this message is displayed on its own.
  */
 export const generateMessage = ({
-    eventType,
-    refType,
-    actorName,
-    entityName,
-    newStatus,
-    extraContext,
+  eventType,
+  refType,
+  actorName,
+  entityName,
+  newStatus,
+  extraContext,
 }) => {
-    const label = refLabel(refType);
-    const actor = normalizeText(actorName, "Người dùng");
-    const entity = normalizeEntityName(entityName);
-    const extra = normalizeText(extraContext);
+  const label = refLabel(refType);
+  const actor = normalizeText(actorName, "Người dùng");
+  const entity = normalizeEntityName(entityName);
+  const extra = normalizeText(extraContext);
 
-    switch (eventType) {
-        case "CREATED":
-            return `${actor} đã tạo ${label} "${entity}"`;
+  switch (eventType) {
+    case "CREATED":
+      return `${actor} đã tạo ${label} "${entity}"`;
 
-        case "UPDATED":
-            if (extra) {
-                return `${actor} đã cập nhật ${label} "${entity}" · ${extra}`;
-            }
-            return `${actor} đã cập nhật ${label} "${entity}"`;
+    case "UPDATED":
+      if (extra) {
+        return `${actor} đã cập nhật ${label} "${entity}" · ${extra}`;
+      }
+      return `${actor} đã cập nhật ${label} "${entity}"`;
 
-        case "DELETED":
-            return `${actor} đã xóa ${label} "${entity}"`;
+    case "DELETED":
+      return `${actor} đã xóa ${label} "${entity}"`;
 
-        case "ASSIGNED":
-            return `Bạn được ${actor} giao ${label} "${entity}"`;
+    case "ASSIGNED":
+      return `Bạn được ${actor} giao ${label} "${entity}"`;
 
-        case "STATUS_CHANGED": {
-            const variant = resolveStatusChangedVariant(newStatus);
-            if (variant === "submitted")
-                return `${actor} đã gửi ${label} "${entity}" lên chờ phê duyệt`;
-            if (variant === "approved")
-                return `${label} "${entity}" đã được ${actor} phê duyệt`;
-            if (variant === "rejected") {
-                if (extra)
-                    return `${label} "${entity}" bị ${actor} từ chối · Lý do: ${extra}`;
-                return `${label} "${entity}" đã bị ${actor} từ chối`;
-            }
-            return `Trạng thái của ${label} "${entity}" đã được ${actor} cập nhật`;
-        }
-
-        case "COMMENTED":
-            if (extra)
-                return `${actor} đã bình luận trên ${label} "${entity}": "${extra}"`;
-            return `${actor} đã bình luận trên ${label} "${entity}"`;
-
-        case "REPLIED":
-            if (extra)
-                return `${actor} đã trả lời bình luận trong ${label} "${entity}": "${extra}"`;
-            return `${actor} đã trả lời bình luận trong ${label} "${entity}"`;
-
-        case "LOCKED":
-            return `${actor} đã khóa ${label} "${entity}". Không thể chỉnh sửa thêm.`;
-
-        case "CLONED":
-            if (extra)
-                return `${actor} đã sao chép ${label} "${entity}" thành "${extra}"`;
-            return `${actor} đã sao chép ${label} "${entity}" thành công`;
-
-        case "REMINDER":
-            return `Nhắc nhở: ${label} "${entity}" sắp đến hạn. Hãy cập nhật tiến độ.`;
-
-        default:
-            return `Có cập nhật mới trên ${label} "${entity}"`;
+    case "STATUS_CHANGED": {
+      const variant = resolveStatusChangedVariant(newStatus);
+      if (variant === "submitted")
+        return `${actor} đã gửi ${label} "${entity}" lên chờ phê duyệt`;
+      if (variant === "approved")
+        return `${label} "${entity}" đã được ${actor} phê duyệt`;
+      if (variant === "resolved")
+        return `${label} "${entity}" đã được ${actor} đánh dấu là đã giải quyết${extra ? ` · ${extra}` : ""}`;
+      if (variant === "flagged")
+        return `${label} "${entity}" đã bị ${actor} đánh dấu từ chối${extra ? ` · ${extra}` : ""}`;
+      if (variant === "rejected") {
+        if (extra)
+          return `${label} "${entity}" bị ${actor} từ chối · Lý do: ${extra}`;
+        return `${label} "${entity}" đã bị ${actor} từ chối`;
+      }
+      if (newStatus)
+        return `Trạng thái của ${label} "${entity}" đã được ${actor} cập nhật thành "${newStatus}"${extra ? ` · ${extra}` : ""}`;
+      return `Trạng thái của ${label} "${entity}" đã được ${actor} cập nhật`;
     }
+
+    case "COMMENTED":
+      if (extra)
+        return `${actor} đã bình luận trên ${label} "${entity}": "${extra}"`;
+      return `${actor} đã bình luận trên ${label} "${entity}"`;
+
+    case "REPLIED":
+      if (extra)
+        return `${actor} đã trả lời bình luận trong ${label} "${entity}": "${extra}"`;
+      return `${actor} đã trả lời bình luận trong ${label} "${entity}"`;
+
+    case "LOCKED":
+      return `${actor} đã khóa ${label} "${entity}". Không thể chỉnh sửa thêm.`;
+
+    case "CLONED":
+      if (extra)
+        return `${actor} đã sao chép ${label} "${entity}" thành "${extra}"`;
+      return `${actor} đã sao chép ${label} "${entity}" thành công`;
+
+    case "REMINDER":
+      return `Nhắc nhở: ${label} "${entity}" sắp đến hạn. Hãy cập nhật tiến độ.`;
+
+    default:
+      return `Có cập nhật mới trên ${label} "${entity}"`;
+  }
 };
