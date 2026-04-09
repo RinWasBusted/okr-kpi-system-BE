@@ -52,8 +52,6 @@ router.use(authenticate);
  *                         properties:
  *                           id:
  *                             type: integer
- *                           title:
- *                             type: string
  *                           message:
  *                             type: string
  *                           is_read:
