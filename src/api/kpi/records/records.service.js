@@ -316,15 +316,18 @@ const calculateProgress = (actualValue, targetValue, startValue, evaluationMetho
             progress = ((actual - start) / (target - start)) * 100;
     }
 
-    return progress;
+    // Round to 2 decimal places
+    return Math.round(progress * 100) / 100;
 };
 
 const getUnitPath = async (unitId) => {
-    const unit = await prisma.units.findUnique({
-        where: { id: unitId },
-        select: { path: true },
-    });
-    return unit?.path || null;
+    if (!unitId) return null;
+    const rows = await prisma.$queryRaw`
+        SELECT path::text AS path
+        FROM "Units"
+        WHERE id = ${unitId}
+    `;
+    return rows[0]?.path || null;
 };
 
 const isDescendantOrEqual = (candidate, ancestor) => {

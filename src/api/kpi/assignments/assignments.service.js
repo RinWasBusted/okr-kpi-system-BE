@@ -77,7 +77,8 @@ const calculateProgressPercentage = (
   }
 
   // No bounds for KPI - can exceed 100% or go below 0%
-  return progress;
+  // Round to 2 decimal places
+  return Math.round(progress * 100) / 100;
 };
 
 // Calculate progress status for KPI

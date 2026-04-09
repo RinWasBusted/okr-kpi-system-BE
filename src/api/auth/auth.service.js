@@ -244,9 +244,9 @@ export const getCurrentUser = async (userId) => {
             throw new AppError("Account no longer exists. Please login again.", 401);
         }
 
-        // Transform avatar_url to Cloudinary URL with 50x50 pixels
+        // Transform avatar_url to Cloudinary URL with 100x100 pixels
         const avatarUrl = user.avatar_url
-            ? getCloudinaryImageUrl(user.avatar_url, 50, 50, "fill")
+            ? getCloudinaryImageUrl(user.avatar_url, 100, 100, "fill")
             : null;
 
         // eslint-disable-next-line no-unused-vars

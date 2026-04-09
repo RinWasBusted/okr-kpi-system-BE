@@ -134,7 +134,9 @@ export const calculateKeyResultProgress = (currentValue, targetValue, startValue
     }
 
     // Bound between 0% and 100% for Key Results
-    return Math.max(0, Math.min(progress, 100));
+    const boundedProgress = Math.max(0, Math.min(progress, 100));
+    // Round to 2 decimal places
+    return Math.round(boundedProgress * 100) / 100;
 };
 
 // Calculate progress status based on progress_percentage
@@ -158,6 +160,8 @@ export const recalculateObjectiveProgress = async (objectiveId) => {
         (sum, kr) => sum + (kr.progress_percentage * kr.weight) / 100,
         0,
     );
+    // Round to 2 decimal places
+    const roundedProgress = Math.round(progress * 100) / 100;
 
     // Get current objective status
     const objective = await prisma.objectives.findUnique({
@@ -167,10 +171,10 @@ export const recalculateObjectiveProgress = async (objectiveId) => {
 
     // Only update status if objective is in a progress-based status (not Draft, Pending_Approval, or Rejected)
     const progressBasedStatuses = ["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"];
-    const updateData = { progress_percentage: progress };
+    const updateData = { progress_percentage: roundedProgress };
 
     if (progressBasedStatuses.includes(objective?.status)) {
-        const newStatus = calculateProgressStatus(progress);
+        const newStatus = calculateProgressStatus(roundedProgress);
         updateData.status = newStatus;
     }
 
@@ -179,7 +183,7 @@ export const recalculateObjectiveProgress = async (objectiveId) => {
         data: updateData,
     });
 
-    return progress;
+    return roundedProgress;
 };
 
 export default {

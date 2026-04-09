@@ -160,26 +160,7 @@ export const approveObjective = async (req, res) => {
         const objectiveId = parsePositiveInt(req.params.id, null);
         if (!objectiveId) throw new AppError("Invalid objective ID", 400);
 
-        const { title, parent_objective_id, visibility, description } = req.validated.body;
-        const updates = {};
-
-        if (title !== undefined) {
-            updates.title = title.trim();
-        }
-
-        if (description !== undefined) {
-            updates.description = description ? description.trim() : null;
-        }
-
-        if (parent_objective_id !== undefined) {
-            updates.parent_objective_id = parent_objective_id;
-        }
-
-        if (visibility !== undefined) {
-            updates.visibility = visibility;
-        }
-
-        const objective = await objectiveService.approveObjective(req.user, objectiveId, updates);
+        const objective = await objectiveService.approveObjective(req.user, objectiveId);
 
         res.success("Objective approved successfully", 200, { objective });
     } catch (error) {

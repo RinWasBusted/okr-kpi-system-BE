@@ -650,7 +650,7 @@ export const submitObjective = async (user, objectiveId) => {
     return await formatObjective(updated, false, user);
 };
 
-export const approveObjective = async (user, objectiveId, updates) => {
+export const approveObjective = async (user, objectiveId) => {
     const objective = await getObjectiveOrThrow(objectiveId);
 
     if (!await canApproveObjective(user, objective)) {
@@ -661,56 +661,12 @@ export const approveObjective = async (user, objectiveId, updates) => {
         throw new AppError("Objective is not pending approval", 400);
     }
 
-    if (updates.parent_objective_id !== undefined && updates.parent_objective_id !== null) {
-        if (updates.parent_objective_id === objectiveId) {
-            throw new AppError("Objective cannot be its own parent", 400);
-        }
-        const parent = await prisma.objectives.findFirst({
-            where: { id: updates.parent_objective_id },
-            select: { id: true, visibility: true },
-        });
-        if (!parent) throw new AppError("Parent objective not found", 404);
-        
-        // Validate child visibility is not more public than parent
-        const childVisibility = updates.visibility !== undefined ? updates.visibility : objective.visibility;
-        if (!validateChildVisibility(childVisibility, parent.visibility)) {
-            throw new AppError(
-                `Child objective visibility (${childVisibility}) cannot be more public than parent visibility (${parent.visibility})`,
-                422
-            );
-        }
-    } else if (objective.parent_objective_id && updates.visibility !== undefined) {
-        // Validate visibility hierarchy when only changing visibility (not parent) but objective already has a parent
-        const parent = await prisma.objectives.findFirst({
-            where: { id: objective.parent_objective_id },
-            select: { id: true, visibility: true },
-        });
-        if (parent && !validateChildVisibility(updates.visibility, parent.visibility)) {
-            throw new AppError(
-                `Child objective visibility (${updates.visibility}) cannot be more public than parent visibility (${parent.visibility})`,
-                422
-            );
-        }
-    }
-
-    // Validate PRIVATE visibility requires owner_id (consistent with createObjective)
-    const finalVisibility = updates.visibility !== undefined ? updates.visibility : objective.visibility;
-    if (finalVisibility === "PRIVATE" && !objective.owner_id) {
-        throw new AppError("owner_id is required for PRIVATE objectives", 422);
-    }
-
     // Calculate progress-based status after approval
     const newStatus = calculateProgressStatus(objective.progress_percentage);
 
     const updated = await prisma.objectives.update({
         where: { id: objectiveId },
         data: {
-            ...(updates.title !== undefined && { title: updates.title }),
-            ...(updates.description !== undefined && { description: updates.description ?? null }),
-            ...(updates.parent_objective_id !== undefined && {
-                parent_objective_id: updates.parent_objective_id,
-            }),
-            ...(updates.visibility !== undefined && { visibility: updates.visibility }),
             status: newStatus,
             approved_by: user.id,
         },
