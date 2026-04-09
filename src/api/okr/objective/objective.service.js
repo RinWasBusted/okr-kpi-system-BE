@@ -2,265 +2,308 @@ import prisma from "../../../utils/prisma.js";
 import AppError from "../../../utils/appError.js";
 import { UserRole } from "@prisma/client";
 import {
-    canApproveObjective,
-    canEditObjective,
-    recalculateObjectiveProgress,
-    calculateKeyResultProgress,
+  canApproveObjective,
+  canEditObjective,
+  recalculateObjectiveProgress,
+  calculateKeyResultProgress,
 } from "../../../utils/okr.js";
 import { getCloudinaryImageUrl } from "../../../utils/cloudinary.js";
 import { daysBetweenUtc } from "../../../utils/date.js";
 import {
-    getObjectiveAccessPath,
-    getUnitPath,
-    isAncestorUnit,
-    getUnitAncestors,
-    isUnitManager,
+  getObjectiveAccessPath,
+  getUnitPath,
+  isAncestorUnit,
+  getUnitAncestors,
+  isUnitManager,
 } from "../../../utils/path.js";
 import {
-    notifyObjectiveEvent,
-    notifySpecificUsers,
-    getUsersInUnitAndAncestors,
+  notifyObjectiveEvent,
+  notifySpecificUsers,
+  getUsersInUnitAndAncestors,
 } from "../../../utils/notificationHelper.js";
 
 // Visibility hierarchy: PUBLIC (1) < INTERNAL (2) < PRIVATE (3)
 // Child objective visibility must be >= parent visibility (more private)
 const getVisibilityLevel = (visibility) => {
-    const levels = { PUBLIC: 1, INTERNAL: 2, PRIVATE: 3 };
-    return levels[visibility] || 1;
+  const levels = { PUBLIC: 1, INTERNAL: 2, PRIVATE: 3 };
+  return levels[visibility] || 1;
 };
 
 const validateChildVisibility = (childVisibility, parentVisibility) => {
-    const childLevel = getVisibilityLevel(childVisibility);
-    const parentLevel = getVisibilityLevel(parentVisibility);
-    return childLevel >= parentLevel; // Child must be more private or equal
+  const childLevel = getVisibilityLevel(childVisibility);
+  const parentLevel = getVisibilityLevel(parentVisibility);
+  return childLevel >= parentLevel; // Child must be more private or equal
 };
 
 const toDateOnlyUtc = (date) =>
-    new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
 
 const isDescendantOrEqual = (candidate, ancestor) => {
-    if (!candidate || !ancestor) return false;
-    return candidate === ancestor || candidate.startsWith(`${ancestor}.`);
+  if (!candidate || !ancestor) return false;
+  return candidate === ancestor || candidate.startsWith(`${ancestor}.`);
 };
 
 const isAncestorOrEqual = (candidate, descendant) => {
-    if (!candidate || !descendant) return false;
-    return descendant === candidate || descendant.startsWith(`${candidate}.`);
+  if (!candidate || !descendant) return false;
+  return descendant === candidate || descendant.startsWith(`${candidate}.`);
 };
 
 const canViewObjective = async (user, objective, unitContext) => {
-    if (!objective) return false;
-    if (user.role === UserRole.ADMIN_COMPANY) return true;
+  if (!objective) return false;
+  if (user.role === UserRole.ADMIN_COMPANY) return true;
 
-    if (objective.visibility === "PUBLIC") return true;
+  if (objective.visibility === "PUBLIC") return true;
 
-    const userPath = unitContext || (user.unit_id ? await getUnitPath(user.unit_id) : null);
-    const objectivePath =
-        objective.access_path ?? (objective.id ? await getObjectiveAccessPath(objective.id) : null);
+  const userPath =
+    unitContext || (user.unit_id ? await getUnitPath(user.unit_id) : null);
+  const objectivePath =
+    objective.access_path ??
+    (objective.id ? await getObjectiveAccessPath(objective.id) : null);
 
-    if (objective.visibility === "INTERNAL") {
-        if (!objectivePath || !userPath) return false;
-        return (
-            isAncestorOrEqual(objectivePath, userPath) ||
-            isDescendantOrEqual(objectivePath, userPath)
-        );
-    }
+  if (objective.visibility === "INTERNAL") {
+    if (!objectivePath || !userPath) return false;
+    return (
+      isAncestorOrEqual(objectivePath, userPath) ||
+      isDescendantOrEqual(objectivePath, userPath)
+    );
+  }
 
-    if (objective.visibility === "PRIVATE") {
-        if (objective.owner_id === user.id) return true;
-        if (!objectivePath || !userPath) return false;
-        return objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath);
-    }
+  if (objective.visibility === "PRIVATE") {
+    if (objective.owner_id === user.id) return true;
+    if (!objectivePath || !userPath) return false;
+    return (
+      objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath)
+    );
+  }
 
-    return false;
+  return false;
 };
 
 const ownerSelect = {
-    id: true,
-    full_name: true,
-    email: true,
-    avatar_url: true,
-    job_title: true,
-    unit_id: true,
+  id: true,
+  full_name: true,
+  email: true,
+  avatar_url: true,
+  job_title: true,
+  unit_id: true,
 };
 
 const unitSelect = {
-    id: true,
-    name: true,
-    parent_id: true,
+  id: true,
+  name: true,
+  parent_id: true,
 };
 
 const objectiveBaseSelect = {
-    id: true,
-    title: true,
-    description: true,
-    status: true,
-    visibility: true,
-    progress_percentage: true,
-    cycle_id: true,
-    unit_id: true,
-    owner_id: true,
-    parent_objective_id: true,
-    created_at: true,
-    cycle: { select: { id: true, name: true, start_date: true, end_date: true } },
-    owner: { select: ownerSelect },
-    unit: { select: unitSelect },
-    parent_objective: { select: { id: true, title: true } },
-    approver: { select: { id: true, full_name: true, email: true, avatar_url: true } },
+  id: true,
+  title: true,
+  description: true,
+  status: true,
+  visibility: true,
+  progress_percentage: true,
+  cycle_id: true,
+  unit_id: true,
+  owner_id: true,
+  parent_objective_id: true,
+  created_at: true,
+  cycle: { select: { id: true, name: true, start_date: true, end_date: true } },
+  owner: { select: ownerSelect },
+  unit: { select: unitSelect },
+  parent_objective: { select: { id: true, title: true } },
+  approver: {
+    select: { id: true, full_name: true, email: true, avatar_url: true },
+  },
 };
 
 const keyResultSelect = {
-    id: true,
-    title: true,
-    target_value: true,
-    current_value: true,
-    unit: true,
-    weight: true,
-    due_date: true,
-    progress_percentage: true,
+  id: true,
+  title: true,
+  target_value: true,
+  current_value: true,
+  unit: true,
+  weight: true,
+  due_date: true,
+  progress_percentage: true,
 };
 
 const formatKeyResult = (kr, now) => ({
-    id: kr.id,
-    title: kr.title,
-    target_value: kr.target_value,
-    current_value: kr.current_value,
-    unit: kr.unit,
-    weight: kr.weight,
-    due_date: kr.due_date,
-    progress_percentage: kr.progress_percentage,
-    days_until_due: kr.due_date ? daysBetweenUtc(kr.due_date, now) : null,
+  id: kr.id,
+  title: kr.title,
+  target_value: kr.target_value,
+  current_value: kr.current_value,
+  unit: kr.unit,
+  weight: kr.weight,
+  due_date: kr.due_date,
+  progress_percentage: kr.progress_percentage,
+  days_until_due: kr.due_date ? daysBetweenUtc(kr.due_date, now) : null,
 });
 
 // Calculate progress status based on progress_percentage
 const calculateProgressStatus = (progress) => {
-    const p = Number(progress) || 0;
-    if (p === 0) return "NOT_STARTED";
-    if (p >= 100) return "COMPLETED";
-    if (p >= 80) return "ON_TRACK";
-    if (p >= 30) return "WARNING";
-    return "DANGER";
+  const p = Number(progress) || 0;
+  if (p === 0) return "NOT_STARTED";
+  if (p >= 100) return "COMPLETED";
+  if (p >= 80) return "ON_TRACK";
+  if (p >= 30) return "WARNING";
+  return "DANGER";
+};
+
+const calculateProgressStatusFilter = (progress) => {
+  const p = Number(progress) || 0;
+  if (p === 0) return "NOT_STARTED";
+  if (p >= 100) return "COMPLETED";
+  if (p >= 80) return "ON_TRACK";
+  if (p >= 30) return "AT_RISK";
+  return "CRITICAL";
+};
+
+const matchesProgressStatus = (objective, progressStatus) => {
+  if (!progressStatus) return true;
+  return (
+    calculateProgressStatusFilter(objective.progress_percentage) ===
+    progressStatus
+  );
 };
 
 // Calculate permissions for an objective based on user and objective state
 const calculateObjectivePermissions = async (user, objective) => {
-    const permissions = {
-        view: false,
-        edit: false,
-        submit: false,
-        approve: false,
-        reject: false,
-        delete: false,
-    };
+  const permissions = {
+    view: false,
+    edit: false,
+    submit: false,
+    approve: false,
+    reject: false,
+    delete: false,
+  };
 
-    if (!objective || !user) return permissions;
+  if (!objective || !user) return permissions;
 
-    // ADMIN_COMPANY has all permissions
-    if (user.role === UserRole.ADMIN_COMPANY) {
-        permissions.view = true;
-        permissions.edit = true;
-        permissions.submit = true;
-        permissions.approve = true;
-        permissions.reject = true;
-        permissions.delete = true;
-        return permissions;
-    }
-
-    // Check view permission
-    const canView = await canViewObjective(user, objective);
-    permissions.view = canView;
-
-    if (!canView) return permissions;
-
-    // Edit permission: owner or unit manager
-    const isOwner = objective.owner_id && objective.owner_id === user.id;
-    const isManager = objective.unit_id && await isUnitManager(user.id, objective.unit_id);
-    const canEdit = isOwner || isManager;
-    permissions.edit = canEdit;
-
-    // Submit permission: can edit and status is Draft or Rejected
-    const canSubmitStatuses = ["Draft", "Rejected"];
-    permissions.submit = canEdit && canSubmitStatuses.includes(objective.status);
-
-    // Approve/Reject permission: from ancestor unit (not same unit)
-    let canApproveReject = false;
-    if (user.unit_id) {
-        const userPath = await getUnitPath(user.unit_id);
-        const objectivePath = objective.access_path ?? (objective.id ? await getObjectiveAccessPath(objective.id) : null);
-        if (userPath && objectivePath) {
-            canApproveReject = objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath);
-        }
-    }
-    permissions.approve = canApproveReject && objective.status === "Pending_Approval";
-    permissions.reject = canApproveReject && objective.status === "Pending_Approval";
-
-    // Delete permission: same as edit
-    permissions.delete = canEdit;
-
+  // ADMIN_COMPANY has all permissions
+  if (user.role === UserRole.ADMIN_COMPANY) {
+    permissions.view = true;
+    permissions.edit = true;
+    permissions.submit = true;
+    permissions.approve = true;
+    permissions.reject = true;
+    permissions.delete = true;
     return permissions;
+  }
+
+  // Check view permission
+  const canView = await canViewObjective(user, objective);
+  permissions.view = canView;
+
+  if (!canView) return permissions;
+
+  // Edit permission: owner or unit manager
+  const isOwner = objective.owner_id && objective.owner_id === user.id;
+  const isManager =
+    objective.unit_id && (await isUnitManager(user.id, objective.unit_id));
+  const canEdit = isOwner || isManager;
+  permissions.edit = canEdit;
+
+  // Submit permission: can edit and status is Draft or Rejected
+  const canSubmitStatuses = ["Draft", "Rejected"];
+  permissions.submit = canEdit && canSubmitStatuses.includes(objective.status);
+
+  // Approve/Reject permission: from ancestor unit (not same unit)
+  let canApproveReject = false;
+  if (user.unit_id) {
+    const userPath = await getUnitPath(user.unit_id);
+    const objectivePath =
+      objective.access_path ??
+      (objective.id ? await getObjectiveAccessPath(objective.id) : null);
+    if (userPath && objectivePath) {
+      canApproveReject =
+        objectivePath !== userPath &&
+        isDescendantOrEqual(objectivePath, userPath);
+    }
+  }
+  permissions.approve =
+    canApproveReject && objective.status === "Pending_Approval";
+  permissions.reject =
+    canApproveReject && objective.status === "Pending_Approval";
+
+  // Delete permission: same as edit
+  permissions.delete = canEdit;
+
+  return permissions;
 };
 
-const formatObjective = async (objective, includeKeyResults = false, user = null) => {
-    const now = new Date();
-    const formatUserAvatar = (userData) => {
-        if (!userData) return null;
-        return {
-            ...userData,
-            avatar_url: userData.avatar_url
-                ? getCloudinaryImageUrl(userData.avatar_url, 50, 50, "fill")
-                : null,
-        };
+const formatObjective = async (
+  objective,
+  includeKeyResults = false,
+  user = null,
+) => {
+  const now = new Date();
+  const formatUserAvatar = (userData) => {
+    if (!userData) return null;
+    return {
+      ...userData,
+      avatar_url: userData.avatar_url
+        ? getCloudinaryImageUrl(userData.avatar_url, 50, 50, "fill")
+        : null,
     };
+  };
 
-    // Calculate permissions if user is provided
-    const permissions = user ? await calculateObjectivePermissions(user, objective) : null;
+  // Calculate permissions if user is provided
+  const permissions = user
+    ? await calculateObjectivePermissions(user, objective)
+    : null;
 
-    const result = {
-        id: objective.id,
-        title: objective.title,
-        description: objective.description ?? null,
-        status: objective.status,
-        visibility: objective.visibility,
-        progress_percentage: objective.progress_percentage,
-        cycle: objective.cycle ?? null,
-        unit_id: objective.unit_id,
-        owner_id: objective.owner_id,
-        parent_objective_id: objective.parent_objective_id,
-        created_at: objective.created_at,
-        owner: formatUserAvatar(objective.owner),
-        unit: objective.unit ?? null,
-        parent_objective: objective.parent_objective ?? null,
-        approved_by: formatUserAvatar(objective.approver),
-        ...(includeKeyResults && {
-            key_results: (objective.key_results || []).map((kr) => formatKeyResult(kr, now)),
-        }),
-    };
+  const result = {
+    id: objective.id,
+    title: objective.title,
+    description: objective.description ?? null,
+    status: objective.status,
+    visibility: objective.visibility,
+    progress_percentage: objective.progress_percentage,
+    progress_status: calculateProgressStatusFilter(
+      objective.progress_percentage,
+    ),
+    cycle: objective.cycle ?? null,
+    unit_id: objective.unit_id,
+    owner_id: objective.owner_id,
+    parent_objective_id: objective.parent_objective_id,
+    created_at: objective.created_at,
+    owner: formatUserAvatar(objective.owner),
+    unit: objective.unit ?? null,
+    parent_objective: objective.parent_objective ?? null,
+    approved_by: formatUserAvatar(objective.approver),
+    ...(includeKeyResults && {
+      key_results: (objective.key_results || []).map((kr) =>
+        formatKeyResult(kr, now),
+      ),
+    }),
+  };
 
-    if (permissions) {
-        result.permission = permissions;
-    }
+  if (permissions) {
+    result.permission = permissions;
+  }
 
-    return result;
+  return result;
 };
 
 const getVisibleObjectiveIds = async (user) => {
-    if (user.role === UserRole.ADMIN_COMPANY) return null;
+  if (user.role === UserRole.ADMIN_COMPANY) return null;
 
-    const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
+  const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
 
-    if (!userPath) {
-        const rows = await prisma.$queryRaw`
+  if (!userPath) {
+    const rows = await prisma.$queryRaw`
             SELECT id
             FROM "Objectives"
             WHERE (
                 visibility = 'PUBLIC'
                 OR (visibility = 'PRIVATE' AND owner_id = ${user.id})
-              )
+            )
         `;
-        return rows.map((row) => row.id);
-    }
+    return rows.map((row) => row.id);
+  }
 
-    const rows = await prisma.$queryRaw`
+  const rows = await prisma.$queryRaw`
         SELECT id
         FROM "Objectives"
         WHERE (
@@ -276,256 +319,278 @@ const getVisibleObjectiveIds = async (user) => {
                     OR (access_path <@ ${userPath}::ltree AND access_path <> ${userPath}::ltree)
                 )
             )
-          )
+        )
     `;
 
-    return rows.map((row) => row.id);
+  return rows.map((row) => row.id);
 };
 
 const getObjectiveOrThrow = async (objectiveId, includeRelations = false) => {
-    const objective = await prisma.objectives.findFirst({
-        where: { id: objectiveId },
-        ...(includeRelations
-            ? {
-                  select: {
-                      ...objectiveBaseSelect,
-                      ...(includeRelations.key_results && { key_results: { select: keyResultSelect } }),
-                  },
-              }
-            : { select: objectiveBaseSelect }),
-    });
+  const objective = await prisma.objectives.findFirst({
+    where: { id: objectiveId },
+    ...(includeRelations
+      ? {
+          select: {
+            ...objectiveBaseSelect,
+            ...(includeRelations.key_results && {
+              key_results: { select: keyResultSelect },
+            }),
+          },
+        }
+      : { select: objectiveBaseSelect }),
+  });
 
-    if (!objective) throw new AppError("Objective not found", 404);
-    objective.access_path = await getObjectiveAccessPath(objective.id);
-    return objective;
+  if (!objective) throw new AppError("Objective not found", 404);
+  objective.access_path = await getObjectiveAccessPath(objective.id);
+  return objective;
 };
 
 const ensureCycleExists = async (cycleId) => {
-    const cycle = await prisma.cycles.findFirst({
-        where: { id: cycleId },
-        select: { id: true },
-    });
-    if (!cycle) throw new AppError("Cycle not found", 404);
+  const cycle = await prisma.cycles.findFirst({
+    where: { id: cycleId },
+    select: { id: true },
+  });
+  if (!cycle) throw new AppError("Cycle not found", 404);
 };
 
 const ensureUnitExists = async (unitId) => {
-    const unit = await prisma.units.findFirst({
-        where: { id: unitId },
-        select: { id: true, parent_id: true },
-    });
-    if (!unit) throw new AppError("Unit not found", 404);
-    return unit;
+  const unit = await prisma.units.findFirst({
+    where: { id: unitId },
+    select: { id: true, parent_id: true },
+  });
+  if (!unit) throw new AppError("Unit not found", 404);
+  return unit;
 };
 
 const ensureUserExists = async (userId) => {
-    const user = await prisma.users.findFirst({
-        where: { id: userId },
-        select: { id: true, unit_id: true },
-    });
-    if (!user) throw new AppError("User not found", 404);
-    return user;
+  const user = await prisma.users.findFirst({
+    where: { id: userId },
+    select: { id: true, unit_id: true },
+  });
+  if (!user) throw new AppError("User not found", 404);
+  return user;
 };
 
 const resolveVisibility = (visibility) => visibility ?? "INTERNAL";
 
 const determineObjectiveStatus = async () => {
-    // Always return Draft when creating new objective
-    return "Draft";
+  // Always return Draft when creating new objective
+  return "Draft";
 };
 
 export const listObjectives = async ({
-    user,
-    filters,
-    include_key_results,
-    page,
-    per_page,
-    mode = "tree",
+  user,
+  filters,
+  include_key_results,
+  page,
+  per_page,
+  mode = "tree",
 }) => {
-    const visibleObjectiveIds = await getVisibleObjectiveIds(user);
+  const visibleObjectiveIds = await getVisibleObjectiveIds(user);
 
-    // Check if user can filter by status (only ADMIN_COMPANY or unit manager)
-    const canFilterByStatus = async (user, unitId) => {
-        if (user.role === UserRole.ADMIN_COMPANY) return true;
-        if (!unitId || !user.unit_id) return false;
-        // Check if user is manager of the unit
-        const unit = await prisma.units.findUnique({
-            where: { id: unitId },
-            select: { manager_id: true },
-        });
-        if (unit?.manager_id === user.id) return true;
-        // Check if user is manager of ancestor unit
-        return await isAncestorUnit(user.unit_id, unitId);
-    };
-
-    // Validate status filter permission
-    if (filters.status) {
-        const hasPermission = await canFilterByStatus(user, filters.unit_id);
-        if (!hasPermission) {
-            throw new AppError("You do not have permission to filter by status", 403);
-        }
-    }
-
-    const where = {
-        deleted_at: null,
-        ...(filters.cycle_id !== undefined && { cycle_id: filters.cycle_id }),
-        ...(filters.unit_id !== undefined && { unit_id: filters.unit_id }),
-        ...(filters.owner_id !== undefined && { owner_id: filters.owner_id }),
-        ...(filters.status !== undefined && { status: filters.status }),
-        ...(filters.parent_objective_id !== undefined && {
-            parent_objective_id: filters.parent_objective_id,
-        }),
-        ...(filters.visibility !== undefined && { visibility: filters.visibility }),
-    };
-
-    if (visibleObjectiveIds) {
-        if (visibleObjectiveIds.length === 0) {
-            return { total: 0, data: [], last_page: 0 };
-        }
-        where.id = { in: visibleObjectiveIds };
-    }
-
-    const select = {
-        ...objectiveBaseSelect,
-        ...(include_key_results && { key_results: { select: keyResultSelect } }),
-    };
-
-    // Get all objectives matching filters (no pagination yet)
-    const allObjectives = await prisma.objectives.findMany({
-        where,
-        orderBy: { created_at: "desc" },
-        select,
+  // Check if user can filter by status (only ADMIN_COMPANY or unit manager)
+  const canFilterByStatus = async (user, unitId) => {
+    if (user.role === UserRole.ADMIN_COMPANY) return true;
+    if (!unitId || !user.unit_id) return false;
+    // Check if user is manager of the unit
+    const unit = await prisma.units.findUnique({
+      where: { id: unitId },
+      select: { manager_id: true },
     });
+    if (unit?.manager_id === user.id) return true;
+    // Check if user is manager of ancestor unit
+    return await isAncestorUnit(user.unit_id, unitId);
+  };
 
-    let formattedObjectives = await Promise.all(
-        allObjectives.map((objective) => formatObjective(objective, include_key_results, user))
+  // Validate status filter permission
+  if (filters.status) {
+    const hasPermission = await canFilterByStatus(user, filters.unit_id);
+    if (!hasPermission) {
+      throw new AppError("You do not have permission to filter by status", 403);
+    }
+  }
+
+  const where = {
+    deleted_at: null,
+    ...(filters.cycle_id !== undefined && { cycle_id: filters.cycle_id }),
+    ...(filters.unit_id !== undefined && { unit_id: filters.unit_id }),
+    ...(filters.owner_id !== undefined && { owner_id: filters.owner_id }),
+    ...(filters.status !== undefined && { status: filters.status }),
+    ...(filters.parent_objective_id !== undefined && {
+      parent_objective_id: filters.parent_objective_id,
+    }),
+    ...(filters.visibility !== undefined && { visibility: filters.visibility }),
+  };
+
+  if (visibleObjectiveIds) {
+    if (visibleObjectiveIds.length === 0) {
+      return { total: 0, data: [], last_page: 0 };
+    }
+    where.id = { in: visibleObjectiveIds };
+  }
+
+  const select = {
+    ...objectiveBaseSelect,
+    ...(include_key_results && { key_results: { select: keyResultSelect } }),
+  };
+
+  // Get all objectives matching filters (no pagination yet)
+  const allObjectives = await prisma.objectives.findMany({
+    where,
+    orderBy: { created_at: "desc" },
+    select,
+  });
+
+  let formattedObjectives = await Promise.all(
+    allObjectives.map((objective) =>
+      formatObjective(objective, include_key_results, user),
+    ),
+  );
+
+  if (filters.progress_status !== undefined) {
+    formattedObjectives = formattedObjectives.filter((objective) =>
+      matchesProgressStatus(objective, filters.progress_status),
+    );
+  }
+
+  // Flat list mode: return all objectives as flat list with pagination
+  if (mode === "list") {
+    const total = formattedObjectives.length;
+    const offset = (page - 1) * per_page;
+    const paginatedObjectives = formattedObjectives.slice(
+      offset,
+      offset + per_page,
     );
 
-
-    // Flat list mode: return all objectives as flat list with pagination
-    if (mode === "list") {
-        const total = formattedObjectives.length;
-        const offset = (page - 1) * per_page;
-        const paginatedObjectives = formattedObjectives.slice(offset, offset + per_page);
-
-        return {
-            total,
-            data: paginatedObjectives,
-            last_page: Math.ceil(total / per_page),
-        };
-    }
-
-    // Tree mode: build tree structure (default behavior)
-    const objectivesMap = new Map();
-    const objectivesWithSubs = formattedObjectives.map((objective) => ({
-        ...objective,
-        sub_objectives: [],
-    }));
-
-    // Create map for quick lookup
-    objectivesWithSubs.forEach((objective) => {
-        objectivesMap.set(objective.id, objective);
-    });
-
-    // Build parent-child relationships
-    const rootObjectives = [];
-    objectivesWithSubs.forEach((objective) => {
-        if (objective.parent_objective_id === null) {
-            rootObjectives.push(objective);
-        } else {
-            const parent = objectivesMap.get(objective.parent_objective_id);
-            if (parent) {
-                parent.sub_objectives.push(objective);
-            }
-        }
-    });
-
-    // Apply pagination to root objectives
-    const offset = (page - 1) * per_page;
-    const paginatedRoots = rootObjectives.slice(offset, offset + per_page);
-
     return {
-        total: rootObjectives.length,
-        data: paginatedRoots,
-        last_page: Math.ceil(rootObjectives.length / per_page),
+      total,
+      data: paginatedObjectives,
+      last_page: Math.ceil(total / per_page),
     };
+  }
+
+  // Tree mode: build tree structure (default behavior)
+  const objectivesMap = new Map();
+  const objectivesWithSubs = formattedObjectives.map((objective) => ({
+    ...objective,
+    sub_objectives: [],
+  }));
+
+  // Create map for quick lookup
+  objectivesWithSubs.forEach((objective) => {
+    objectivesMap.set(objective.id, objective);
+  });
+
+  // Build parent-child relationships
+  const rootObjectives = [];
+  objectivesWithSubs.forEach((objective) => {
+    if (objective.parent_objective_id === null) {
+      rootObjectives.push(objective);
+    } else {
+      const parent = objectivesMap.get(objective.parent_objective_id);
+      if (parent) {
+        parent.sub_objectives.push(objective);
+      }
+    }
+  });
+
+  // Apply pagination to root objectives
+  const offset = (page - 1) * per_page;
+  const paginatedRoots = rootObjectives.slice(offset, offset + per_page);
+
+  return {
+    total: rootObjectives.length,
+    data: paginatedRoots,
+    last_page: Math.ceil(rootObjectives.length / per_page),
+  };
 };
 
 export const createObjective = async (user, payload) => {
-    await ensureCycleExists(payload.cycle_id);
+  await ensureCycleExists(payload.cycle_id);
 
-    let owner = null;
-    if (payload.owner_id) {
-        owner = await ensureUserExists(payload.owner_id);
-        // Validate: owner without unit cannot be assigned to objective with unit_id
-        if (payload.unit_id && !owner.unit_id) {
-            throw new AppError("Cannot assign owner without unit to an objective with unit_id", 422);
-        }
+  let owner = null;
+  if (payload.owner_id) {
+    owner = await ensureUserExists(payload.owner_id);
+    // Validate: owner without unit cannot be assigned to objective with unit_id
+    if (payload.unit_id && !owner.unit_id) {
+      throw new AppError(
+        "Cannot assign owner without unit to an objective with unit_id",
+        422,
+      );
     }
+  }
 
-    let unitId = payload.unit_id ?? owner?.unit_id ?? null;
+  let unitId = payload.unit_id ?? owner?.unit_id ?? null;
 
-    const isCompanyWide = !unitId && !payload.owner_id;
+  const isCompanyWide = !unitId && !payload.owner_id;
 
-    if (isCompanyWide) {
-        // Only AdminCompany can create a company-wide objective
-        if (user.role !== UserRole.ADMIN_COMPANY) {
-            throw new AppError("Only admins can create company-wide objectives", 403);
-        }
-        // Company-wide objectives must be PUBLIC — other visibilities make no sense
-        // without a unit scope
-        if (payload.visibility && payload.visibility !== "PUBLIC") {
-            throw new AppError("Company-wide objectives must have PUBLIC visibility", 422);
-        }
-    } else {
-        // Unit-scoped or personal objective — unit_id is required
-        if (!unitId) throw new AppError("unit_id is required", 422);
-
-        await ensureUnitExists(unitId);
-
-        if (owner && owner.unit_id && owner.unit_id !== unitId) {
-            throw new AppError("owner_id does not belong to unit_id", 422);
-        }
+  if (isCompanyWide) {
+    // Only AdminCompany can create a company-wide objective
+    if (user.role !== UserRole.ADMIN_COMPANY) {
+      throw new AppError("Only admins can create company-wide objectives", 403);
     }
-
-    if (payload.parent_objective_id) {
-        const parent = await prisma.objectives.findFirst({
-            where: { id: payload.parent_objective_id },
-            select: { id: true, visibility: true },
-        });
-        if (!parent) throw new AppError("Parent objective not found", 404);
-        
-        // Validate child visibility is not more public than parent
-        const resolvedVisibility = resolveVisibility(payload.visibility);
-        if (!validateChildVisibility(resolvedVisibility, parent.visibility)) {
-            throw new AppError(
-                `Child objective visibility (${resolvedVisibility}) cannot be more public than parent visibility (${parent.visibility})`,
-                422
-            );
-        }
+    // Company-wide objectives must be PUBLIC — other visibilities make no sense
+    // without a unit scope
+    if (payload.visibility && payload.visibility !== "PUBLIC") {
+      throw new AppError(
+        "Company-wide objectives must have PUBLIC visibility",
+        422,
+      );
     }
+  } else {
+    // Unit-scoped or personal objective — unit_id is required
+    if (!unitId) throw new AppError("unit_id is required", 422);
 
+    await ensureUnitExists(unitId);
+
+    if (owner && owner.unit_id && owner.unit_id !== unitId) {
+      throw new AppError("owner_id does not belong to unit_id", 422);
+    }
+  }
+
+  if (payload.parent_objective_id) {
+    const parent = await prisma.objectives.findFirst({
+      where: { id: payload.parent_objective_id },
+      select: { id: true, visibility: true },
+    });
+    if (!parent) throw new AppError("Parent objective not found", 404);
+
+    // Validate child visibility is not more public than parent
     const resolvedVisibility = resolveVisibility(payload.visibility);
-    if (resolvedVisibility === "PRIVATE" && !payload.owner_id) {
-        throw new AppError("owner_id is required for PRIVATE objectives", 422);
+    if (!validateChildVisibility(resolvedVisibility, parent.visibility)) {
+      throw new AppError(
+        `Child objective visibility (${resolvedVisibility}) cannot be more public than parent visibility (${parent.visibility})`,
+        422,
+      );
     }
+  }
 
-    const status = await determineObjectiveStatus(user, unitId, payload.owner_id ?? null);
-    
-    let accessPath;
-    if (unitId) {
-        accessPath = await getUnitPath(unitId);
-        if (!accessPath) throw new AppError("Unit not found", 404);
-    } else {
-        accessPath = "company";
-    }
+  const resolvedVisibility = resolveVisibility(payload.visibility);
+  if (resolvedVisibility === "PRIVATE" && !payload.owner_id) {
+    throw new AppError("owner_id is required for PRIVATE objectives", 422);
+  }
 
-    const nextIdRows = await prisma.$queryRaw`
+  const status = await determineObjectiveStatus(
+    user,
+    unitId,
+    payload.owner_id ?? null,
+  );
+
+  let accessPath;
+  if (unitId) {
+    accessPath = await getUnitPath(unitId);
+    if (!accessPath) throw new AppError("Unit not found", 404);
+  } else {
+    accessPath = "company";
+  }
+
+  const nextIdRows = await prisma.$queryRaw`
         SELECT nextval(pg_get_serial_sequence('"Objectives"', 'id'))::int AS id
     `;
-    const objectiveId = nextIdRows[0]?.id;
-    if (!objectiveId) throw new AppError("Failed to allocate objective ID", 500);
+  const objectiveId = nextIdRows[0]?.id;
+  if (!objectiveId) throw new AppError("Failed to allocate objective ID", 500);
 
-    await prisma.$executeRaw`
+  await prisma.$executeRaw`
         INSERT INTO "Objectives" (
             id,
             company_id,
@@ -558,476 +623,601 @@ export const createObjective = async (user, payload) => {
         )
     `;
 
-    const objective = await prisma.objectives.findFirst({
-        where: { id: objectiveId },
-        select: objectiveBaseSelect,
-    });
+  const objective = await prisma.objectives.findFirst({
+    where: { id: objectiveId },
+    select: objectiveBaseSelect,
+  });
 
-    // Notify users in the unit
-    await notifyObjectiveEvent({
-        companyId: user.company_id,
-        eventType: "CREATED",
-        objective: { id: objectiveId, title: payload.title, unit_id: unitId, owner_id: payload.owner_id },
-        actorName: user.full_name || user.email,
-        actorId: user.id,
-    });
+  // Notify users in the unit
+  await notifyObjectiveEvent({
+    companyId: user.company_id,
+    eventType: "CREATED",
+    objective: {
+      id: objectiveId,
+      title: payload.title,
+      unit_id: unitId,
+      owner_id: payload.owner_id,
+    },
+    actorName: user.full_name || user.email,
+    actorId: user.id,
+  });
 
-    return await formatObjective(objective, false, user);
+  return await formatObjective(objective, false, user);
 };
 
 export const updateObjective = async (user, objectiveId, updates) => {
-    const objective = await getObjectiveOrThrow(objectiveId);
+  const objective = await getObjectiveOrThrow(objectiveId);
 
-    if (!await canEditObjective(user, objective)) {
-        throw new AppError("You do not have permission to update this objective", 403);
+  if (!(await canEditObjective(user, objective))) {
+    throw new AppError(
+      "You do not have permission to update this objective",
+      403,
+    );
+  }
+
+  // Only Draft and Rejected statuses can be edited
+  const editableStatuses = ["Draft", "Rejected"];
+  if (!editableStatuses.includes(objective.status)) {
+    throw new AppError(
+      "Objective cannot be updated in its current status",
+      400,
+    );
+  }
+
+  if (
+    updates.parent_objective_id !== undefined &&
+    updates.parent_objective_id !== null
+  ) {
+    if (updates.parent_objective_id === objectiveId) {
+      throw new AppError("Objective cannot be its own parent", 400);
     }
-
-    // Only Draft and Rejected statuses can be edited
-    const editableStatuses = ["Draft", "Rejected"];
-    if (!editableStatuses.includes(objective.status)) {
-        throw new AppError("Objective cannot be updated in its current status", 400);
-    }
-
-    if (updates.parent_objective_id !== undefined && updates.parent_objective_id !== null) {
-        if (updates.parent_objective_id === objectiveId) {
-            throw new AppError("Objective cannot be its own parent", 400);
-        }
-        const parent = await prisma.objectives.findFirst({
-            where: { id: updates.parent_objective_id },
-            select: { id: true, visibility: true },
-        });
-        if (!parent) throw new AppError("Parent objective not found", 404);
-        
-        // Validate child visibility is not more public than parent
-        const childVisibility = updates.visibility !== undefined ? updates.visibility : objective.visibility;
-        if (!validateChildVisibility(childVisibility, parent.visibility)) {
-            throw new AppError(
-                `Child objective visibility (${childVisibility}) cannot be more public than parent visibility (${parent.visibility})`,
-                422
-            );
-        }
-    } else if (objective.parent_objective_id && updates.visibility !== undefined) {
-        // Validate visibility hierarchy when only changing visibility (not parent) but objective already has a parent
-        const parent = await prisma.objectives.findFirst({
-            where: { id: objective.parent_objective_id },
-            select: { id: true, visibility: true },
-        });
-        if (parent && !validateChildVisibility(updates.visibility, parent.visibility)) {
-            throw new AppError(
-                `Child objective visibility (${updates.visibility}) cannot be more public than parent visibility (${parent.visibility})`,
-                422
-            );
-        }
-    }
-
-    if (updates.visibility === "PRIVATE" && !objective.owner_id) {
-        throw new AppError("owner_id is required for PRIVATE objectives", 422);
-    }
-
-    const data = {
-        ...(updates.title !== undefined && { title: updates.title }),
-        ...(updates.description !== undefined && { description: updates.description ?? null }),
-        ...(updates.parent_objective_id !== undefined && {
-            parent_objective_id: updates.parent_objective_id,
-        }),
-        ...(updates.visibility !== undefined && { visibility: updates.visibility }),
-        status: "Draft",
-        approved_by: null,
-    };
-
-    const updated = await prisma.objectives.update({
-        where: { id: objectiveId },
-        data,
-        select: objectiveBaseSelect,
+    const parent = await prisma.objectives.findFirst({
+      where: { id: updates.parent_objective_id },
+      select: { id: true, visibility: true },
     });
+    if (!parent) throw new AppError("Parent objective not found", 404);
 
-    // Notify users in the unit (excluding the updater)
-    await notifyObjectiveEvent({
-        companyId: user.company_id,
-        eventType: "UPDATED",
-        objective: { id: objectiveId, title: objective.title, unit_id: objective.unit_id, owner_id: objective.owner_id },
-        actorName: user.full_name || user.email,
-        actorId: user.id,
+    // Validate child visibility is not more public than parent
+    const childVisibility =
+      updates.visibility !== undefined
+        ? updates.visibility
+        : objective.visibility;
+    if (!validateChildVisibility(childVisibility, parent.visibility)) {
+      throw new AppError(
+        `Child objective visibility (${childVisibility}) cannot be more public than parent visibility (${parent.visibility})`,
+        422,
+      );
+    }
+  } else if (
+    objective.parent_objective_id &&
+    updates.visibility !== undefined
+  ) {
+    // Validate visibility hierarchy when only changing visibility (not parent) but objective already has a parent
+    const parent = await prisma.objectives.findFirst({
+      where: { id: objective.parent_objective_id },
+      select: { id: true, visibility: true },
     });
+    if (
+      parent &&
+      !validateChildVisibility(updates.visibility, parent.visibility)
+    ) {
+      throw new AppError(
+        `Child objective visibility (${updates.visibility}) cannot be more public than parent visibility (${parent.visibility})`,
+        422,
+      );
+    }
+  }
 
-    return await formatObjective(updated, false, user);
+  if (updates.visibility === "PRIVATE" && !objective.owner_id) {
+    throw new AppError("owner_id is required for PRIVATE objectives", 422);
+  }
+
+  const data = {
+    ...(updates.title !== undefined && { title: updates.title }),
+    ...(updates.description !== undefined && {
+      description: updates.description ?? null,
+    }),
+    ...(updates.parent_objective_id !== undefined && {
+      parent_objective_id: updates.parent_objective_id,
+    }),
+    ...(updates.visibility !== undefined && { visibility: updates.visibility }),
+    status: "Draft",
+    approved_by: null,
+  };
+
+  const updated = await prisma.objectives.update({
+    where: { id: objectiveId },
+    data,
+    select: objectiveBaseSelect,
+  });
+
+  // Notify users in the unit (excluding the updater)
+  await notifyObjectiveEvent({
+    companyId: user.company_id,
+    eventType: "UPDATED",
+    objective: {
+      id: objectiveId,
+      title: objective.title,
+      unit_id: objective.unit_id,
+      owner_id: objective.owner_id,
+    },
+    actorName: user.full_name || user.email,
+    actorId: user.id,
+  });
+
+  return await formatObjective(updated, false, user);
 };
 
 export const submitObjective = async (user, objectiveId) => {
-    const objective = await getObjectiveOrThrow(objectiveId);
+  const objective = await getObjectiveOrThrow(objectiveId);
 
-    if (!await canEditObjective(user, objective)) {
-        throw new AppError("You do not have permission to submit this objective", 403);
-    }
+  if (!(await canEditObjective(user, objective))) {
+    throw new AppError(
+      "You do not have permission to submit this objective",
+      403,
+    );
+  }
 
-    if (!['Draft', 'Rejected'].includes(objective.status)) {
-        throw new AppError("Objective cannot be submitted in its current status", 400);
-    }
+  if (!["Draft", "Rejected"].includes(objective.status)) {
+    throw new AppError(
+      "Objective cannot be submitted in its current status",
+      400,
+    );
+  }
 
-    const updated = await prisma.objectives.update({
-        where: { id: objectiveId },
-        data: { status: "Pending_Approval", approved_by: null },
-        select: objectiveBaseSelect,
+  const updated = await prisma.objectives.update({
+    where: { id: objectiveId },
+    data: { status: "Pending_Approval", approved_by: null },
+    select: objectiveBaseSelect,
+  });
+
+  // Notify managers/approvers in ancestor units
+  if (objective.unit_id) {
+    const approverIds = await getUsersInUnitAndAncestors(
+      objective.unit_id,
+      user.company_id,
+    );
+    await notifySpecificUsers({
+      companyId: user.company_id,
+      eventType: "STATUS_CHANGED",
+      objective: {
+        id: objectiveId,
+        title: objective.title,
+        unit_id: objective.unit_id,
+        owner_id: objective.owner_id,
+      },
+      actorName: user.full_name || user.email,
+      actorId: user.id,
+      newStatus: "Pending_Approval",
+      recipientIds: approverIds,
     });
+  }
 
-    // Notify managers/approvers in ancestor units
-    if (objective.unit_id) {
-        const approverIds = await getUsersInUnitAndAncestors(objective.unit_id, user.company_id);
-        await notifySpecificUsers({
-            companyId: user.company_id,
-            eventType: "STATUS_CHANGED",
-            objective: { id: objectiveId, title: objective.title, unit_id: objective.unit_id, owner_id: objective.owner_id },
-            actorName: user.full_name || user.email,
-            actorId: user.id,
-            recipientIds: approverIds,
-        });
-    }
-
-    return await formatObjective(updated, false, user);
+  return await formatObjective(updated, false, user);
 };
 
 export const approveObjective = async (user, objectiveId) => {
-    const objective = await getObjectiveOrThrow(objectiveId);
+  const objective = await getObjectiveOrThrow(objectiveId);
 
-    if (!await canApproveObjective(user, objective)) {
-        throw new AppError("You do not have permission to approve this objective", 403);
-    }
+  if (!(await canApproveObjective(user, objective))) {
+    throw new AppError(
+      "You do not have permission to approve this objective",
+      403,
+    );
+  }
 
-    if (objective.status !== "Pending_Approval") {
-        throw new AppError("Objective is not pending approval", 400);
-    }
+  if (objective.status !== "Pending_Approval") {
+    throw new AppError("Objective is not pending approval", 400);
+  }
 
-    // Calculate progress-based status after approval
-    const newStatus = calculateProgressStatus(objective.progress_percentage);
+  // Calculate progress-based status after approval
+  const newStatus = calculateProgressStatus(objective.progress_percentage);
 
-    const updated = await prisma.objectives.update({
-        where: { id: objectiveId },
-        data: {
-            status: newStatus,
-            approved_by: user.id,
-        },
-        select: objectiveBaseSelect,
+  const updated = await prisma.objectives.update({
+    where: { id: objectiveId },
+    data: {
+      status: newStatus,
+      approved_by: user.id,
+    },
+    select: objectiveBaseSelect,
+  });
+
+  await recalculateObjectiveProgress(objectiveId);
+
+  // Notify the owner about approval
+  if (objective.owner_id && objective.owner_id !== user.id) {
+    await notifySpecificUsers({
+      companyId: user.company_id,
+      eventType: "STATUS_CHANGED",
+      objective: {
+        id: objectiveId,
+        title: objective.title,
+        unit_id: objective.unit_id,
+        owner_id: objective.owner_id,
+      },
+      actorName: user.full_name || user.email,
+      actorId: user.id,
+      newStatus,
+      recipientIds: [objective.owner_id],
     });
+  }
 
-    await recalculateObjectiveProgress(objectiveId);
-
-    // Notify the owner about approval
-    if (objective.owner_id && objective.owner_id !== user.id) {
-        await notifySpecificUsers({
-            companyId: user.company_id,
-            eventType: "STATUS_CHANGED",
-            objective: { id: objectiveId, title: objective.title, unit_id: objective.unit_id, owner_id: objective.owner_id },
-            actorName: user.full_name || user.email,
-            actorId: user.id,
-            recipientIds: [objective.owner_id],
-        });
-    }
-
-    return await formatObjective(updated, false, user);
+  return await formatObjective(updated, false, user);
 };
 
 // Publish/Activate objective directly from Draft to progress-based status (bypass approval workflow)
 // For admin or high-level managers
 export const publishObjective = async (user, objectiveId, updates = {}) => {
-    const objective = await getObjectiveOrThrow(objectiveId);
+  const objective = await getObjectiveOrThrow(objectiveId);
 
-    // Only admin or managers with approval permission can publish directly
-    if (!await canApproveObjective(user, objective)) {
-        throw new AppError("You do not have permission to publish this objective", 403);
+  // Only admin or managers with approval permission can publish directly
+  if (!(await canApproveObjective(user, objective))) {
+    throw new AppError(
+      "You do not have permission to publish this objective",
+      403,
+    );
+  }
+
+  // Must be in Draft status to publish directly
+  if (objective.status !== "Draft") {
+    throw new AppError(
+      "Only Draft objectives can be published directly. Use approve endpoint for Pending_Approval objectives.",
+      400,
+    );
+  }
+
+  // Validate parent objective and visibility if provided
+  if (
+    updates.parent_objective_id !== undefined &&
+    updates.parent_objective_id !== null
+  ) {
+    if (updates.parent_objective_id === objectiveId) {
+      throw new AppError("Objective cannot be its own parent", 400);
     }
-
-    // Must be in Draft status to publish directly
-    if (objective.status !== "Draft") {
-        throw new AppError("Only Draft objectives can be published directly. Use approve endpoint for Pending_Approval objectives.", 400);
-    }
-
-    // Validate parent objective and visibility if provided
-    if (updates.parent_objective_id !== undefined && updates.parent_objective_id !== null) {
-        if (updates.parent_objective_id === objectiveId) {
-            throw new AppError("Objective cannot be its own parent", 400);
-        }
-        const parent = await prisma.objectives.findFirst({
-            where: { id: updates.parent_objective_id },
-            select: { id: true, visibility: true },
-        });
-        if (!parent) throw new AppError("Parent objective not found", 404);
-
-        const childVisibility = updates.visibility !== undefined ? updates.visibility : objective.visibility;
-        if (!validateChildVisibility(childVisibility, parent.visibility)) {
-            throw new AppError(
-                `Child objective visibility (${childVisibility}) cannot be more public than parent visibility (${parent.visibility})`,
-                422
-            );
-        }
-    } else if (objective.parent_objective_id && updates.visibility !== undefined) {
-        const parent = await prisma.objectives.findFirst({
-            where: { id: objective.parent_objective_id },
-            select: { id: true, visibility: true },
-        });
-        if (parent && !validateChildVisibility(updates.visibility, parent.visibility)) {
-            throw new AppError(
-                `Child objective visibility (${updates.visibility}) cannot be more public than parent visibility (${parent.visibility})`,
-                422
-            );
-        }
-    }
-
-    // Validate PRIVATE visibility requires owner_id
-    const finalVisibility = updates.visibility !== undefined ? updates.visibility : objective.visibility;
-    if (finalVisibility === "PRIVATE" && !objective.owner_id) {
-        throw new AppError("owner_id is required for PRIVATE objectives", 422);
-    }
-
-    // Calculate progress-based status
-    const newStatus = calculateProgressStatus(objective.progress_percentage);
-
-    const updated = await prisma.objectives.update({
-        where: { id: objectiveId },
-        data: {
-            ...(updates.title !== undefined && { title: updates.title }),
-            ...(updates.description !== undefined && { description: updates.description ?? null }),
-            ...(updates.parent_objective_id !== undefined && {
-                parent_objective_id: updates.parent_objective_id,
-            }),
-            ...(updates.visibility !== undefined && { visibility: updates.visibility }),
-            status: newStatus,
-            approved_by: user.id,
-        },
-        select: objectiveBaseSelect,
+    const parent = await prisma.objectives.findFirst({
+      where: { id: updates.parent_objective_id },
+      select: { id: true, visibility: true },
     });
+    if (!parent) throw new AppError("Parent objective not found", 404);
 
-    await recalculateObjectiveProgress(objectiveId);
+    const childVisibility =
+      updates.visibility !== undefined
+        ? updates.visibility
+        : objective.visibility;
+    if (!validateChildVisibility(childVisibility, parent.visibility)) {
+      throw new AppError(
+        `Child objective visibility (${childVisibility}) cannot be more public than parent visibility (${parent.visibility})`,
+        422,
+      );
+    }
+  } else if (
+    objective.parent_objective_id &&
+    updates.visibility !== undefined
+  ) {
+    const parent = await prisma.objectives.findFirst({
+      where: { id: objective.parent_objective_id },
+      select: { id: true, visibility: true },
+    });
+    if (
+      parent &&
+      !validateChildVisibility(updates.visibility, parent.visibility)
+    ) {
+      throw new AppError(
+        `Child objective visibility (${updates.visibility}) cannot be more public than parent visibility (${parent.visibility})`,
+        422,
+      );
+    }
+  }
 
-    return await formatObjective(updated, false, user);
+  // Validate PRIVATE visibility requires owner_id
+  const finalVisibility =
+    updates.visibility !== undefined
+      ? updates.visibility
+      : objective.visibility;
+  if (finalVisibility === "PRIVATE" && !objective.owner_id) {
+    throw new AppError("owner_id is required for PRIVATE objectives", 422);
+  }
+
+  // Calculate progress-based status
+  const newStatus = calculateProgressStatus(objective.progress_percentage);
+
+  const updated = await prisma.objectives.update({
+    where: { id: objectiveId },
+    data: {
+      ...(updates.title !== undefined && { title: updates.title }),
+      ...(updates.description !== undefined && {
+        description: updates.description ?? null,
+      }),
+      ...(updates.parent_objective_id !== undefined && {
+        parent_objective_id: updates.parent_objective_id,
+      }),
+      ...(updates.visibility !== undefined && {
+        visibility: updates.visibility,
+      }),
+      status: newStatus,
+      approved_by: user.id,
+    },
+    select: objectiveBaseSelect,
+  });
+
+  await recalculateObjectiveProgress(objectiveId);
+
+  return await formatObjective(updated, false, user);
 };
 
 export const rejectObjective = async (user, objectiveId, comment) => {
-    const objective = await getObjectiveOrThrow(objectiveId);
+  const objective = await getObjectiveOrThrow(objectiveId);
 
-    if (!await canApproveObjective(user, objective)) {
-        throw new AppError("You do not have permission to reject this objective", 403);
-    }
+  if (!(await canApproveObjective(user, objective))) {
+    throw new AppError(
+      "You do not have permission to reject this objective",
+      403,
+    );
+  }
 
-    if (objective.status !== "Pending_Approval") {
-        throw new AppError("Objective is not pending approval", 400);
-    }
+  if (objective.status !== "Pending_Approval") {
+    throw new AppError("Objective is not pending approval", 400);
+  }
 
-    const updated = await prisma.objectives.update({
-        where: { id: objectiveId },
-        data: { status: "Rejected", approved_by: user.id },
-        select: objectiveBaseSelect,
+  const updated = await prisma.objectives.update({
+    where: { id: objectiveId },
+    data: { status: "Rejected", approved_by: user.id },
+    select: objectiveBaseSelect,
+  });
+
+  if (comment) {
+    await prisma.feedbacks.create({
+      data: {
+        company_id: user.company_id,
+        objective_id: objectiveId,
+        user_id: user.id,
+        content: comment,
+        type: "CONCERN",
+        sentiment: "NEGATIVE",
+        status: "ACTIVE",
+      },
     });
+  }
 
-    if (comment) {
-        await prisma.feedbacks.create({
-            data: {
-                company_id: user.company_id,
-                objective_id: objectiveId,
-                user_id: user.id,
-                content: comment,
-                type: "CONCERN",
-                sentiment: "NEGATIVE",
-                status: "ACTIVE",
-            },
-        });
-    }
+  // Notify the owner about rejection
+  if (objective.owner_id && objective.owner_id !== user.id) {
+    await notifySpecificUsers({
+      companyId: user.company_id,
+      eventType: "STATUS_CHANGED",
+      objective: {
+        id: objectiveId,
+        title: objective.title,
+        unit_id: objective.unit_id,
+        owner_id: objective.owner_id,
+      },
+      actorName: user.full_name || user.email,
+      actorId: user.id,
+      newStatus: "Rejected",
+      extraContext: comment?.trim() || undefined,
+      recipientIds: [objective.owner_id],
+    });
+  }
 
-    // Notify the owner about rejection
-    if (objective.owner_id && objective.owner_id !== user.id) {
-        await notifySpecificUsers({
-            companyId: user.company_id,
-            eventType: "STATUS_CHANGED",
-            objective: { id: objectiveId, title: objective.title, unit_id: objective.unit_id, owner_id: objective.owner_id },
-            actorName: user.full_name || user.email,
-            actorId: user.id,
-            recipientIds: [objective.owner_id],
-        });
-    }
-
-    return await formatObjective(updated, false, user);
+  return await formatObjective(updated, false, user);
 };
 
 export const revertToDraft = async (user, objectiveId) => {
-    const objective = await getObjectiveOrThrow(objectiveId);
+  const objective = await getObjectiveOrThrow(objectiveId);
 
-    // Check if user can edit this objective (owner or unit manager)
-    const isOwner = objective.owner_id && objective.owner_id === user.id;
-    const isManager = objective.unit_id && await isUnitManager(user.id, objective.unit_id);
-    const isCompanyAdmin = user.role === UserRole.ADMIN_COMPANY;
+  // Check if user can edit this objective (owner or unit manager)
+  const isOwner = objective.owner_id && objective.owner_id === user.id;
+  const isManager =
+    objective.unit_id && (await isUnitManager(user.id, objective.unit_id));
+  const isCompanyAdmin = user.role === UserRole.ADMIN_COMPANY;
 
-    if (!isOwner && !isManager && !isCompanyAdmin) {
-        throw new AppError("You do not have permission to revert this objective", 403);
-    }
+  if (!isOwner && !isManager && !isCompanyAdmin) {
+    throw new AppError(
+      "You do not have permission to revert this objective",
+      403,
+    );
+  }
 
-    // Can only revert from certain statuses (includes all progress-based statuses)
-    const revertibleStatuses = ["Rejected", "Pending_Approval", "NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"];
-    if (!revertibleStatuses.includes(objective.status)) {
-        throw new AppError(`Cannot revert objective from ${objective.status} status`, 400);
-    }
+  // Can only revert from certain statuses (includes all progress-based statuses)
+  const revertibleStatuses = [
+    "Rejected",
+    "Pending_Approval",
+    "NOT_STARTED",
+    "ON_TRACK",
+    "AT_RISK",
+    "CRITICAL",
+    "COMPLETED",
+  ];
+  if (!revertibleStatuses.includes(objective.status)) {
+    throw new AppError(
+      `Cannot revert objective from ${objective.status} status`,
+      400,
+    );
+  }
 
-    const updated = await prisma.objectives.update({
-        where: { id: objectiveId },
-        data: { status: "Draft", approved_by: null },
-        select: objectiveBaseSelect,
-    });
+  const updated = await prisma.objectives.update({
+    where: { id: objectiveId },
+    data: { status: "Draft", approved_by: null },
+    select: objectiveBaseSelect,
+  });
 
-    return await formatObjective(updated, false, user);
+  return await formatObjective(updated, false, user);
 };
 
 export const ensureObjectiveVisible = async (user, objectiveId) => {
-    const objective = await getObjectiveOrThrow(objectiveId);
-    const canView = await canViewObjective(user, objective);
-    if (!canView) {
-        throw new AppError("You do not have permission to view this objective", 403);
-    }
-    return objective;
+  const objective = await getObjectiveOrThrow(objectiveId);
+  const canView = await canViewObjective(user, objective);
+  if (!canView) {
+    throw new AppError(
+      "You do not have permission to view this objective",
+      403,
+    );
+  }
+  return objective;
 };
 
 export const ensureObjectiveEditable = async (user, objectiveId) => {
-    const objective = await getObjectiveOrThrow(objectiveId);
-    const canEdit = await canEditObjective(user, objective);
-    if (!canEdit) {
-        throw new AppError("You do not have permission to edit this objective", 403);
-    }
-    return objective;
+  const objective = await getObjectiveOrThrow(objectiveId);
+  const canEdit = await canEditObjective(user, objective);
+  if (!canEdit) {
+    throw new AppError(
+      "You do not have permission to edit this objective",
+      403,
+    );
+  }
+  return objective;
 };
 
 export const getObjectiveById = async (user, objectiveId) => {
-    const objective = await getObjectiveOrThrow(objectiveId, { key_results: true });
+  const objective = await getObjectiveOrThrow(objectiveId, {
+    key_results: true,
+  });
 
-    // Check if user can view this objective
-    const canView = await canViewObjective(user, objective);
-    if (!canView) {
-        throw new AppError("You do not have permission to view this objective", 403);
-    }
+  // Check if user can view this objective
+  const canView = await canViewObjective(user, objective);
+  if (!canView) {
+    throw new AppError(
+      "You do not have permission to view this objective",
+      403,
+    );
+  }
 
-    return await formatObjective(objective, true, user);
+  return await formatObjective(objective, true, user);
 };
 
 export const deleteObjective = async (user, objectiveId) => {
-    const objective = await getObjectiveOrThrow(objectiveId);
+  const objective = await getObjectiveOrThrow(objectiveId);
 
-    if (!await canEditObjective(user, objective)) {
-        throw new AppError("You do not have permission to delete this objective", 403);
-    }
+  if (!(await canEditObjective(user, objective))) {
+    throw new AppError(
+      "You do not have permission to delete this objective",
+      403,
+    );
+  }
 
-    const now = new Date();
+  const now = new Date();
 
-    await prisma.$transaction([
-        prisma.feedbacks.deleteMany({
-            where: { objective_id: objectiveId },
-        }),
+  await prisma.$transaction([
+    prisma.feedbacks.deleteMany({
+      where: { objective_id: objectiveId },
+    }),
 
-        prisma.keyResults.updateMany({
-            where: { objective_id: objectiveId },
-            data: { deleted_at: now },
-        }),
-        prisma.objectives.update({
-            where: { id: objectiveId },
-            data: { deleted_at: now },
-        }),
-    ]);
+    prisma.keyResults.updateMany({
+      where: { objective_id: objectiveId },
+      data: { deleted_at: now },
+    }),
+    prisma.objectives.update({
+      where: { id: objectiveId },
+      data: { deleted_at: now },
+    }),
+  ]);
 
-    return { success: true, message: "Objective deleted successfully" };
+  return { success: true, message: "Objective deleted successfully" };
 };
 
 /**
  * Get available objectives that can be set as parent for a new objective in a specific unit
  * Returns objectives from the specified unit and all its ancestor units
  */
-export const getAvailableParentObjectives = async (user, unitId, cycleId, includeKeyResults = false) => {
-    // Validate unit exists
-    const unit = await prisma.units.findFirst({
-        where: { id: unitId },
-        select: { id: true },
-    });
-    if (!unit) throw new AppError("Unit not found", 404);
+export const getAvailableParentObjectives = async (
+  user,
+  unitId,
+  cycleId,
+  includeKeyResults = false,
+) => {
+  // Validate unit exists
+  const unit = await prisma.units.findFirst({
+    where: { id: unitId },
+    select: { id: true },
+  });
+  if (!unit) throw new AppError("Unit not found", 404);
 
-    // Get ancestor unit IDs
-    const ancestorUnitIds = await getUnitAncestors(unitId);
-    const relevantUnitIds = [unitId, ...ancestorUnitIds];
+  // Get ancestor unit IDs
+  const ancestorUnitIds = await getUnitAncestors(unitId);
+  const relevantUnitIds = [unitId, ...ancestorUnitIds];
 
-    // Build where clause
-    const where = {
-        deleted_at: null,
-        unit_id: { in: relevantUnitIds },
-        ...(cycleId !== undefined && { cycle_id: cycleId }),
-    };
+  // Build where clause
+  const where = {
+    deleted_at: null,
+    unit_id: { in: relevantUnitIds },
+    ...(cycleId !== undefined && { cycle_id: cycleId }),
+  };
 
-    const select = {
-        ...objectiveBaseSelect,
-        ...(includeKeyResults && { key_results: { select: keyResultSelect } }),
-    };
+  const select = {
+    ...objectiveBaseSelect,
+    ...(includeKeyResults && { key_results: { select: keyResultSelect } }),
+  };
 
-    // Get all objectives from the unit and its ancestors
-    const objectives = await prisma.objectives.findMany({
-        where,
-        orderBy: [
-            { unit_id: "asc" },
-            { created_at: "desc" },
-        ],
-        select,
-    });
+  // Get all objectives from the unit and its ancestors
+  const objectives = await prisma.objectives.findMany({
+    where,
+    orderBy: [{ unit_id: "asc" }, { created_at: "desc" }],
+    select,
+  });
 
-    // Filter by visibility permissions
-    const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
-    const unitPaths = await Promise.all(
-        relevantUnitIds.map(async (id) => ({
-            id,
-            path: await getUnitPath(id),
-        }))
-    );
-    const unitPathMap = new Map(unitPaths.map((u) => [u.id, u.path]));
+  // Filter by visibility permissions
+  const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
+  const unitPaths = await Promise.all(
+    relevantUnitIds.map(async (id) => ({
+      id,
+      path: await getUnitPath(id),
+    })),
+  );
+  const unitPathMap = new Map(unitPaths.map((u) => [u.id, u.path]));
 
-    const visibleObjectives = objectives.filter((objective) => {
-        // Admin can see all
-        if (user.role === UserRole.ADMIN_COMPANY) return true;
+  const visibleObjectives = objectives.filter((objective) => {
+    // Admin can see all
+    if (user.role === UserRole.ADMIN_COMPANY) return true;
 
-        // PUBLIC visibility - visible to all
-        if (objective.visibility === "PUBLIC") return true;
+    // PUBLIC visibility - visible to all
+    if (objective.visibility === "PUBLIC") return true;
 
-        const objectivePath = unitPathMap.get(objective.unit_id);
-        if (!objectivePath || !userPath) return false;
+    const objectivePath = unitPathMap.get(objective.unit_id);
+    if (!objectivePath || !userPath) return false;
 
-        // INTERNAL visibility - visible if user is in same unit hierarchy
-        if (objective.visibility === "INTERNAL") {
-            return (
-                isAncestorOrEqual(objectivePath, userPath) ||
-                isDescendantOrEqual(objectivePath, userPath)
-            );
-        }
+    // INTERNAL visibility - visible if user is in same unit hierarchy
+    if (objective.visibility === "INTERNAL") {
+      return (
+        isAncestorOrEqual(objectivePath, userPath) ||
+        isDescendantOrEqual(objectivePath, userPath)
+      );
+    }
 
-        // PRIVATE visibility - visible to owner or ancestor units
-        if (objective.visibility === "PRIVATE") {
-            if (objective.owner_id === user.id) return true;
-            return objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath);
-        }
+    // PRIVATE visibility - visible to owner or ancestor units
+    if (objective.visibility === "PRIVATE") {
+      if (objective.owner_id === user.id) return true;
+      return (
+        objectivePath !== userPath &&
+        isDescendantOrEqual(objectivePath, userPath)
+      );
+    }
 
-        return false;
-    });
+    return false;
+  });
 
-    // Group objectives by unit for better organization in response
-    const formattedObjectives = await Promise.all(
-        visibleObjectives.map((objective) => formatObjective(objective, includeKeyResults, user))
-    );
+  // Group objectives by unit for better organization in response
+  const formattedObjectives = await Promise.all(
+    visibleObjectives.map((objective) =>
+      formatObjective(objective, includeKeyResults, user),
+    ),
+  );
 
-    // Group by unit
-    const groupedByUnit = formattedObjectives.reduce((acc, objective) => {
-        const unitKey = objective.unit?.id?.toString() || "unknown";
-        if (!acc[unitKey]) {
-            acc[unitKey] = {
-                unit: objective.unit,
-                objectives: [],
-            };
-        }
-        acc[unitKey].objectives.push(objective);
-        return acc;
-    }, {});
+  // Group by unit
+  const groupedByUnit = formattedObjectives.reduce((acc, objective) => {
+    const unitKey = objective.unit?.id?.toString() || "unknown";
+    if (!acc[unitKey]) {
+      acc[unitKey] = {
+        unit: objective.unit,
+        objectives: [],
+      };
+    }
+    acc[unitKey].objectives.push(objective);
+    return acc;
+  }, {});
 
-    return {
-        unit_id: unitId,
-        unit_ids_searched: relevantUnitIds,
-        total: formattedObjectives.length,
-        data: Object.values(groupedByUnit),
-    };
+  return {
+    unit_id: unitId,
+    unit_ids_searched: relevantUnitIds,
+    total: formattedObjectives.length,
+    data: Object.values(groupedByUnit),
+  };
 };

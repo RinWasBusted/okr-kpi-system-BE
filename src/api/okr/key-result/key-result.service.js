@@ -7,17 +7,14 @@ import {
     recalculateObjectiveProgress,
 } from "../../../utils/okr.js";
 import { daysBetweenUtc } from "../../../utils/date.js";
-import {
-    getObjectiveAccessPath,
-    getUnitPath,
-} from "../../../utils/path.js";
-import {
-    notifyObjectiveEvent,
-} from "../../../utils/notificationHelper.js";
+import { getObjectiveAccessPath, getUnitPath } from "../../../utils/path.js";
+import { notifyObjectiveEvent } from "../../../utils/notificationHelper.js";
 
 // Utility functions
 const toDateOnlyUtc = (date) =>
-    new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    new Date(
+        Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    );
 
 const isDescendantOrEqual = (candidate, ancestor) => {
     if (!candidate || !ancestor) return false;
@@ -36,9 +33,11 @@ const canViewObjective = async (user, objective, unitContext) => {
 
     if (objective.visibility === "PUBLIC") return true;
 
-    const userPath = unitContext || (user.unit_id ? await getUnitPath(user.unit_id) : null);
+    const userPath =
+        unitContext || (user.unit_id ? await getUnitPath(user.unit_id) : null);
     const objectivePath =
-        objective.access_path ?? (objective.id ? await getObjectiveAccessPath(objective.id) : null);
+        objective.access_path ??
+        (objective.id ? await getObjectiveAccessPath(objective.id) : null);
 
     if (objective.visibility === "INTERNAL") {
         if (!objectivePath || !userPath) return false;
@@ -51,7 +50,9 @@ const canViewObjective = async (user, objective, unitContext) => {
     if (objective.visibility === "PRIVATE") {
         if (objective.owner_id === user.id) return true;
         if (!objectivePath || !userPath) return false;
-        return objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath);
+        return (
+            objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath)
+        );
     }
 
     return false;
@@ -86,26 +87,28 @@ const formatKeyResult = (kr, now) => ({
 
 const getObjectiveForKeyResult = async (objectiveId) => {
     const objective = await prisma.$queryRaw`
-        SELECT id, status, visibility, unit_id, owner_id, access_path::text AS access_path
-        FROM "Objectives"
-        WHERE id = ${objectiveId}
-    `;
+                SELECT id, status, visibility, unit_id, owner_id, access_path::text AS access_path
+                FROM "Objectives"
+                WHERE id = ${objectiveId}
+        `;
 
-    if (!objective || objective.length === 0) throw new AppError("Objective not found", 404);
+    if (!objective || objective.length === 0)
+        throw new AppError("Objective not found", 404);
     return objective[0];
 };
 
 const getKeyResultOrThrow = async (keyResultId) => {
     const keyResult = await prisma.$queryRaw`
-        SELECT
-            kr.id, kr.objective_id, kr.title, kr.start_value, kr.target_value, kr.current_value, kr.unit, kr.weight, kr.due_date, kr.progress_percentage, kr.evaluation_method,
-            obj.id AS objective_id_obj, obj.status, obj.visibility, obj.unit_id, obj.owner_id, obj.access_path::text AS access_path
-        FROM "KeyResults" kr
-        JOIN "Objectives" obj ON kr.objective_id = obj.id
-        WHERE kr.id = ${keyResultId}
-    `;
+                SELECT
+                        kr.id, kr.objective_id, kr.title, kr.start_value, kr.target_value, kr.current_value, kr.unit, kr.weight, kr.due_date, kr.progress_percentage, kr.evaluation_method,
+                        obj.id AS objective_id_obj, obj.status, obj.visibility, obj.unit_id, obj.owner_id, obj.access_path::text AS access_path
+                FROM "KeyResults" kr
+                JOIN "Objectives" obj ON kr.objective_id = obj.id
+                WHERE kr.id = ${keyResultId}
+        `;
 
-    if (!keyResult || keyResult.length === 0) throw new AppError("Key Result not found", 404);
+    if (!keyResult || keyResult.length === 0)
+        throw new AppError("Key Result not found", 404);
 
     const kr = keyResult[0];
     return {
@@ -133,7 +136,10 @@ const getKeyResultOrThrow = async (keyResultId) => {
 
 const ensureObjectiveEditableStatus = (objective) => {
     if (!["Draft", "Rejected"].includes(objective.status)) {
-        throw new AppError("Objective cannot be modified in its current status", 400);
+        throw new AppError(
+            "Objective cannot be modified in its current status",
+            400,
+        );
     }
 };
 
@@ -142,7 +148,10 @@ export const listKeyResults = async (user, objectiveId) => {
 
     const allowed = await canViewObjective(user, objective);
     if (!allowed) {
-        throw new AppError("You do not have permission to view this objective", 403);
+        throw new AppError(
+            "You do not have permission to view this objective",
+            403,
+        );
     }
 
     const keyResults = await prisma.keyResults.findMany({
@@ -160,7 +169,10 @@ export const createKeyResult = async (user, objectiveId, payload) => {
 
     const allowed = await canEditObjective(user, objective);
     if (!allowed) {
-        throw new AppError("You do not have permission to edit this objective", 403);
+        throw new AppError(
+            "You do not have permission to edit this objective",
+            403,
+        );
     }
 
     ensureObjectiveEditableStatus(objective);
@@ -210,9 +222,15 @@ export const createKeyResult = async (user, objectiveId, payload) => {
     await notifyObjectiveEvent({
         companyId: user.company_id,
         eventType: "UPDATED",
-        objective: { id: objectiveId, title: objective.title, unit_id: objective.unit_id, owner_id: objective.owner_id },
+        objective: {
+            id: objectiveId,
+            title: objective.title,
+            unit_id: objective.unit_id,
+            owner_id: objective.owner_id,
+        },
         actorName: user.full_name || user.email,
         actorId: user.id,
+        extraContext: `Key Result: ${created.title}`,
         refType: "OBJECTIVE",
     });
 
@@ -224,7 +242,10 @@ export const updateKeyResult = async (user, keyResultId, updates) => {
 
     const allowed = await canEditObjective(user, keyResult.objective);
     if (!allowed) {
-        throw new AppError("You do not have permission to edit this objective", 403);
+        throw new AppError(
+            "You do not have permission to edit this objective",
+            403,
+        );
     }
 
     ensureObjectiveEditableStatus(keyResult.objective);
@@ -247,8 +268,10 @@ export const updateKeyResult = async (user, keyResultId, updates) => {
     const targetValue = updates.target_value ?? keyResult.target_value;
     const currentValue = updates.current_value ?? keyResult.current_value;
     // If start_value is being updated but not provided, use current_value as default
-    const startValue = updates.start_value ?? keyResult.start_value ?? currentValue ?? 0;
-    const evaluationMethod = updates.evaluation_method ?? keyResult.evaluation_method;
+    const startValue =
+        updates.start_value ?? keyResult.start_value ?? currentValue ?? 0;
+    const evaluationMethod =
+        updates.evaluation_method ?? keyResult.evaluation_method;
     const progressPercentage = calculateKeyResultProgress(
         currentValue,
         targetValue,
@@ -260,13 +283,21 @@ export const updateKeyResult = async (user, keyResultId, updates) => {
         where: { id: keyResultId },
         data: {
             ...(updates.title !== undefined && { title: updates.title }),
-            ...(updates.start_value !== undefined && { start_value: updates.start_value }),
-            ...(updates.target_value !== undefined && { target_value: updates.target_value }),
-            ...(updates.current_value !== undefined && { current_value: updates.current_value }),
+            ...(updates.start_value !== undefined && {
+                start_value: updates.start_value,
+            }),
+            ...(updates.target_value !== undefined && {
+                target_value: updates.target_value,
+            }),
+            ...(updates.current_value !== undefined && {
+                current_value: updates.current_value,
+            }),
             ...(updates.unit !== undefined && { unit: updates.unit }),
             ...(updates.weight !== undefined && { weight: updates.weight }),
             ...(updates.due_date !== undefined && { due_date: updates.due_date }),
-            ...(updates.evaluation_method !== undefined && { evaluation_method: updates.evaluation_method }),
+            ...(updates.evaluation_method !== undefined && {
+                evaluation_method: updates.evaluation_method,
+            }),
             progress_percentage: progressPercentage,
         },
         select: keyResultSelect,
@@ -278,9 +309,15 @@ export const updateKeyResult = async (user, keyResultId, updates) => {
     await notifyObjectiveEvent({
         companyId: user.company_id,
         eventType: "UPDATED",
-        objective: { id: keyResult.objective_id, title: keyResult.objective.title, unit_id: keyResult.objective.unit_id, owner_id: keyResult.objective.owner_id },
+        objective: {
+            id: keyResult.objective_id,
+            title: keyResult.objective.title,
+            unit_id: keyResult.objective.unit_id,
+            owner_id: keyResult.objective.owner_id,
+        },
         actorName: user.full_name || user.email,
         actorId: user.id,
+        extraContext: `Key Result: ${updated.title}`,
         refType: "OBJECTIVE",
     });
 
@@ -292,13 +329,19 @@ export const deleteKeyResult = async (user, keyResultId) => {
 
     const allowed = await canEditObjective(user, keyResult.objective);
     if (!allowed) {
-        throw new AppError("You do not have permission to edit this objective", 403);
+        throw new AppError(
+            "You do not have permission to edit this objective",
+            403,
+        );
     }
 
     // Can only delete KR when objective is in Draft or Rejected status
     const deletableStatuses = ["Draft", "Rejected"];
     if (!deletableStatuses.includes(keyResult.objective.status)) {
-        throw new AppError("Cannot delete KR when objective is not in Draft or Rejected status", 400);
+        throw new AppError(
+            "Cannot delete KR when objective is not in Draft or Rejected status",
+            400,
+        );
     }
 
     await prisma.$transaction([
@@ -316,9 +359,15 @@ export const deleteKeyResult = async (user, keyResultId) => {
     await notifyObjectiveEvent({
         companyId: user.company_id,
         eventType: "UPDATED",
-        objective: { id: keyResult.objective_id, title: keyResult.objective.title, unit_id: keyResult.objective.unit_id, owner_id: keyResult.objective.owner_id },
+        objective: {
+            id: keyResult.objective_id,
+            title: keyResult.objective.title,
+            unit_id: keyResult.objective.unit_id,
+            owner_id: keyResult.objective.owner_id,
+        },
         actorName: user.full_name || user.email,
         actorId: user.id,
+        extraContext: `Key Result "${keyResult.title}" đã bị xóa`,
         refType: "OBJECTIVE",
     });
 };
