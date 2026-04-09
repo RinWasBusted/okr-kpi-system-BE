@@ -4,9 +4,12 @@ import {
     createUnit,
     updateUnit,
     deleteUnit,
-    getUnitDetail
+    getUnitDetail,
+    getUnitInfo
 } from "./unit.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.js";
+import { validate } from "../../middlewares/validate.js";
+import { createUnitSchema, updateUnitSchema, listUnitsQuerySchema } from "../../schemas/unit.schema.js";
 
 const router = express.Router();
 
@@ -24,7 +27,7 @@ router.use(authenticate);
  * /units:
  *   get:
  *     summary: Get list of units
- *     description: Returns a flat list of all units in the company. Use `parent_id` to build a tree on the frontend. Requires `accessToken` cookie.
+ *     description: Returns units in the company. Use `mode` to specify tree or flat list. Requires `accessToken` cookie.
  *     tags: [Units]
  *     parameters:
  *       - in: query
@@ -38,7 +41,15 @@ router.use(authenticate);
  *         schema:
  *           type: integer
  *           default: 100
- *         description: Records per page
+ *           maximum: 100
+ *         description: Records per page (max 100)
+ *       - in: query
+ *         name: mode
+ *         schema:
+ *           type: string
+ *           enum: [tree, list]
+ *           default: tree
+ *         description: Response format - "tree" returns hierarchical structure with sub_units, "list" returns flat list
  *     responses:
  *       200:
  *         description: Units retrieved successfully
@@ -81,9 +92,32 @@ router.use(authenticate);
  *                           full_name:
  *                             type: string
  *                             example: "Nguyen Van A"
+ *                       manager_name:
+ *                         type: string
+ *                         nullable: true
+ *                         example: "Nguyen Van A"
  *                       member_count:
  *                         type: integer
  *                         example: 12
+ *                       okr_count:
+ *                         type: integer
+ *                         example: 5
+ *                       kpi_count:
+ *                         type: integer
+ *                         example: 3
+ *                       okr_progress:
+ *                         type: number
+ *                         nullable: true
+ *                         example: 67.5
+ *                       kpi_health:
+ *                         type: number
+ *                         nullable: true
+ *                         example: 82.3
+ *                       sub_units:
+ *                         type: array
+ *                         description: Only present in tree mode
+ *                         items:
+ *                           type: object
  *                       created_at:
  *                         type: string
  *                         format: date-time
@@ -100,6 +134,9 @@ router.use(authenticate);
  *                     total:
  *                       type: integer
  *                       example: 8
+ *                     mode:
+ *                       type: string
+ *                       example: "tree"
  *       401:
  *         description: Access token missing or invalid
  *         content:
@@ -120,7 +157,97 @@ router.use(authenticate);
  *                       type: string
  *                       example: "Access token is missing"
  */
-router.get("/", getUnits);
+router.get("/", validate(listUnitsQuerySchema, "query"), getUnits);
+
+/**
+ * @swagger
+ * /units/{id}/info:
+ *   get:
+ *     summary: Get unit basic info
+ *     description: Retrieve basic information about a specific unit including manager name, job title, and email. Requires `accessToken` cookie.
+ *     tags: [Units]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Unit ID
+ *     responses:
+ *       200:
+ *         description: Unit info retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Unit info retrieved successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     unit_id:
+ *                       type: integer
+ *                       example: 1
+ *                     unit_name:
+ *                       type: string
+ *                       example: "Engineering"
+ *                     manager_name:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "Nguyen Van A"
+ *                     manager_job_title:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "Engineering Lead"
+ *                     manager_email:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "manager@example.com"
+ *       401:
+ *         description: Access token missing or invalid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "UNAUTHORIZED"
+ *                     message:
+ *                       type: string
+ *                       example: "Access token is missing"
+ *       404:
+ *         description: Unit not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "NOT_FOUND"
+ *                     message:
+ *                       type: string
+ *                       example: "Unit not found"
+ */
+router.get("/:id/info", getUnitInfo);
 
 /**
  * @swagger
@@ -249,6 +376,8 @@ router.get("/:id/detail", getUnitDetail);
  *             properties:
  *               name:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "Frontend Team"
  *               parent_id:
  *                 type: integer
@@ -387,7 +516,7 @@ router.get("/:id/detail", getUnitDetail);
  *                       type: string
  *                       example: "name is required"
  */
-router.post("/", createUnit);
+router.post("/", authorize("ADMIN_COMPANY"), validate(createUnitSchema), createUnit);
 
 /**
  * @swagger
@@ -412,6 +541,8 @@ router.post("/", createUnit);
  *             properties:
  *               name:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "Backend Team"
  *               parent_id:
  *                 type: integer
@@ -543,7 +674,7 @@ router.post("/", createUnit);
  *                       type: string
  *                       example: "Unit not found"
  */
-router.put("/:id", updateUnit);
+router.put("/:id", authorize("ADMIN_COMPANY"), validate(updateUnitSchema), updateUnit);
 
 /**
  * @swagger
@@ -639,6 +770,6 @@ router.put("/:id", updateUnit);
  *                       type: string
  *                       example: "Unit not found"
  */
-router.delete("/:id", deleteUnit);
+router.delete("/:id", authorize("ADMIN_COMPANY"), deleteUnit);
 
 export default router;

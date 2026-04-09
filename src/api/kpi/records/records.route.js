@@ -1,5 +1,5 @@
 import express from "express";
-import { createKPIRecord, getKPIRecords } from "./records.controller.js";
+import { createKPIRecord, getKPIRecords, getKPIChartData } from "./records.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
 
 const router = express.Router();
@@ -73,7 +73,7 @@ router.use(authenticate);
  *                       description: Progress to time ratio (2 decimal places)
  *                     status:
  *                       type: string
- *                       enum: [OnTrack, AtRisk, Behind, Critical]
+ *                       enum: [ON_TRACK, AT_RISK, CRITICAL]
  *                     trend:
  *                       type: string
  *                       enum: [Upward, Downward, Stable]
@@ -131,7 +131,7 @@ router.post("/kpi-assignments/:assignment_id/records", createKPIRecord);
  *                         type: number
  *                       status:
  *                         type: string
- *                         enum: [OnTrack, AtRisk, Behind, Critical]
+ *                         enum: [ON_TRACK, AT_RISK, CRITICAL]
  *                       trend:
  *                         type: string
  *                         enum: [Upward, Downward, Stable]
@@ -142,5 +142,86 @@ router.post("/kpi-assignments/:assignment_id/records", createKPIRecord);
  *         description: Assignment not found
  */
 router.get("/kpi-assignments/:assignment_id/records", getKPIRecords);
+
+/**
+ * @swagger
+ * /kpi-records/chart-data:
+ *   get:
+ *     summary: Get KPI chart data for a unit (all cycles, all history)
+ *     tags: [KPIRecords]
+ *     parameters:
+ *       - in: query
+ *         name: unit_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Unit ID to get chart data for
+ *     responses:
+ *       200:
+ *         description: KPI Chart data retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     unit:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         name:
+ *                           type: string
+ *                     kpis:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           kpi_id:
+ *                             type: integer
+ *                           kpi_name:
+ *                             type: string
+ *                           unit:
+ *                             type: string
+ *                           evaluation_method:
+ *                             type: string
+ *                           target_value:
+ *                             type: number
+ *                           records:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 period_start:
+ *                                   type: string
+ *                                   format: date
+ *                                 period_end:
+ *                                   type: string
+ *                                   format: date
+ *                                 actual_value:
+ *                                   type: number
+ *                                   description: Giá trị đạt được (hiển thị trên biểu đồ)
+ *                                 progress_percentage:
+ *                                   type: number
+ *                                 status:
+ *                                   type: string
+ *                                   enum: [ON_TRACK, AT_RISK, CRITICAL]
+ *                                 trend:
+ *                                   type: string
+ *                                   enum: [Upward, Downward, Stable]
+ *       403:
+ *         description: No permission to view this unit
+ *       404:
+ *         description: Unit not found
+ *       422:
+ *         description: Validation error
+ */
+router.get("/kpi-records/chart-data", getKPIChartData);
 
 export default router;

@@ -6,6 +6,8 @@ import {
     deleteKeyResult,
 } from "./key-result.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
+import { validate } from "../../../middlewares/validate.js";
+import { createKeyResultSchema, updateKeyResultSchema } from "../../../schemas/kpi.schema.js";
 
 const router = express.Router();
 
@@ -103,18 +105,28 @@ router.get("/objectives/:objective_id/key-results", getKeyResults);
  *             properties:
  *               title:
  *                 type: string
- *                 description: Key result title
+ *                 minLength: 1
+ *                 maxLength: 255
+ *                 description: Key result title (1-255 characters, required)
  *               target_value:
  *                 type: number
+ *                 exclusiveMinimum: 0
  *                 description: Target value to achieve
  *               current_value:
  *                 type: number
+ *                 minimum: 0
+ *                 default: 0
  *                 description: Current value progress (optional, defaults to 0)
  *               unit:
  *                 type: string
- *                 description: Unit of measurement
+ *                 minLength: 1
+ *                 maxLength: 50
+ *                 description: Unit of measurement (1-50 characters, required)
  *               weight:
  *                 type: number
+ *                 minimum: 0
+ *                 maximum: 100
+ *                 default: 100
  *                 description: Weight percentage (0-100)
  *               due_date:
  *                 type: string
@@ -146,7 +158,7 @@ router.get("/objectives/:objective_id/key-results", getKeyResults);
  *       422:
  *         description: Validation error (missing or invalid fields)
  */
-router.post("/objectives/:objective_id/key-results", createKeyResult);
+router.post("/objectives/:objective_id/key-results", validate(createKeyResultSchema), createKeyResult);
 
 /**
  * @swagger
@@ -170,23 +182,31 @@ router.post("/objectives/:objective_id/key-results", createKeyResult);
  *             properties:
  *               title:
  *                 type: string
- *                 description: Key result title
+ *                 minLength: 1
+ *                 maxLength: 255
+ *                 description: Key result title (1-255 characters, optional for update)
  *               target_value:
  *                 type: number
- *                 description: Target value to achieve
+ *                 exclusiveMinimum: 0
+ *                 description: Target value to achieve (optional)
  *               current_value:
  *                 type: number
- *                 description: Current value progress
+ *                 minimum: 0
+ *                 description: Current value progress (optional)
  *               unit:
  *                 type: string
- *                 description: Unit of measurement
+ *                 minLength: 1
+ *                 maxLength: 50
+ *                 description: Unit of measurement (1-50 characters, optional for update)
  *               weight:
  *                 type: number
- *                 description: Weight percentage (0-100)
+ *                 minimum: 0
+ *                 maximum: 100
+ *                 description: Weight percentage (0-100, optional)
  *               due_date:
  *                 type: string
  *                 format: date
- *                 description: Due date in YYYY-MM-DD format
+ *                 description: Due date in YYYY-MM-DD format (optional)
  *     responses:
  *       200:
  *         description: Key result updated successfully
@@ -213,7 +233,7 @@ router.post("/objectives/:objective_id/key-results", createKeyResult);
  *       422:
  *         description: Validation error (invalid field values)
  */
-router.put("/key-results/:id", updateKeyResult);
+router.put("/key-results/:id", validate(updateKeyResultSchema), updateKeyResult);
 
 /**
  * @swagger

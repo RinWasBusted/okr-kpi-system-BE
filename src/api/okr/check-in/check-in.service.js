@@ -41,8 +41,10 @@ const getKeyResultWithObjective = async (keyResultId) => {
 export const createCheckIn = async (user, keyResultId, payload) => {
     const keyResult = await getKeyResultWithObjective(keyResultId);
 
-    if (keyResult.objective.status !== "Active") {
-        throw new AppError("Objective must be active to check in", 400);
+    // Check-in allowed on progress-based statuses (after approval)
+    const allowedStatuses = ["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"];
+    if (!allowedStatuses.includes(keyResult.objective.status)) {
+        throw new AppError("Objective must be approved to check in", 400);
     }
 
     const allowed = await canEditObjective(user, keyResult.objective);
@@ -55,6 +57,8 @@ export const createCheckIn = async (user, keyResultId, payload) => {
     const krProgress = calculateKeyResultProgress(
         payload.achieved_value,
         keyResult.target_value,
+        keyResult.start_value,
+        keyResult.evaluation_method,
     );
 
     const checkIn = await prisma.checkIns.create({

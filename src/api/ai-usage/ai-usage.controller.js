@@ -1,9 +1,11 @@
-import * as aiUsageService from "./ai-usage-service.js";
+import * as aiUsageService from "./ai-usage.service.js";
 import AppError from "../../utils/appError.js";
 
 // Get company AI plan info
 export const getCompanyAIPlan = async (req, res) => {
-    const result = await aiUsageService.getCompanyAIPlan();
+    const companyId = req.user.company_id;
+
+    const result = await aiUsageService.getCompanyAIPlan(companyId);
 
     if (!result) {
         throw new AppError("Company not found", 404);
@@ -14,6 +16,7 @@ export const getCompanyAIPlan = async (req, res) => {
 
 // Get AI usage logs with filters
 export const getAIUsageLogs = async (req, res) => {
+    const companyId = req.user.company_id;
     const {
         user_id,
         feature_name,
@@ -43,7 +46,7 @@ export const getAIUsageLogs = async (req, res) => {
         per_page: Math.min(parseInt(per_page) || 20, 100),
     };
 
-    const { data, meta } = await aiUsageService.getAIUsageLogs(filters, pagination);
+    const { data, meta } = await aiUsageService.getAIUsageLogs(companyId, filters, pagination);
 
     res.success("AI usage logs retrieved successfully", 200, data, meta);
 };

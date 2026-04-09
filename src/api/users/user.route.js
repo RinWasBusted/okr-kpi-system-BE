@@ -6,16 +6,23 @@ import {
     updateUser,
     uploadAvatar,
     deleteAvatar,
+    deleteUser,
     isOwnerOrAdmin
 } from "./user.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.js";
 import { uploadSingle } from "../../utils/multer.js";
 import { wrapMulter } from "../../utils/wrapMulter.js";
 import requestContext from "../../utils/context.js";
+import { validate } from "../../middlewares/validate.js";
+import {
+    createUserSchema,
+    updateUserSchema,
+    listUsersQuerySchema,
+} from "../../schemas/user.schema.js";
 
 const router = express.Router();
 
-router.use(authenticate, authorize("ADMIN_COMPANY"));
+router.use(authenticate);
 
 /**
  * @swagger
@@ -41,6 +48,7 @@ router.use(authenticate, authorize("ADMIN_COMPANY"));
  *         name: search
  *         schema:
  *           type: string
+ *           maxLength: 255
  *         description: Search by full name or email (partial match)
  *       - in: query
  *         name: page
@@ -92,6 +100,10 @@ router.use(authenticate, authorize("ADMIN_COMPANY"));
  *                         type: string
  *                         nullable: true
  *                         example: null
+ *                       role:
+ *                         type: string
+ *                         enum: [ADMIN_COMPANY, EMPLOYEE]
+ *                         example: "EMPLOYEE"
  *                       unit:
  *                         type: object
  *                         nullable: true
@@ -163,7 +175,7 @@ router.use(authenticate, authorize("ADMIN_COMPANY"));
  *                       type: string
  *                       example: "Access denied"
  */
-router.get("/", getUsers);
+router.get("/", validate(listUsersQuerySchema, "query"), getUsers);
  
 /**
  * @swagger
@@ -217,6 +229,10 @@ router.get("/", getUsers);
  *                           type: string
  *                           nullable: true
  *                           example: null
+ *                         role:
+ *                           type: string
+ *                           enum: [ADMIN_COMPANY, EMPLOYEE]
+ *                           example: "EMPLOYEE"
  *                         unit:
  *                           type: object
  *                           nullable: true
@@ -299,10 +315,8 @@ router.get("/:id", getUserById);
  * /users/{id}/avatar:
  *   patch:
  *     summary: Update user avatar
- *     description: Upload or update user avatar. Can only be done by the user themselves or ADMIN_COMPANY. If no file is sent, the avatar will be deleted.
+ *     description: Upload or update user avatar. Can only be done by the user themselves or ADMIN_COMPANY. If no file is sent, the avatar will be deleted. Requires `accessToken` cookie.
  *     tags: [Users]
- *     security:
- *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -342,13 +356,13 @@ router.get("/:id", getUserById);
  *       400:
  *         description: Invalid user ID
  *       401:
- *         description: Unauthorized
+ *         description: Unauthorized - Access token missing or invalid
  *       403:
  *         description: Forbidden - Not owner or admin
  *       404:
  *         description: User not found
  */
-router.patch("/:id/avatar", authorize("ADMIN_COMPANY", "EMPLOYEE"), isOwnerOrAdmin, wrapMulter(requestContext, uploadSingle("avatar")), uploadAvatar);
+router.patch("/:id/avatar", isOwnerOrAdmin, wrapMulter(requestContext, uploadSingle("avatar")), uploadAvatar);
 
 /**
  * @swagger
@@ -397,14 +411,18 @@ router.delete("/:id/avatar", authorize("ADMIN_COMPANY", "EMPLOYEE"), isOwnerOrAd
  *             properties:
  *               full_name:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "Nguyen Van A"
  *               email:
  *                 type: string
  *                 format: email
+ *                 maxLength: 255
  *                 example: "nguyenvana@acme.com"
  *               password:
  *                 type: string
  *                 minLength: 8
+ *                 maxLength: 255
  *                 example: "password123"
  *               unit_id:
  *                 type: integer
@@ -452,6 +470,9 @@ router.delete("/:id/avatar", authorize("ADMIN_COMPANY", "EMPLOYEE"), isOwnerOrAd
  *                           type: string
  *                           nullable: true
  *                           example: "okr-kpi-system/users/avatars/image-123"
+ *                         role:
+ *                           type: string
+ *                           example: "EMPLOYEE"
  *                         unit:
  *                           type: object
  *                           nullable: true
@@ -565,7 +586,7 @@ router.delete("/:id/avatar", authorize("ADMIN_COMPANY", "EMPLOYEE"), isOwnerOrAd
  *                       type: string
  *                       example: "Password must be at least 8 characters"
  */
-router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createUser);
+router.post("/", authorize("ADMIN_COMPANY"), wrapMulter(requestContext, uploadSingle("avatar")), validate(createUserSchema), createUser);
  
 /**
  * @swagger
@@ -590,7 +611,15 @@ router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createUser)
  *             properties:
  *               full_name:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
  *                 example: "Nguyen Van B"
+ *               job_title:
+ *                 type: string
+ *                 maxLength: 100
+ *                 nullable: true
+ *                 example: "Senior Engineer"
+ *                 description: Update job title. Set null to remove.
  *               unit_id:
  *                 type: integer
  *                 nullable: true
@@ -599,6 +628,7 @@ router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createUser)
  *               password:
  *                 type: string
  *                 minLength: 8
+ *                 maxLength: 255
  *                 example: "newpassword123"
  *                 description: Admin reset password on behalf of employee.
  *               is_active:
@@ -642,6 +672,9 @@ router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createUser)
  *                           type: string
  *                           nullable: true
  *                           example: null
+ *                         role:
+ *                           type: string
+ *                           example: "EMPLOYEE"
  *                         unit:
  *                           type: object
  *                           nullable: true
@@ -748,6 +781,34 @@ router.post("/", wrapMulter(requestContext, uploadSingle("avatar")), createUser)
  *                       type: string
  *                       example: "Password must be at least 8 characters"
  */
-router.put("/:id", updateUser);
+router.put("/:id", isOwnerOrAdmin, validate(updateUserSchema), updateUser);
+
+/**
+ * @swagger
+ * /users/{id}:
+ *   delete:
+ *     summary: Soft delete a user
+ *     description: Soft delete (deactivate) a user by marking with deleted_at timestamp. Only ADMIN_COMPANY can perform this action.
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: User ID to delete
+ *     responses:
+ *       204:
+ *         description: User deleted successfully
+ *       400:
+ *         description: Invalid user ID or user already deleted
+ *       401:
+ *         description: Unauthorized - Access token missing or invalid
+ *       403:
+ *         description: Forbidden - Only ADMIN_COMPANY can delete users
+ *       404:
+ *         description: User not found
+ */
+router.delete("/:id", authorize("ADMIN_COMPANY"), deleteUser);
  
 export default router;

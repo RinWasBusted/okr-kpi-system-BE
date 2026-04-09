@@ -81,7 +81,7 @@ const router = express.Router({ mergeParams: true });
  *                       avatar_url:
  *                         type: string
  *                         nullable: true
- *                         example: null
+ *                         example: "https://res.cloudinary.com/.../image.jpg"
  *                       is_active:
  *                         type: boolean
  *                         example: true
@@ -201,6 +201,7 @@ router.get("/", getCompanyAdmins);
  *                         avatar_url:
  *                           type: string
  *                           nullable: true
+ *                           example: "https://res.cloudinary.com/.../image.jpg"
  *                         is_active:
  *                           type: boolean
  *                         created_at:

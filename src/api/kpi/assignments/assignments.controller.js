@@ -24,20 +24,34 @@ const parseNumber = (value) => {
 // GET /kpi-assignments
 export const getKPIAssignments = async (req, res) => {
     try {
+        const {
+            cycle_id,
+            unit_id,
+            owner_id,
+            visibility,
+            parent_assignment_id,
+            progress_status,
+            kpi_status,
+            status,
+            page,
+            per_page,
+            mode,
+        } = req.validated.query;
+
         const filters = {
-            cycle_id: parseOptionalInt(req.query.cycle_id),
-            unit_id: parseOptionalInt(req.query.unit_id),
-            owner_id: parseOptionalInt(req.query.owner_id),
-            visibility: req.query.visibility,
-            parent_assignment_id:
-                req.query.parent_assignment_id === "null"
-                    ? null
-                    : parseOptionalInt(req.query.parent_assignment_id),
-            page: parsePositiveInt(req.query.page, 1),
-            per_page: parsePositiveInt(req.query.per_page, 20),
+            cycle_id,
+            unit_id,
+            owner_id,
+            visibility,
+            parent_assignment_id: parent_assignment_id === "null" ? null : parent_assignment_id,
+            progress_status,
+            kpi_status,
+            status: status || "active",
+            page,
+            per_page,
         };
 
-        const data = await assignmentsService.listKPIAssignments(req.user, filters);
+        const data = await assignmentsService.listKPIAssignments(req.user, filters, mode);
         res.success("KPI Assignments retrieved successfully", 200, data.data, data.meta);
     } catch (error) {
         throw error;
@@ -47,39 +61,18 @@ export const getKPIAssignments = async (req, res) => {
 // POST /kpi-assignments
 export const createKPIAssignment = async (req, res) => {
     try {
-        const { kpi_dictionary_id, cycle_id, target_value, current_value, owner_id, unit_id, parent_assignment_id, visibility } = req.body;
-
-        const dictId = parsePositiveInt(kpi_dictionary_id, null);
-        if (!dictId) throw new AppError("kpi_dictionary_id is required", 422);
-
-        const cycleId = parsePositiveInt(cycle_id, null);
-        if (!cycleId) throw new AppError("cycle_id is required", 422);
-
-        const targetValue = parseNumber(target_value);
-        if (targetValue === undefined) throw new AppError("target_value is required", 422);
-
-        const currentValue = current_value !== undefined ? parseNumber(current_value) : undefined;
-        if (current_value !== undefined && currentValue === undefined) {
-            throw new AppError("current_value must be a number", 422);
-        }
-
-        const ownerId = parseOptionalInt(owner_id);
-        const unitId = parseOptionalInt(unit_id);
-        const parentId = parseOptionalInt(parent_assignment_id);
-
-        if (visibility && !["PUBLIC", "INTERNAL", "PRIVATE"].includes(visibility)) {
-            throw new AppError("visibility must be one of: PUBLIC, INTERNAL, PRIVATE", 422);
-        }
+        const { kpi_dictionary_id, cycle_id, target_value, current_value, owner_id, unit_id, parent_assignment_id, visibility, due_date } = req.validated.body;
 
         const assignment = await assignmentsService.createKPIAssignment(req.user, {
-            kpi_dictionary_id: dictId,
-            cycle_id: cycleId,
-            target_value: targetValue,
-            current_value: currentValue,
-            owner_id: ownerId,
-            unit_id: unitId,
-            parent_assignment_id: parentId,
+            kpi_dictionary_id,
+            cycle_id,
+            target_value,
+            current_value,
+            owner_id,
+            unit_id,
+            parent_assignment_id,
             visibility,
+            due_date,
         });
 
         res.success("KPI Assignment created successfully", 201, { kpi_assignment: assignment });
@@ -94,32 +87,27 @@ export const updateKPIAssignment = async (req, res) => {
         const assignmentId = parsePositiveInt(req.params.id, null);
         if (!assignmentId) throw new AppError("Invalid assignment ID", 400);
 
-        const { cycle_id, target_value, current_value, visibility } = req.body;
+        const { cycle_id, target_value, current_value, visibility, due_date } = req.validated.body;
         const updates = {};
 
         if (cycle_id !== undefined) {
-            const parsed = parsePositiveInt(cycle_id, null);
-            if (parsed === null) throw new AppError("cycle_id must be a positive integer", 422);
-            updates.cycle_id = parsed;
+            updates.cycle_id = cycle_id;
         }
 
         if (target_value !== undefined) {
-            const parsed = parseNumber(target_value);
-            if (parsed === undefined) throw new AppError("target_value must be a number", 422);
-            updates.target_value = parsed;
+            updates.target_value = target_value;
         }
 
         if (current_value !== undefined) {
-            const parsed = parseNumber(current_value);
-            if (parsed === undefined) throw new AppError("current_value must be a number", 422);
-            updates.current_value = parsed;
+            updates.current_value = current_value;
         }
 
         if (visibility !== undefined) {
-            if (!["PUBLIC", "INTERNAL", "PRIVATE"].includes(visibility)) {
-                throw new AppError("visibility must be one of: PUBLIC, INTERNAL, PRIVATE", 422);
-            }
             updates.visibility = visibility;
+        }
+
+        if (due_date !== undefined) {
+            updates.due_date = due_date;
         }
 
         if (Object.keys(updates).length === 0) {
@@ -149,6 +137,41 @@ export const deleteKPIAssignment = async (req, res) => {
         await assignmentsService.deleteKPIAssignment(req.user, assignmentId, cascade);
 
         res.status(204).send();
+    } catch (error) {
+        throw error;
+    }
+};
+
+// GET /kpi-assignments/:id
+export const getKPIAssignmentById = async (req, res) => {
+    try {
+        const assignmentId = parsePositiveInt(req.params.id, null);
+        if (!assignmentId) throw new AppError("Invalid assignment ID", 400);
+
+        const assignment = await assignmentsService.getKPIAssignmentById(req.user, assignmentId);
+
+        res.success("KPI Assignment retrieved successfully", 200, { kpi_assignment: assignment });
+    } catch (error) {
+        throw error;
+    }
+};
+
+// GET /kpi-assignments/available-parents
+export const getAvailableParentKPIs = async (req, res) => {
+    try {
+        const unitId = parseOptionalInt(req.query.unit_id);
+        if (!unitId) throw new AppError("unit_id is required", 400);
+
+        const kpiDictionaryId = parseOptionalInt(req.query.kpi_dictionary_id);
+
+        const result = await assignmentsService.getAvailableParentKPIs(req.user, unitId, kpiDictionaryId);
+
+        res.success("Available parent KPIs retrieved successfully", 200, result.data, {
+            unit_id: result.unit_id,
+            unit_ids_searched: result.unit_ids_searched,
+            kpi_dictionary_id: result.kpi_dictionary_id,
+            total: result.total,
+        });
     } catch (error) {
         throw error;
     }

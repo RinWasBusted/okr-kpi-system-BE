@@ -1,8 +1,9 @@
 import prisma from "../../utils/prisma.js";
 
 // Get company AI plan info (ai_plan, token_usage, credit_cost, usage_limit)
-export const getCompanyAIPlan = async () => {
-    const company = await prisma.companies.findFirst({
+export const getCompanyAIPlan = async (companyId) => {
+    const company = await prisma.companies.findUnique({
+        where: { id: companyId },
         select: {
             id: true,
             name: true,
@@ -36,7 +37,7 @@ export const getCompanyAIPlan = async () => {
 };
 
 // Get AI usage logs with filters for company
-export const getAIUsageLogs = async (filters, pagination) => {
+export const getAIUsageLogs = async (companyId, filters, pagination) => {
     const {
         user_id,
         feature_name,
@@ -50,6 +51,7 @@ export const getAIUsageLogs = async (filters, pagination) => {
     const { page, per_page } = pagination;
 
     const where = {
+        company_id: companyId,
         ...(user_id !== undefined && { user_id }),
         ...(feature_name !== undefined && { feature_name: { contains: feature_name, mode: "insensitive" } }),
         ...(model_name !== undefined && { model_name: { contains: model_name, mode: "insensitive" } }),

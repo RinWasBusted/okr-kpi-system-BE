@@ -4,8 +4,16 @@ import {
     createKPIAssignment,
     updateKPIAssignment,
     deleteKPIAssignment,
+    getKPIAssignmentById,
+    getAvailableParentKPIs,
 } from "./assignments.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
+import { validate } from "../../../middlewares/validate.js";
+import {
+    createKPIAssignmentSchema,
+    updateKPIAssignmentSchema,
+    listKPIAssignmentsQuerySchema,
+} from "../../../schemas/kpi.schema.js";
 
 const router = express.Router();
 
@@ -23,6 +31,7 @@ router.use(authenticate);
  * /kpi-assignments:
  *   get:
  *     summary: Get list of KPI Assignments
+ *     description: Retrieve KPI assignments with cycle context. Child assignments inherit visibility constraints from parent assignments.
  *     tags: [KPIAssignments]
  *     parameters:
  *       - in: query
@@ -45,12 +54,38 @@ router.use(authenticate);
  *         schema:
  *           type: string
  *           enum: [PUBLIC, INTERNAL, PRIVATE]
- *         description: Filter by visibility
+ *         description: Filter by visibility level
+ *       - in: query
+ *         name: progress_status
+ *         schema:
+ *           type: string
+ *           enum: [NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED]
+ *         description: Filter by progress status (calculated from progress_percentage)
+ *       - in: query
+ *         name: kpi_status
+ *         schema:
+ *           type: string
+ *           enum: [ON_TRACK, AT_RISK, CRITICAL]
+ *         description: Filter by KPI status from latest record (requires admin/manager permission)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [active, deleted]
+ *           default: active
+ *         description: Filter by activity status (deleted requires admin/manager permission)
  *       - in: query
  *         name: parent_assignment_id
  *         schema:
  *           type: integer
  *         description: Filter by parent assignment
+ *       - in: query
+ *         name: mode
+ *         schema:
+ *           type: string
+ *           enum: [tree, list]
+ *           default: tree
+ *         description: Response format - tree (hierarchical) or list (flat)
  *       - in: query
  *         name: page
  *         schema:
@@ -61,6 +96,7 @@ router.use(authenticate);
  *         schema:
  *           type: integer
  *           default: 20
+ *           maximum: 100
  *     responses:
  *       200:
  *         description: KPI Assignments retrieved successfully
@@ -97,8 +133,25 @@ router.use(authenticate);
  *                         type: number
  *                       progress_percentage:
  *                         type: number
+ *                       progress_status:
+ *                         type: string
  *                       visibility:
  *                         type: string
+ *                         enum: [PUBLIC, INTERNAL, PRIVATE]
+ *                       cycle:
+ *                         type: object
+ *                         nullable: true
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           name:
+ *                             type: string
+ *                           start_date:
+ *                             type: string
+ *                             format: date
+ *                           end_date:
+ *                             type: string
+ *                             format: date
  *                       owner:
  *                         type: object
  *                         nullable: true
@@ -108,9 +161,24 @@ router.use(authenticate);
  *                       parent_assignment:
  *                         type: object
  *                         nullable: true
+ *                       due_date:
+ *                         type: string
+ *                         format: date-time
+ *                         nullable: true
+ *                         description: Due date for this KPI assignment
  *                       latest_record:
  *                         type: object
  *                         nullable: true
+ *                       permission:
+ *                         type: object
+ *                         description: User permissions for this KPI assignment
+ *                         properties:
+ *                           view:
+ *                             type: boolean
+ *                           edit:
+ *                             type: boolean
+ *                           delete:
+ *                             type: boolean
  *                 meta:
  *                   type: object
  *                   properties:
@@ -123,13 +191,178 @@ router.use(authenticate);
  *                     last_page:
  *                       type: integer
  */
-router.get("/kpi-assignments", getKPIAssignments);
+router.get("/kpi-assignments", validate(listKPIAssignmentsQuerySchema, "query"), getKPIAssignments);
+
+/**
+ * @swagger
+ * /kpi-assignments/available-parents:
+ *   get:
+ *     summary: Get available parent KPI assignments for a unit
+ *     description: |
+ *       Retrieve KPI assignments that can be set as parent for a new KPI in the specified unit.
+ *       Returns assignments from the specified unit and all its ancestor units.
+ *       Only includes root assignments (assignments without a parent) that use the same KPI dictionary.
+ *       Results are filtered by visibility permissions.
+ *     tags: [KPIAssignments]
+ *     parameters:
+ *       - in: query
+ *         name: unit_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The unit ID for which to find available parent KPIs
+ *       - in: query
+ *         name: kpi_dictionary_id
+ *         schema:
+ *           type: integer
+ *         description: Optional - filter by KPI dictionary ID (parent must use same KPI)
+ *     responses:
+ *       200:
+ *         description: Available parent KPIs retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       unit:
+ *                         type: object
+ *                         nullable: true
+ *                       assignments:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             kpi_dictionary:
+ *                               type: object
+ *                             target_value:
+ *                               type: number
+ *                             current_value:
+ *                               type: number
+ *                             progress_percentage:
+ *                               type: number
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     unit_id:
+ *                       type: integer
+ *                     unit_ids_searched:
+ *                       type: array
+ *                       items:
+ *                         type: integer
+ *                     kpi_dictionary_id:
+ *                       type: integer
+ *                       nullable: true
+ *                     total:
+ *                       type: integer
+ *       400:
+ *         description: Invalid unit_id
+ *       404:
+ *         description: Unit not found
+ */
+router.get("/kpi-assignments/available-parents", getAvailableParentKPIs);
+
+/**
+ * @swagger
+ * /kpi-assignments/{id}:
+ *   get:
+ *     summary: Get KPI Assignment details by ID
+ *     description: Retrieve detailed information about a specific KPI assignment including its dictionary, owner, unit, cycle, and latest record.
+ *     tags: [KPIAssignments]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: KPI Assignment ID
+ *     responses:
+ *       200:
+ *         description: KPI Assignment retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     kpi_assignment:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         kpi_dictionary:
+ *                           type: object
+ *                         target_value:
+ *                           type: number
+ *                         current_value:
+ *                           type: number
+ *                         progress_percentage:
+ *                           type: number
+ *                         progress_status:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                         visibility:
+ *                           type: string
+ *                         owner:
+ *                           type: object
+ *                         unit:
+ *                           type: object
+ *                         cycle:
+ *                           type: object
+ *                         parent_assignment:
+ *                           type: object
+ *                         due_date:
+ *                           type: string
+ *                           format: date-time
+ *                           nullable: true
+ *                           description: Due date for this KPI assignment
+ *                         latest_record:
+ *                           type: object
+ *                         permission:
+ *                           type: object
+ *                           description: User permissions for this KPI assignment
+ *                           properties:
+ *                             view:
+ *                               type: boolean
+ *                             edit:
+ *                               type: boolean
+ *                             delete:
+ *                               type: boolean
+ *       400:
+ *         description: Invalid assignment ID
+ *       403:
+ *         description: No permission to view this assignment
+ *       404:
+ *         description: KPI Assignment not found
+ */
+router.get("/kpi-assignments/:id", getKPIAssignmentById);
 
 /**
  * @swagger
  * /kpi-assignments:
  *   post:
  *     summary: Create a new KPI Assignment
+ *     description: |
+ *       Create a new KPI assignment with visibility hierarchy enforcement.
+ *       If parent_assignment_id is specified, child assignment's visibility must be >= parent's visibility (more private or equal).
+ *       Either owner_id or unit_id must be provided (not both).
  *     tags: [KPIAssignments]
  *     requestBody:
  *       required: true
@@ -144,40 +377,58 @@ router.get("/kpi-assignments", getKPIAssignments);
  *             properties:
  *               kpi_dictionary_id:
  *                 type: integer
+ *                 description: Required - KPI definition to assign
  *               cycle_id:
  *                 type: integer
+ *                 description: Required - cycle this assignment belongs to
  *               target_value:
  *                 type: number
+ *                 exclusiveMinimum: 0
+ *                 description: Required - target value (must be > 0)
  *               current_value:
  *                 type: number
- *                 description: Defaults to 0 if not provided
+ *                 minimum: 0
+ *                 description: Optional - current value (defaults to 0 if not provided)
  *               owner_id:
  *                 type: integer
- *                 description: For personal KPI
+ *                 description: Optional - assign to specific user (either owner_id or unit_id, not both)
  *               unit_id:
  *                 type: integer
- *                 description: For unit KPI
+ *                 description: Optional - assign to specific unit (either owner_id or unit_id, not both)
  *               parent_assignment_id:
  *                 type: integer
+ *                 description: Optional - parent assignment ID (child visibility must be >= parent visibility)
  *               visibility:
  *                 type: string
  *                 enum: [PUBLIC, INTERNAL, PRIVATE]
  *                 default: INTERNAL
+ *                 description: |
+ *                   Visibility level (PUBLIC < INTERNAL < PRIVATE)
+ *                   If parent_assignment_id provided, child visibility must be >= parent visibility
+ *               due_date:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Optional - due date for this KPI assignment (e.g., for weekly or short-term KPIs)
  *     responses:
  *       201:
  *         description: KPI Assignment created successfully
+ *       400:
+ *         description: Invalid request (e.g., both owner_id and unit_id provided)
+ *       403:
+ *         description: No permission to create assignment
  *       404:
- *         description: Resource not found
+ *         description: Resource not found (KPI dictionary, cycle, etc.)
  *       422:
- *         description: Validation error
+ *         description: Validation error (e.g., child visibility more public than parent)
  */
-router.post("/kpi-assignments", createKPIAssignment);
+router.post("/kpi-assignments", validate(createKPIAssignmentSchema), createKPIAssignment);
 
 /**
  * @swagger
  * /kpi-assignments/{id}:
  *   put:
  *     summary: Update a KPI Assignment
+ *     description: Update KPI assignment values and settings. Cycle context is automatically included in responses. Note - parent_assignment_id and visibility inheritance rules are enforced on create/update.
  *     tags: [KPIAssignments]
  *     parameters:
  *       - in: path
@@ -194,22 +445,36 @@ router.post("/kpi-assignments", createKPIAssignment);
  *             properties:
  *               cycle_id:
  *                 type: integer
+ *                 description: Change assignment cycle
  *               target_value:
  *                 type: number
+ *                 exclusiveMinimum: 0
+ *                 description: Target value (must be > 0)
  *               current_value:
  *                 type: number
+ *                 minimum: 0
+ *                 description: Current progress value
  *               visibility:
  *                 type: string
  *                 enum: [PUBLIC, INTERNAL, PRIVATE]
+ *                 description: Visibility level (PUBLIC < INTERNAL < PRIVATE). If parent assignment exists, child visibility must be >= parent visibility
+ *               due_date:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Due date for this KPI assignment (e.g., for weekly or short-term KPIs)
  *     responses:
  *       200:
  *         description: KPI Assignment updated successfully
+ *       400:
+ *         description: Invalid assignment ID
  *       403:
  *         description: No permission to edit
  *       404:
  *         description: KPI Assignment not found
+ *       422:
+ *         description: Validation error
  */
-router.put("/kpi-assignments/:id", updateKPIAssignment);
+router.put("/kpi-assignments/:id", validate(updateKPIAssignmentSchema), updateKPIAssignment);
 
 /**
  * @swagger

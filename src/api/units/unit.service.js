@@ -1,31 +1,48 @@
 import prisma from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
 import { UserRole } from "@prisma/client";
-import requestContext from "../../utils/context.js";
+import { getCloudinaryImageUrl } from "../../utils/cloudinary.js";
+import {
+    getUnitPath,
+    updateObjectivesAccessPathForUnit,
+    updateKPIAssignmentsAccessPathForUnit,
+    updateAccessPathForUserOwnedItems,
+} from "../../utils/path.js";
 
-const withContext = async (fn) => {
-    const store = requestContext.getStore();
-    const company_id = store?.company_id ?? "";
-    const role = store?.role ?? "";
 
-    return prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT set_config('app.current_company_id', ${String(company_id)}, true);`;
-        await tx.$executeRaw`SELECT set_config('app.user_role', ${String(role)}, true);`;
-        return fn(tx);
-    });
+const formatUnitRow = (row, includeStats = false, currentUser = null) => {
+    const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
+    const isManager = currentUser?.id === row.manager_id;
+
+    const base = {
+        id: row.id,
+        name: row.name,
+        parent_id: row.parent_id ?? null,
+        path: row.path,
+        manager: row.manager_id
+            ? { id: row.manager_id, full_name: row.manager_full_name }
+            : null,
+        member_count: Number(row.member_count ?? 0),
+        created_at: row.created_at,
+    };
+
+    if (includeStats) {
+        base.okr_count = Number(row.okr_count ?? 0);
+        base.kpi_count = Number(row.kpi_count ?? 0);
+        base.okr_progress = row.okr_progress !== null ? Number(row.okr_progress) : null;
+        base.kpi_health = row.kpi_health !== null ? Number(row.kpi_health) : null;
+    }
+
+    // Only add permission for ADMIN_COMPANY
+    if (isAdmin) {
+        base.permission = {
+            editable: true,
+            deletable: true,
+        };
+    }
+
+    return base;
 };
-
-const formatUnitRow = (row) => ({
-    id: row.id,
-    name: row.name,
-    parent_id: row.parent_id ?? null,
-    path: row.path,
-    manager: row.manager_id
-        ? { id: row.manager_id, full_name: row.manager_full_name }
-        : null,
-    member_count: Number(row.member_count ?? 0),
-    created_at: row.created_at,
-});
 
 const getUnitCore = async (tx, unitId) => {
     const rows = await tx.$queryRaw`
@@ -65,9 +82,8 @@ const getUnitRowById = async (tx, unitId) => {
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-export const listUnits = async ({ page, per_page }) => {
-    return withContext(async (tx) => {
-        // Get all units (no pagination for tree building)
+export const listUnits = async ({ page, per_page, mode = "tree" }, currentUser) => {
+    return prisma.$transaction(async (tx) => {
         const allUnits = await tx.$queryRaw`
             SELECT
                 u.id,
@@ -77,25 +93,33 @@ export const listUnits = async ({ page, per_page }) => {
                 u.created_at,
                 m.id AS manager_id,
                 m.full_name AS manager_full_name,
-                COUNT(uu.id) AS member_count
+                COALESCE(up.total_users, 0) AS member_count,
+                COALESCE(up.total_okrs, 0) AS okr_count,
+                COALESCE(up.total_kpis, 0) AS kpi_count,
+                COALESCE(up.avg_okr_progress, 0) AS okr_progress,
+                COALESCE(up.avg_kpi_progress, 0) AS kpi_health
             FROM "Units" u
             LEFT JOIN "Users" m ON m.id = u.manager_id
-            LEFT JOIN "Users" uu ON uu.unit_id = u.id
-            GROUP BY
-                u.id,
-                u.name,
-                u.parent_id,
-                u.path,
-                u.created_at,
-                m.id,
-                m.full_name
+            LEFT JOIN unit_performance up ON up.unit_id = u.id
             ORDER BY u.id ASC
         `;
 
-        // Build tree structure
+        // Flat list mode: return all units as flat list with pagination
+        if (mode === "list") {
+            const total = allUnits.length;
+            const offset = (page - 1) * per_page;
+            const paginatedUnits = allUnits.slice(offset, offset + per_page);
+
+            return {
+                total,
+                data: paginatedUnits.map((unit) => formatUnitRow(unit, true, currentUser)),
+            };
+        }
+
+        // Tree mode: build tree structure (default behavior)
         const unitsMap = new Map();
         const formattedUnits = allUnits.map((unit) => ({
-            ...formatUnitRow(unit),
+            ...formatUnitRow(unit, true, currentUser),
             sub_units: [],
         }));
 
@@ -131,7 +155,7 @@ export const listUnits = async ({ page, per_page }) => {
 // ─── Create ───────────────────────────────────────────────────────────────────
 
 export const createUnit = async (companyId, { name, parent_id, manager_id }) => {
-    return withContext(async (tx) => {
+    return prisma.$transaction(async (tx) => {
         let parentPath = null;
 
         if (parent_id !== undefined && parent_id !== null) {
@@ -142,12 +166,38 @@ export const createUnit = async (companyId, { name, parent_id, manager_id }) => 
 
         if (manager_id !== undefined && manager_id !== null) {
             const manager = await tx.$queryRaw`
-                SELECT id
+                SELECT id, unit_id
                 FROM "Users"
-                WHERE id = ${manager_id} AND role = ${UserRole.EMPLOYEE}
+                WHERE id = ${manager_id}
+                  AND role != ${UserRole.ADMIN}::"UserRole"
                 LIMIT 1
             `;
-            if (manager.length === 0) throw new AppError("Manager not found in this company", 404);
+            if (manager.length === 0) throw new AppError("Manager not found or is not eligible to be assigned as a unit manager", 404);
+
+            // Check if manager already belongs to a unit
+            // For new units, manager must not belong to any other unit
+            // (since the unit doesn't exist yet, they can't have this unit_id)
+            const managerUnitId = manager[0].unit_id;
+            if (managerUnitId !== null) {
+                throw new AppError("Manager must not be assigned to any unit before becoming a manager", 400);
+            }
+
+            // Check if manager is already managing another unit, if so, remove them from that unit
+            const currentManagedUnit = await tx.$queryRaw`
+                SELECT id FROM "Units" WHERE manager_id = ${manager_id} LIMIT 1
+            `;
+            if (currentManagedUnit.length > 0) {
+                const oldUnitId = currentManagedUnit[0].id;
+                await tx.$executeRaw`
+                    UPDATE "Units" SET manager_id = null WHERE id = ${oldUnitId}
+                `;
+                // Update unit_id for the old manager's user record
+                await tx.$executeRaw`
+                    UPDATE "Users" SET unit_id = null WHERE id = ${manager_id}
+                `;
+                // Update access_path for old manager's owned items
+                await updateAccessPathForUserOwnedItems(tx, manager_id, null);
+            }
         }
 
         const nextIdRows = await tx.$queryRaw`
@@ -179,7 +229,7 @@ export const createUnit = async (companyId, { name, parent_id, manager_id }) => 
 // ─── Update ───────────────────────────────────────────────────────────────────
 
 export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
-    return withContext(async (tx) => {
+    return prisma.$transaction(async (tx) => {
         const existing = await getUnitCore(tx, unitId);
         if (!existing) throw new AppError("Unit not found", 404);
 
@@ -199,12 +249,24 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
 
         if (manager_id !== undefined && manager_id !== null) {
             const manager = await tx.$queryRaw`
-                SELECT id
+                SELECT id, unit_id
                 FROM "Users"
-                WHERE id = ${manager_id} AND role = ${UserRole.EMPLOYEE}
+                WHERE id = ${manager_id}
+                  AND role != ${UserRole.ADMIN}::"UserRole"
                 LIMIT 1
             `;
-            if (manager.length === 0) throw new AppError("Manager not found in this company", 404);
+            if (manager.length === 0) throw new AppError("Manager not found or is not eligible to be assigned as a unit manager", 404);
+
+            // Check if manager belongs to this unit
+            // A person can only become manager of a unit if they have that unit_id
+            // Manager cannot be transferred directly from another unit - must be moved manually first
+            const managerUnitId = manager[0].unit_id;
+            if (managerUnitId !== unitId) {
+                throw new AppError("Manager must be a member of this unit (have matching unit_id). Transfer manager from another unit by first updating their unit_id via user management.", 400);
+            }
+
+            // Note: We do NOT automatically transfer manager from another unit.
+            // Manager must first be moved to this unit (via user update), then can be assigned as manager.
         }
 
         const nameProvided = name !== undefined && name !== null;
@@ -224,15 +286,11 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
         `;
 
         if (managerProvided && newManagerId !== oldManagerId) {
-            if (oldManagerId !== null) {
-                await tx.$executeRaw`
-                    UPDATE "Users" SET unit_id = null WHERE id = ${oldManagerId}
-                `;
-            }
+            // When manager changes:
+            // - Old manager: remains as member of the unit (unit_id unchanged, access_path unchanged)
+            // - New manager: must already be a member of this unit (validated above), update access_path
             if (newManagerId !== null) {
-                await tx.$executeRaw`
-                    UPDATE "Users" SET unit_id = ${unitId} WHERE id = ${newManagerId}
-                `;
+                await updateAccessPathForUserOwnedItems(tx, newManagerId, unitId);
             }
         }
 
@@ -251,6 +309,19 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
                 END
                 WHERE path <@ ${oldPath}::ltree
             `;
+
+            // Update access_path for Objectives and KPIAssignments of affected units
+            // Get all affected units (the updated unit and its descendants)
+            const affectedUnits = await tx.$queryRaw`
+                SELECT id, path::text AS path
+                FROM "Units"
+                WHERE path <@ ${newPath}::ltree
+            `;
+
+            for (const unit of affectedUnits) {
+                await updateObjectivesAccessPathForUnit(tx, unit.id, unit.path);
+                await updateKPIAssignmentsAccessPathForUnit(tx, unit.id, unit.path);
+            }
         }
 
         const unitRow = await getUnitRowById(tx, unitId);
@@ -261,7 +332,7 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
 export const deleteUnit = async (unitId) => {
-    return withContext(async (tx) => {
+    return prisma.$transaction(async (tx) => {
         const rows = await tx.$queryRaw`
             SELECT
                 u.id,
@@ -284,60 +355,99 @@ export const deleteUnit = async (unitId) => {
     });
 };
 
-// ─── Detail ───────────────────────────────────────────────────────────────────
+// ─── Info (lightweight) ───────────────────────────────────────────────────────
 
-export const getUnitDetail = async (unitId) => {
-    return withContext(async (tx) => {
+export const getUnitInfo = async (unitId) => {
+    return prisma.$transaction(async (tx) => {
         const rows = await tx.$queryRaw`
             SELECT
                 u.id,
-                u.name,
-                u.parent_id,
-                u.created_at,
-                m.id AS manager_id,
-                m.full_name AS manager_full_name,
-                m.email AS manager_email,
-                m.avatar_url,
-                m.job_title
+                u.name AS unit_name,
+                m.full_name AS manager_name,
+                m.job_title AS manager_job_title,
+                m.email AS manager_email
             FROM "Units" u
             LEFT JOIN "Users" m ON m.id = u.manager_id
             WHERE u.id = ${unitId}
         `;
 
         if (rows.length === 0) throw new AppError("Unit not found", 404);
+
+        const unit = rows[0];
+        return {
+            unit_id: unit.id,
+            unit_name: unit.unit_name,
+            manager_name: unit.manager_name ?? null,
+            manager_job_title: unit.manager_job_title ?? null,
+            manager_email: unit.manager_email ?? null,
+        };
+    });
+};
+
+// ─── Detail ───────────────────────────────────────────────────────────────────
+
+export const getUnitDetail = async (unitId, currentUser) => {
+    return prisma.$transaction(async (tx) => {
+        const rows = await tx.$queryRaw`
+            SELECT
+                u.id,
+                u.name,
+                u.parent_id,
+                u.path::text AS path,
+                u.created_at,
+                m.id AS manager_id,
+                m.full_name AS manager_full_name,
+                m.email AS manager_email,
+                m.avatar_url,
+                m.job_title,
+                COALESCE(up.total_users, 0) AS member_count,
+                COALESCE(up.total_kpis, 0) AS kpi_count,
+                COALESCE(up.total_okrs, 0) AS okr_count,
+                COALESCE(up.avg_okr_progress, 0) AS okr_progress,
+                COALESCE(up.avg_kpi_progress, 0) AS kpi_health
+            FROM "Units" u
+            LEFT JOIN "Users" m ON m.id = u.manager_id
+            LEFT JOIN unit_performance up ON up.unit_id = u.id
+            WHERE u.id = ${unitId}
+        `;
+
+        if (rows.length === 0) throw new AppError("Unit not found", 404);
         const unit = rows[0];
 
-        // Get total KPI assignments for this unit
-        const kpiResult = await tx.$queryRaw`
-            SELECT COUNT(*) AS total
-            FROM "KPIAssignments"
-            WHERE unit_id = ${unitId} AND deleted_at IS NULL
-        `;
-        const total_kpi = Number(kpiResult[0]?.total ?? 0);
+        const isAdmin = currentUser?.role === UserRole.ADMIN_COMPANY;
 
-        // Get total objectives for this unit
-        const objectiveResult = await tx.$queryRaw`
-            SELECT COUNT(*) AS total
-            FROM "Objectives"
-            WHERE unit_id = ${unitId} AND deleted_at IS NULL
-        `;
-        const total_objective = Number(objectiveResult[0]?.total ?? 0);
-
-        return {
+        const result = {
             id: unit.id,
             name: unit.name,
             parent_id: unit.parent_id ?? null,
+            path: unit.path,
             manager: unit.manager_id
                 ? {
                     id: unit.manager_id,
                     full_name: unit.manager_full_name,
                     email: unit.manager_email,
-                    avatar_url: unit.avatar_url,
+                    avatar_url: unit.avatar_url
+                        ? getCloudinaryImageUrl(unit.avatar_url, 50, 50, "fill")
+                        : null,
                     job_title: unit.job_title,
                   }
                 : null,
-            total_kpi,
-            total_objective,
+            member_count: Number(unit.member_count ?? 0),
+            okr_count: Number(unit.okr_count ?? 0),
+            kpi_count: Number(unit.kpi_count ?? 0),
+            okr_progress: unit.okr_progress !== null ? Number(unit.okr_progress) : null,
+            kpi_health: unit.kpi_health !== null ? Number(unit.kpi_health) : null,
+            created_at: unit.created_at,
         };
+
+        // Only add permission for ADMIN_COMPANY
+        if (isAdmin) {
+            result.permission = {
+                editable: true,
+                deletable: true,
+            };
+        }
+
+        return result;
     });
 };

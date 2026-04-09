@@ -1,8 +1,10 @@
 import express from "express";
 import {
     getCycles,
+    getCycleById,
     createCycle,
     updateCycle,
+    deleteCycle,
     lockCycle,
     cloneCycle,
 } from "./cycle.controller.js";
@@ -24,7 +26,7 @@ router.use(authenticate);
  * /cycles:
  *   get:
  *     summary: Get list of cycles
- *     description: Returns a paginated list of cycles. Requires `accessToken` cookie and `ADMIN_COMPANY` role.
+ *     description: Returns a paginated list of cycles with open cycles count. Requires `accessToken` cookie and `ADMIN_COMPANY` role. Employee can only see cycle names through Objective/KPI references.
  *     tags: [Cycles]
  *     parameters:
  *       - in: query
@@ -53,8 +55,50 @@ router.use(authenticate);
  *     responses:
  *       200:
  *         description: Cycles retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       start_date:
+ *                         type: string
+ *                         format: date
+ *                       end_date:
+ *                         type: string
+ *                         format: date
+ *                       is_locked:
+ *                         type: boolean
+ *                       days_remaining:
+ *                         type: integer
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     open_cycles_count:
+ *                       type: integer
+ *                       description: Number of unlocked cycles
+ *                     page:
+ *                       type: integer
+ *                     per_page:
+ *                       type: integer
+ *                     last_page:
+ *                       type: integer
  */
-router.get("/", getCycles);
+router.get("/", authenticate, getCycles);
 
 /**
  * @swagger
@@ -88,7 +132,71 @@ router.get("/", getCycles);
  *       422:
  *         description: Validation error (DATE_OVERLAP or invalid dates)
  */
-router.post("/", authorize("ADMIN_COMPANY"), createCycle);
+router.post("/", authorize("ADMIN_COMPANY"),createCycle);
+
+/**
+ * @swagger
+ * /cycles/{id}:
+ *   get:
+ *     summary: Get cycle detail
+ *     description: Get detailed information of a cycle including statistics. Requires `accessToken` cookie.
+ *     tags: [Cycles]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Cycle ID
+ *     responses:
+ *       200:
+ *         description: Cycle retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cycle:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         name:
+ *                           type: string
+ *                         start_date:
+ *                           type: string
+ *                           format: date-time
+ *                         end_date:
+ *                           type: string
+ *                           format: date-time
+ *                         is_locked:
+ *                           type: boolean
+ *                         days_remaining:
+ *                           type: integer
+ *                         statistics:
+ *                           type: object
+ *                           properties:
+ *                             total_objectives:
+ *                               type: integer
+ *                             total_kpis:
+ *                               type: integer
+ *                             avg_objective_progress:
+ *                               type: number
+ *                               description: Average progress of all objectives (0-100)
+ *                             avg_kpi_progress:
+ *                               type: number
+ *                               description: Average progress of all KPIs (0-100)
+ *       404:
+ *         description: Cycle not found
+ */
+router.get("/:id", getCycleById);
 
 /**
  * @swagger
@@ -126,6 +234,51 @@ router.put("/:id", authorize("ADMIN_COMPANY"), updateCycle);
 
 /**
  * @swagger
+ * /cycles/{id}:
+ *   delete:
+ *     summary: Delete a cycle
+ *     description: Delete a cycle that has no objectives or KPI assignments. Requires `ADMIN_COMPANY` role.
+ *     tags: [Cycles]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Cycle ID
+ *     responses:
+ *       200:
+ *         description: Cycle deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     deleted_cycle:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         name:
+ *                           type: string
+ *       400:
+ *         description: Cannot delete cycle - has existing objectives or KPI assignments
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Cycle not found
+ */
+router.delete("/:id", authorize("ADMIN_COMPANY"), deleteCycle);
+
+/**
+ * @swagger
  * /cycles/{id}/lock:
  *   patch:
  *     summary: Lock a cycle
@@ -147,8 +300,8 @@ router.patch("/:id/lock", authorize("ADMIN_COMPANY"), lockCycle);
  * @swagger
  * /cycles/{id}/clone:
  *   post:
- *     summary: Clone a cycle into a new cycle
- *     description: Clone a cycle into a brand new cycle with the same info and structure. Requires `ADMIN_COMPANY` role.
+ *     summary: Clone objectives and KPIs from another cycle into this cycle
+ *     description: Copy objectives and KPI assignments from a source cycle into the target cycle (cycle ID in URL). Requires `ADMIN_COMPANY` role.
  *     tags: [Cycles]
  *     parameters:
  *       - in: path
@@ -156,9 +309,55 @@ router.patch("/:id/lock", authorize("ADMIN_COMPANY"), lockCycle);
  *         required: true
  *         schema:
  *           type: integer
+ *         description: Target cycle ID to copy into
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               objective_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [1, 5, 12]
+ *                 description: Objective IDs to clone (if empty or not provided, no objectives will be cloned)
+ *               kpi_assignment_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [3, 8]
+ *                 description: KPI assignment IDs to clone (if empty or not provided, no KPIs will be cloned)
  *     responses:
- *       200:
- *         description: Cycle cloned successfully
+ *       201:
+ *         description: Items cloned successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cloned_objective_ids:
+ *                       type: array
+ *                       items:
+ *                         type: integer
+ *                       description: List of cloned objective IDs
+ *                     cloned_kpi_assignment_ids:
+ *                       type: array
+ *                       items:
+ *                         type: integer
+ *                       description: List of cloned KPI assignment IDs
+ *       400:
+ *         description: Invalid request (target cycle locked)
+ *       422:
+ *         description: Validation error (invalid IDs)
  */
 router.post("/:id/clone", authorize("ADMIN_COMPANY"), cloneCycle);
 

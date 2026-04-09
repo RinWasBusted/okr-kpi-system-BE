@@ -1,6 +1,23 @@
 import * as cycleService from "./cycle.service.js";
 import AppError from "../../utils/appError.js";
 
+// DELETE /cycles/:id
+export const deleteCycle = async (req, res) => {
+    try {
+        const companyId = req.user.company_id;
+        if (!companyId) throw new AppError("Company context is required", 403);
+
+        const cycleId = parsePositiveInt(req.params.id, null);
+        if (!cycleId) throw new AppError("Invalid cycle ID", 400);
+
+        const result = await cycleService.deleteCycle(companyId, cycleId);
+
+        res.success("Cycle deleted successfully", 200, { deleted_cycle: result });
+    } catch (error) {
+        throw error;
+    }
+};
+
 const parsePositiveInt = (value, fallback) => {
     const parsed = Number(value);
     if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
@@ -34,7 +51,7 @@ export const getCycles = async (req, res) => {
         const is_locked = parseBoolean(req.query.is_locked);
         const year = req.query.year ? parsePositiveInt(req.query.year, undefined) : undefined;
 
-        const { total, data, last_page } = await cycleService.listCycles({
+        const { total, open_cycles_count, data, last_page } = await cycleService.listCycles({
             companyId,
             is_locked,
             year,
@@ -44,6 +61,7 @@ export const getCycles = async (req, res) => {
 
         res.success("Cycles retrieved successfully", 200, data, {
             total,
+            open_cycles_count,
             page,
             per_page,
             last_page,
@@ -81,6 +99,23 @@ export const createCycle = async (req, res) => {
         });
 
         res.success("Cycle created successfully", 201, { cycle });
+    } catch (error) {
+        throw error;
+    }
+};
+
+// GET /cycles/:id
+export const getCycleById = async (req, res) => {
+    try {
+        const companyId = req.user.company_id;
+        if (!companyId) throw new AppError("Company context is required", 403);
+
+        const cycleId = parsePositiveInt(req.params.id, null);
+        if (!cycleId) throw new AppError("Invalid cycle ID", 400);
+
+        const cycle = await cycleService.getCycleDetail(companyId, cycleId);
+
+        res.success("Cycle retrieved successfully", 200, { cycle });
     } catch (error) {
         throw error;
     }
@@ -142,7 +177,7 @@ export const lockCycle = async (req, res) => {
         const cycleId = parsePositiveInt(req.params.id, null);
         if (!cycleId) throw new AppError("Invalid cycle ID", 400);
 
-        const cycle = await cycleService.lockCycle(companyId, cycleId);
+        const cycle = await cycleService.lockCycle(companyId, cycleId, req.user);
 
         res.success("Cycle locked successfully", 200, { cycle });
     } catch (error) {
@@ -156,12 +191,43 @@ export const cloneCycle = async (req, res) => {
         const companyId = req.user.company_id;
         if (!companyId) throw new AppError("Company context is required", 403);
 
-        const sourceCycleId = parsePositiveInt(req.params.id, null);
-        if (!sourceCycleId) throw new AppError("Invalid cycle ID", 400);
+        // targetCycleId is the cycle we're copying INTO (from URL param)
+        const targetCycleId = parsePositiveInt(req.params.id, null);
+        if (!targetCycleId) throw new AppError("Invalid target cycle ID", 400);
 
-        const result = await cycleService.cloneCycle(companyId, sourceCycleId);
+        const { objective_ids, kpi_assignment_ids } = req.body;
 
-        res.success("Cycle cloned successfully", 200, result);
+        // Parse objective_ids if provided (array of IDs to clone)
+        let parsedObjectiveIds = [];
+        if (objective_ids !== undefined) {
+            if (!Array.isArray(objective_ids)) {
+                throw new AppError("objective_ids must be an array", 422);
+            }
+            parsedObjectiveIds = objective_ids
+                .map((id) => parsePositiveInt(id, null))
+                .filter((id) => id !== null);
+        }
+
+        // Parse kpi_assignment_ids if provided (array of IDs to clone)
+        let parsedKpiIds = [];
+        if (kpi_assignment_ids !== undefined) {
+            if (!Array.isArray(kpi_assignment_ids)) {
+                throw new AppError("kpi_assignment_ids must be an array", 422);
+            }
+            parsedKpiIds = kpi_assignment_ids
+                .map((id) => parsePositiveInt(id, null))
+                .filter((id) => id !== null);
+        }
+
+        const result = await cycleService.cloneCycle(companyId, targetCycleId, {
+            objective_ids: parsedObjectiveIds,
+            kpi_assignment_ids: parsedKpiIds,
+        }, req.user);
+
+        res.success("Items cloned successfully", 201, {
+            cloned_objective_ids: result.cloned_objective_ids,
+            cloned_kpi_assignment_ids: result.cloned_kpi_assignment_ids,
+        });
     } catch (error) {
         throw error;
     }

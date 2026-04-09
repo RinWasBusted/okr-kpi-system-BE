@@ -1,11 +1,17 @@
 import express from "express";
 import {
     getKPIDictionaries,
+    getKPIDictionariesForAssignment,
     createKPIDictionary,
     updateKPIDictionary,
     deleteKPIDictionary,
 } from "./dictionaries.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
+import { validate } from "../../../middlewares/validate.js";
+import {
+    createKPIDictionarySchema,
+    updateKPIDictionarySchema,
+} from "../../../schemas/kpi.schema.js";
 
 const router = express.Router();
 
@@ -24,6 +30,13 @@ router.use(authenticate);
  *   get:
  *     summary: Get list of KPI Dictionaries
  *     tags: [KPIDictionaries]
+ *     parameters:
+ *       - in: query
+ *         name: for_unit_id
+ *         schema:
+ *           type: integer
+ *         required: false
+ *         description: Filter KPI dictionaries accessible to a specific unit (company-wide + unit itself + ancestor units + descendant units)
  *     responses:
  *       200:
  *         description: KPI Dictionaries retrieved successfully
@@ -50,11 +63,70 @@ router.use(authenticate);
  *                       evaluation_method:
  *                         type: string
  *                         enum: [Positive, Negative, Stabilizing]
+ *                       description:
+ *                         type: string
+ *                         nullable: true
  *                       unit_id:
  *                         type: integer
  *                         nullable: true
+ *                       org_unit:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           name:
+ *                             type: string
  */
 router.get("/kpi-dictionaries", getKPIDictionaries);
+
+/**
+ * @swagger
+ * /kpi-dictionaries/for-assignment/{unit_id}:
+ *   get:
+ *     summary: Get KPI Dictionaries available for creating KPI Assignment in a specific unit
+ *     tags: [KPIDictionaries]
+ *     parameters:
+ *       - in: path
+ *         name: unit_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Unit ID to get available dictionaries for KPI assignment
+ *     responses:
+ *       200:
+ *         description: KPI Dictionaries for unit assignment retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       unit:
+ *                         type: string
+ *                       evaluation_method:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       unit_id:
+ *                         type: integer
+ *                       org_unit:
+ *                         type: object
+ *       400:
+ *         description: Invalid unit ID
+ */
+router.get("/kpi-dictionaries/for-assignment/:unit_id", getKPIDictionariesForAssignment);
 
 /**
  * @swagger
@@ -75,14 +147,22 @@ router.get("/kpi-dictionaries", getKPIDictionaries);
  *             properties:
  *               name:
  *                 type: string
- *                 description: KPI name
+ *                 minLength: 1
+ *                 maxLength: 255
+ *                 description: KPI name (1-255 characters, required)
  *               unit:
  *                 type: string
- *                 description: Unit of measurement (VNĐ, %, Số lượng, etc.)
+ *                 minLength: 1
+ *                 maxLength: 50
+ *                 description: Unit of measurement (VNĐ, %, Số lượng, etc.) - 1-50 characters, required
  *               evaluation_method:
  *                 type: string
  *                 enum: [Positive, Negative, Stabilizing]
  *                 description: Evaluation method
+ *               description:
+ *                 type: string
+ *                 maxLength: 1000
+ *                 description: Optional description for the KPI
  *               unit_id:
  *                 type: integer
  *                 description: Unit ID (null for company-wide)
@@ -94,7 +174,7 @@ router.get("/kpi-dictionaries", getKPIDictionaries);
  *       422:
  *         description: Validation error
  */
-router.post("/kpi-dictionaries", createKPIDictionary);
+router.post("/kpi-dictionaries", validate(createKPIDictionarySchema), createKPIDictionary);
 
 /**
  * @swagger
@@ -117,11 +197,22 @@ router.post("/kpi-dictionaries", createKPIDictionary);
  *             properties:
  *               name:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
+ *                 description: KPI name (1-255 characters, optional for update)
  *               unit:
  *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 50
+ *                 description: Unit of measurement (1-50 characters, optional for update)
  *               evaluation_method:
  *                 type: string
  *                 enum: [Positive, Negative, Stabilizing]
+ *                 description: Evaluation method (optional for update)
+ *               description:
+ *                 type: string
+ *                 maxLength: 1000
+ *                 description: Optional description for the KPI (optional for update)
  *               unit_id:
  *                 type: integer
  *     responses:
@@ -132,7 +223,7 @@ router.post("/kpi-dictionaries", createKPIDictionary);
  *       404:
  *         description: KPI Dictionary not found
  */
-router.put("/kpi-dictionaries/:id", updateKPIDictionary);
+router.put("/kpi-dictionaries/:id", validate(updateKPIDictionarySchema), updateKPIDictionary);
 
 /**
  * @swagger

@@ -13,6 +13,9 @@ import resetTokenUsageJob from './jobs/resetTokenUsage.job.js';
 const createApp = async () => {
   const app = express();
 
+  // Trust the first proxy hop so req.ip reflects the real client IP behind load balancers / Docker Swarm ingress
+  app.set('trust proxy', 1);
+
   // Middleware
   app.use(cors(corsOptions));
   app.options(/.*/, cors(corsOptions));

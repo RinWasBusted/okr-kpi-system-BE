@@ -22,15 +22,15 @@ export const getUnits = async (req, res) => {
         const companyId = req.user.company_id;
         if (!companyId) throw new AppError("Company context is required", 403);
 
-        const page = parsePositiveInt(req.query.page, 1);
-        const per_page = parsePositiveInt(req.query.per_page, 100);
+        const { page, per_page, mode } = req.validated.query;
 
-        const { total, data } = await unitService.listUnits({ page, per_page });
+        const { total, data } = await unitService.listUnits({ page, per_page, mode }, req.user);
 
         res.success("Units retrieved successfully", 200, data, {
             page,
             per_page,
             total,
+            mode,
         });
     } catch (error) {
         throw error;
@@ -43,16 +43,12 @@ export const createUnit = async (req, res) => {
         const companyId = req.user.company_id;
         if (!companyId) throw new AppError("Company context is required", 403);
 
-        const { name, parent_id, manager_id } = req.body;
-
-        if (!name || typeof name !== "string" || name.trim() === "") {
-            throw new AppError("name is required", 422);
-        }
+        const { name, parent_id, manager_id } = req.validated.body;
 
         const unit = await unitService.createUnit(companyId, {
             name: name.trim(),
-            parent_id: parent_id !== undefined ? parseOptionalId(parent_id) : undefined,
-            manager_id: manager_id !== undefined ? parseOptionalId(manager_id) : undefined,
+            parent_id: parent_id ?? undefined,
+            manager_id: manager_id ?? undefined,
         });
 
         res.success("Unit created successfully", 201, { unit });
@@ -72,17 +68,14 @@ export const updateUnit = async (req, res) => {
             throw new AppError("Invalid unit ID", 400);
         }
 
-        const { name, parent_id, manager_id } = req.body;
+        const { name, parent_id, manager_id } = req.validated.body;
 
         const updates = {};
         if (name !== undefined && name !== null) {
-            if (typeof name !== "string" || name.trim() === "") {
-                throw new AppError("name must be a non-empty string", 422);
-            }
             updates.name = name.trim();
         }
-        if (parent_id !== undefined) updates.parent_id = parseOptionalId(parent_id);
-        if (manager_id !== undefined) updates.manager_id = parseOptionalId(manager_id);
+        if (parent_id !== undefined) updates.parent_id = parent_id;
+        if (manager_id !== undefined) updates.manager_id = manager_id;
 
         if (Object.keys(updates).length === 0) {
             throw new AppError("No fields provided to update", 400);
@@ -115,6 +108,25 @@ export const deleteUnit = async (req, res) => {
     }
 };
 
+// GET /units/:id/info
+export const getUnitInfo = async (req, res) => {
+    try {
+        const companyId = req.user.company_id;
+        if (!companyId) throw new AppError("Company context is required", 403);
+
+        const unitId = Number(req.params.id);
+        if (!Number.isInteger(unitId) || unitId <= 0) {
+            throw new AppError("Invalid unit ID", 400);
+        }
+
+        const unit = await unitService.getUnitInfo(unitId);
+
+        res.success("Unit info retrieved successfully", 200, unit);
+    } catch (error) {
+        throw error;
+    }
+};
+
 // GET /units/:id/detail
 export const getUnitDetail = async (req, res) => {
     try {
@@ -126,7 +138,7 @@ export const getUnitDetail = async (req, res) => {
             throw new AppError("Invalid unit ID", 400);
         }
 
-        const unit = await unitService.getUnitDetail(unitId);
+        const unit = await unitService.getUnitDetail(unitId, req.user);
 
         res.success("Unit detail retrieved successfully", 200, unit);
     } catch (error) {

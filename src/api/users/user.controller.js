@@ -46,17 +46,14 @@ export const getUsers = async (req, res) => {
         const companyId = req.user.company_id;
         if (!companyId) throw new AppError("Company context is required", 403);
 
-        const { search } = req.query;
-        const unit_id = req.query.unit_id ? parsePositiveInt(req.query.unit_id, undefined) : undefined;
-        const page = parsePositiveInt(req.query.page, 1);
-        const per_page = Math.min(parsePositiveInt(req.query.per_page, 20), 100);
+        const { search, unit_id, page, per_page } = req.validated.query;
 
         const { total, data, last_page } = await userService.listUsers({
             unit_id,
-            search: search || undefined,
+            search,
             page,
             per_page,
-        });
+        }, req.user);
 
         res.success("Users retrieved successfully", 200, data, {
             total,
@@ -78,7 +75,7 @@ export const getUserById = async (req, res) => {
         const userId = parsePositiveInt(req.params.id, null);
         if (!userId) throw new AppError("Invalid user ID", 400);
 
-        const user = await userService.findUserById(userId);
+        const user = await userService.findUserById(userId, req.user);
 
         res.success("User retrieved successfully", 200, { user });
     } catch (error) {
@@ -92,37 +89,30 @@ export const createUser = async (req, res) => {
         const companyId = req.user.company_id;
         if (!companyId) throw new AppError("Company context is required", 403);
 
-        const { full_name, email, password, unit_id } = req.body;
-
-        if (!full_name || typeof full_name !== "string" || full_name.trim() === "") {
-            throw new AppError("full_name is required", 422);
-        }
-        if (!email || typeof email !== "string") {
-            throw new AppError("email is required", 422);
-        }
-        if (!password || typeof password !== "string") {
-            throw new AppError("password is required", 422);
-        }
-        if (password.length < 8) {
-            throw new AppError("Password must be at least 8 characters", 422);
-        }
+        const { full_name, email, password, unit_id, job_title } = req.validated.body;
 
         let avatarPublicId = null;
         // Upload avatar if file is provided
         if (req.file) {
-            const uploadResult = await uploadImageToCloudinary(
-                req.file.buffer,
-                req.file.originalname,
-                "okr-kpi-system/users/avatars"
-            );
-            avatarPublicId = uploadResult.public_id;
+            try {
+                const uploadResult = await uploadImageToCloudinary(
+                    req.file.buffer,
+                    req.file.originalname,
+                    "okr-kpi-system/users/avatars"
+                );
+                avatarPublicId = uploadResult.public_id;
+            } catch (uploadError) {
+                console.error("Avatar upload failed:", uploadError);
+                throw new AppError("Avatar upload failed", 400, "AVATAR_UPLOAD_FAILED");
+            }
         }
 
         const user = await userService.createUser(companyId, {
             full_name: full_name.trim(),
             email: email.trim().toLowerCase(),
             password,
-            unit_id: unit_id !== undefined ? Number(unit_id) || null : undefined,
+            job_title: job_title ? job_title.trim() : null,
+            unit_id: unit_id ?? undefined,
             avatar_url: avatarPublicId,
         });
 
@@ -141,37 +131,29 @@ export const updateUser = async (req, res) => {
         const userId = parsePositiveInt(req.params.id, null);
         if (!userId) throw new AppError("Invalid user ID", 400);
 
-        const { full_name, unit_id, password, is_active } = req.body;
+        const { full_name, job_title, unit_id, password, is_active } = req.validated.body;
 
         // Build only provided fields
         const updates = {};
 
         if (full_name !== undefined) {
-            if (typeof full_name !== "string" || full_name.trim() === "") {
-                throw new AppError("full_name must be a non-empty string", 422);
-            }
             updates.full_name = full_name.trim();
         }
 
+        if (job_title !== undefined) {
+            updates.job_title = job_title ? job_title.trim() : null;
+        }
+
         if (unit_id !== undefined) {
-            updates.unit_id = unit_id === null ? null : Number(unit_id) || null;
+            updates.unit_id = unit_id;
         }
 
         if (password !== undefined) {
-            if (typeof password !== "string" || password.length < 8) {
-                throw new AppError("Password must be at least 8 characters", 422);
-            }
             updates.password = password;
         }
 
         if (is_active !== undefined) {
-            const parsed = parseBoolean(is_active);
-            if (parsed === undefined) throw new AppError("is_active must be a boolean", 422);
-            updates.is_active = parsed;
-        }
-
-        if (Object.keys(updates).length === 0) {
-            throw new AppError("No fields provided to update", 400);
+            updates.is_active = is_active;
         }
 
         const user = await userService.updateUser(userId, updates);
@@ -225,3 +207,18 @@ export const deleteAvatar = async (req, res) => {
         throw error;
     }
 };
+
+// DELETE /users/:id - Soft delete user
+export const deleteUser = async (req, res) => {
+    try {
+        const userId = parsePositiveInt(req.params.id, null);
+        if (!userId) throw new AppError("Invalid user ID", 400);
+
+        await userService.softDeleteUser(userId);
+
+        res.status(204).send();
+    } catch (error) {
+        throw error;
+    }
+};
+
