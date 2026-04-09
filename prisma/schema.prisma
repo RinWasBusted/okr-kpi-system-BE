@@ -154,7 +154,7 @@ model KPIAssignments {
   kpi_dictionary_id    Int
   cycle_id             Int
   owner_id             Int?
-  unit_id              Int
+  unit_id              Int?
   visibility           Visibility
   access_path          Unsupported("ltree")
   start_value          Float   @default(0)
@@ -171,7 +171,7 @@ model KPIAssignments {
   kpi_dictionary    KPIDictionaries  @relation(fields: [kpi_dictionary_id], references: [id])
   cycle             Cycles           @relation(fields: [cycle_id], references: [id])
   owner             Users?           @relation(fields: [owner_id], references: [id])
-  unit              Units            @relation(fields: [unit_id], references: [id])
+  unit              Units?            @relation(fields: [unit_id], references: [id])
   kpi_records       KPIRecords[]
 
   @@index([company_id])
