@@ -5,15 +5,21 @@ const LIMITS = {
     description: { max: 1000 },
 };
 
+const nullableIdSchema = z.preprocess((value) => {
+    if (value === undefined) return undefined;
+    if (value === null || value === "" || value === 0 || value === "0") return null;
+    return value;
+}, z.coerce.number().int().positive().nullable().optional());
+
 export const createObjectiveSchema = z.object({
     title: z
         .string()
         .min(LIMITS.title.min, "title is required")
         .max(LIMITS.title.max, `title must not exceed ${LIMITS.title.max} characters`),
     cycle_id: z.coerce.number().int().positive("cycle_id is required"),
-    unit_id: z.coerce.number().int().positive().nullable().optional(),
-    owner_id: z.coerce.number().int().positive().nullable().optional(),
-    parent_objective_id: z.coerce.number().int().positive().nullable().optional(),
+    unit_id: nullableIdSchema,
+    owner_id: nullableIdSchema,
+    parent_objective_id: nullableIdSchema,
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
     description: z.string().max(LIMITS.description.max).nullable().optional(),
 });
@@ -24,7 +30,7 @@ export const updateObjectiveSchema = z.object({
         .min(LIMITS.title.min, "title cannot be empty")
         .max(LIMITS.title.max, `title must not exceed ${LIMITS.title.max} characters`)
         .optional(),
-    parent_objective_id: z.coerce.number().int().positive().nullable().optional(),
+    parent_objective_id: nullableIdSchema,
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
     description: z.string().max(LIMITS.description.max).nullable().optional(),
 }).refine((data) => Object.keys(data).length > 0, {

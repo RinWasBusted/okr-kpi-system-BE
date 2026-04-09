@@ -7,6 +7,12 @@ const LIMITS = {
     title: { min: 1, max: 255 },
 };
 
+const nullableIdSchema = z.preprocess((value) => {
+    if (value === undefined) return undefined;
+    if (value === null || value === "" || value === 0 || value === "0") return null;
+    return value;
+}, z.coerce.number().int().positive().nullable().optional());
+
 // KPI Dictionary schemas
 export const createKPIDictionarySchema = z.object({
     name: z
@@ -45,9 +51,9 @@ export const createKPIAssignmentSchema = z.object({
     cycle_id: z.coerce.number().int().positive("cycle_id is required"),
     target_value: z.coerce.number().positive("target_value must be positive"),
     current_value: z.coerce.number().min(0).default(0),
-    unit_id: z.coerce.number().int().positive().nullable().optional(),
-    owner_id: z.coerce.number().int().positive().nullable().optional(),
-    parent_assignment_id: z.coerce.number().int().positive().nullable().optional(),
+    unit_id: nullableIdSchema,
+    owner_id: nullableIdSchema,
+    parent_assignment_id: nullableIdSchema,
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
     due_date: z.string().datetime().nullable().optional(),
 }).refine(

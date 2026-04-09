@@ -13,6 +13,42 @@ const isAncestorOrEqual = (candidate, descendant) => {
     return descendant === candidate || descendant.startsWith(`${candidate}.`);
 };
 
+/**
+ * Check if user is owner of any ancestor objective in the hierarchy
+ * @param {number} userId - The user ID
+ * @param {number} objectiveId - The objective ID to check
+ * @returns {Promise<boolean>} - True if user owns any ancestor objective
+ */
+const isOwnerOfAncestorObjective = async (userId, objectiveId) => {
+    if (!userId || !objectiveId) return false;
+
+    // Query to find all ancestor objectives and check if user is owner of any
+    const ancestors = await prisma.$queryRaw`
+        WITH RECURSIVE objective_ancestors AS (
+            -- Base case: start from the given objective
+            SELECT id, parent_objective_id, owner_id
+            FROM "Objectives"
+            WHERE id = ${objectiveId}
+              AND deleted_at IS NULL
+
+            UNION ALL
+
+            -- Recursive case: join with parent objectives
+            SELECT o.id, o.parent_objective_id, o.owner_id
+            FROM "Objectives" o
+            INNER JOIN objective_ancestors oa ON o.id = oa.parent_objective_id
+            WHERE o.deleted_at IS NULL
+        )
+        SELECT 1
+        FROM objective_ancestors
+        WHERE owner_id = ${userId}
+          AND id != ${objectiveId}
+        LIMIT 1
+    `;
+
+    return ancestors.length > 0;
+};
+
 export const canViewObjective = async (user, objective, unitContext) => {
     if (!objective) return false;
     if (user.role === UserRole.ADMIN_COMPANY) return true;
@@ -34,7 +70,12 @@ export const canViewObjective = async (user, objective, unitContext) => {
     if (objective.visibility === "PRIVATE") {
         if (objective.owner_id === user.id) return true;
         if (!objectivePath || !userPath) return false;
-        return objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath);
+        if (objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath)) return true;
+
+        // Check if user is owner of any ancestor objective
+        if (objective.id && await isOwnerOfAncestorObjective(user.id, objective.id)) return true;
+
+        return false;
     }
 
     return false;

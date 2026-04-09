@@ -7,6 +7,9 @@ import {
   isAncestorUnit,
 } from "../../../utils/path.js";
 import { UserRole } from "@prisma/client";
+import {
+    notifyKPIAssignmentEvent,
+} from "../../../utils/notificationHelper.js";
 
 const toDateOnlyUtc = (date) =>
   new Date(
@@ -806,10 +809,34 @@ export const createKPIAssignment = async (user, payload) => {
 
   const result = await formatAssignment(created[0], user);
 
-  // If parent_assignment_id is provided, recalculate parent's current_value
-  if (payload.parent_assignment_id) {
-    await recalculateCurrentValueFromChildren(payload.parent_assignment_id);
-  }
+    // If parent_assignment_id is provided, recalculate parent's current_value
+    if (payload.parent_assignment_id) {
+        await recalculateCurrentValueFromChildren(payload.parent_assignment_id);
+    }
+
+    // Notify users about new KPI assignment
+    try {
+        const kpiDictionary = await prisma.kPIDictionaries.findUnique({
+            where: { id: payload.kpi_dictionary_id },
+            select: { name: true },
+        });
+
+        await notifyKPIAssignmentEvent({
+            companyId: user.company_id,
+            eventType: "CREATED",
+            assignment: {
+                id: created[0].id,
+                unit_id: unitId,
+                owner_id: ownerId,
+            },
+            kpiName: kpiDictionary?.name || "KPI Assignment",
+            actorName: user.full_name || user.email,
+            actorId: user.id,
+        });
+    } catch (error) {
+        // Log error but don't fail the main operation
+        console.error("Failed to send KPI assignment notification:", error);
+    }
 
   return result;
 };
@@ -930,10 +957,34 @@ export const updateKPIAssignment = async (user, assignmentId, payload) => {
         WHERE id = ${assignmentId}
     `;
 
-  const updatedWithPath = {
-    ...updated,
-    access_path: pathResult[0]?.access_path || null,
-  };
+    const updatedWithPath = {
+        ...updated,
+        access_path: pathResult[0]?.access_path || null,
+    };
+
+    // Notify users about KPI assignment update
+    try {
+        const kpiDictionary = await prisma.kPIDictionaries.findUnique({
+            where: { id: assignment.kpi_dictionary_id },
+            select: { name: true },
+        });
+
+        await notifyKPIAssignmentEvent({
+            companyId: user.company_id,
+            eventType: "UPDATED",
+            assignment: {
+                id: assignmentId,
+                unit_id: assignment.unit_id,
+                owner_id: assignment.owner_id,
+            },
+            kpiName: kpiDictionary?.name || "KPI Assignment",
+            actorName: user.full_name || user.email,
+            actorId: user.id,
+        });
+    } catch (error) {
+        // Log error but don't fail the main operation
+        console.error("Failed to send KPI assignment notification:", error);
+    }
 
   return await formatAssignment(updatedWithPath, user);
 };
@@ -949,12 +1000,20 @@ export const deleteKPIAssignment = async (
 
   if (!assignment) throw new AppError("KPI Assignment not found", 404);
 
-  const allowed = await canUpdateKPIAssignment(user, assignment);
-  if (!allowed)
-    throw new AppError(
-      "You do not have permission to delete this assignment",
-      403,
-    );
+    const allowed = await canUpdateKPIAssignment(user, assignment);
+    if (!allowed) throw new AppError("You do not have permission to delete this assignment", 403);
+
+    // Get KPI name for notification before deletion
+    let kpiName = "KPI Assignment";
+    try {
+        const kpiDictionary = await prisma.kPIDictionaries.findUnique({
+            where: { id: assignment.kpi_dictionary_id },
+            select: { name: true },
+        });
+        if (kpiDictionary?.name) kpiName = kpiDictionary.name;
+    } catch (error) {
+        // Ignore error, use default name
+    }
 
   const parentAssignmentId = assignment.parent_assignment_id;
 
@@ -988,10 +1047,29 @@ export const deleteKPIAssignment = async (
     });
   }
 
-  // If parent exists, recalculate its current_value
-  if (parentAssignmentId) {
-    await recalculateCurrentValueFromChildren(parentAssignmentId);
-  }
+    // If parent exists, recalculate its current_value
+    if (parentAssignmentId) {
+        await recalculateCurrentValueFromChildren(parentAssignmentId);
+    }
+
+    // Notify users about KPI assignment deletion
+    try {
+        await notifyKPIAssignmentEvent({
+            companyId: user.company_id,
+            eventType: "DELETED",
+            assignment: {
+                id: assignmentId,
+                unit_id: assignment.unit_id,
+                owner_id: assignment.owner_id,
+            },
+            kpiName: kpiName,
+            actorName: user.full_name || user.email,
+            actorId: user.id,
+        });
+    } catch (error) {
+        // Log error but don't fail the main operation
+        console.error("Failed to send KPI assignment notification:", error);
+    }
 };
 
 export const getKPIAssignmentById = async (user, assignmentId) => {

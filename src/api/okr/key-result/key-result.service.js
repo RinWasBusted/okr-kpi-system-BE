@@ -11,6 +11,9 @@ import {
     getObjectiveAccessPath,
     getUnitPath,
 } from "../../../utils/path.js";
+import {
+    notifyObjectiveEvent,
+} from "../../../utils/notificationHelper.js";
 
 // Utility functions
 const toDateOnlyUtc = (date) =>
@@ -203,6 +206,16 @@ export const createKeyResult = async (user, objectiveId, payload) => {
 
     await recalculateObjectiveProgress(objectiveId);
 
+    // Notify users in the unit about new key result
+    await notifyObjectiveEvent({
+        companyId: user.company_id,
+        eventType: "UPDATED",
+        objective: { id: objectiveId, title: objective.title, unit_id: objective.unit_id, owner_id: objective.owner_id },
+        actorName: user.full_name || user.email,
+        actorId: user.id,
+        refType: "OBJECTIVE",
+    });
+
     return formatKeyResult(created, new Date());
 };
 
@@ -261,6 +274,16 @@ export const updateKeyResult = async (user, keyResultId, updates) => {
 
     await recalculateObjectiveProgress(keyResult.objective_id);
 
+    // Notify users in the unit about key result update
+    await notifyObjectiveEvent({
+        companyId: user.company_id,
+        eventType: "UPDATED",
+        objective: { id: keyResult.objective_id, title: keyResult.objective.title, unit_id: keyResult.objective.unit_id, owner_id: keyResult.objective.owner_id },
+        actorName: user.full_name || user.email,
+        actorId: user.id,
+        refType: "OBJECTIVE",
+    });
+
     return formatKeyResult(updated, new Date());
 };
 
@@ -288,4 +311,14 @@ export const deleteKeyResult = async (user, keyResultId) => {
     ]);
 
     await recalculateObjectiveProgress(keyResult.objective_id);
+
+    // Notify users in the unit about key result deletion
+    await notifyObjectiveEvent({
+        companyId: user.company_id,
+        eventType: "UPDATED",
+        objective: { id: keyResult.objective_id, title: keyResult.objective.title, unit_id: keyResult.objective.unit_id, owner_id: keyResult.objective.owner_id },
+        actorName: user.full_name || user.email,
+        actorId: user.id,
+        refType: "OBJECTIVE",
+    });
 };
