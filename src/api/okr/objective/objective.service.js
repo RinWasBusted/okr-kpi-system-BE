@@ -970,11 +970,12 @@ export const rejectObjective = async (user, objectiveId, comment) => {
       data: {
         company_id: user.company_id,
         objective_id: objectiveId,
+        kr_tag_id: null,
         user_id: user.id,
+        parent_id: null,
         content: comment,
-        type: "CONCERN",
         sentiment: "NEGATIVE",
-        status: "ACTIVE",
+        status: "CONCERN",
       },
     });
   }

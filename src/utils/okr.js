@@ -1,16 +1,21 @@
 import prisma from "./prisma.js";
 import AppError from "./appError.js";
 import { UserRole } from "@prisma/client";
-import { getUnitPath, getObjectiveAccessPath, isAncestorUnit, isUnitManager } from "./path.js";
+import {
+  getUnitPath,
+  getObjectiveAccessPath,
+  isAncestorUnit,
+  isUnitManager,
+} from "./path.js";
 
 const isDescendantOrEqual = (candidate, ancestor) => {
-    if (!candidate || !ancestor) return false;
-    return candidate === ancestor || candidate.startsWith(`${ancestor}.`);
+  if (!candidate || !ancestor) return false;
+  return candidate === ancestor || candidate.startsWith(`${ancestor}.`);
 };
 
 const isAncestorOrEqual = (candidate, descendant) => {
-    if (!candidate || !descendant) return false;
-    return descendant === candidate || descendant.startsWith(`${candidate}.`);
+  if (!candidate || !descendant) return false;
+  return descendant === candidate || descendant.startsWith(`${candidate}.`);
 };
 
 /**
@@ -20,10 +25,10 @@ const isAncestorOrEqual = (candidate, descendant) => {
  * @returns {Promise<boolean>} - True if user owns any ancestor objective
  */
 const isOwnerOfAncestorObjective = async (userId, objectiveId) => {
-    if (!userId || !objectiveId) return false;
+  if (!userId || !objectiveId) return false;
 
-    // Query to find all ancestor objectives and check if user is owner of any
-    const ancestors = await prisma.$queryRaw`
+  // Query to find all ancestor objectives and check if user is owner of any
+  const ancestors = await prisma.$queryRaw`
         WITH RECURSIVE objective_ancestors AS (
             -- Base case: start from the given objective
             SELECT id, parent_objective_id, owner_id
@@ -46,69 +51,90 @@ const isOwnerOfAncestorObjective = async (userId, objectiveId) => {
         LIMIT 1
     `;
 
-    return ancestors.length > 0;
+  return ancestors.length > 0;
 };
 
 export const canViewObjective = async (user, objective, unitContext) => {
-    if (!objective) return false;
-    if (user.role === UserRole.ADMIN_COMPANY) return true;
+  if (!objective) return false;
+  if (user.role === UserRole.ADMIN_COMPANY) return true;
 
-    if (objective.visibility === "PUBLIC") return true;
+  // Keep permission model consistent: if user can edit, user can always view.
+  if (objective.owner_id && objective.owner_id === user.id) return true;
+  if (objective.unit_id && (await isUnitManager(user.id, objective.unit_id)))
+    return true;
 
-    const userPath = unitContext || (user.unit_id ? await getUnitPath(user.unit_id) : null);
-    const objectivePath =
-        objective.access_path ?? (objective.id ? await getObjectiveAccessPath(objective.id) : null);
+  if (objective.visibility === "PUBLIC") return true;
 
-    if (objective.visibility === "INTERNAL") {
-        if (!objectivePath || !userPath) return false;
-        return (
-            isAncestorOrEqual(objectivePath, userPath) ||
-            isDescendantOrEqual(objectivePath, userPath)
-        );
-    }
+  const userPath =
+    unitContext || (user.unit_id ? await getUnitPath(user.unit_id) : null);
+  const objectivePath =
+    objective.access_path ??
+    (objective.id ? await getObjectiveAccessPath(objective.id) : null);
 
-    if (objective.visibility === "PRIVATE") {
-        if (objective.owner_id === user.id) return true;
-        if (!objectivePath || !userPath) return false;
-        if (objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath)) return true;
+  if (objective.visibility === "INTERNAL") {
+    if (!objectivePath || !userPath) return false;
+    return (
+      isAncestorOrEqual(objectivePath, userPath) ||
+      isDescendantOrEqual(objectivePath, userPath)
+    );
+  }
 
-        // Check if user is owner of any ancestor objective
-        if (objective.id && await isOwnerOfAncestorObjective(user.id, objective.id)) return true;
+  if (objective.visibility === "PRIVATE") {
+    if (objective.owner_id === user.id) return true;
+    if (!objectivePath || !userPath) return false;
+    if (
+      objectivePath !== userPath &&
+      isDescendantOrEqual(objectivePath, userPath)
+    )
+      return true;
 
-        return false;
-    }
+    // Check if user is owner of any ancestor objective
+    if (
+      objective.id &&
+      (await isOwnerOfAncestorObjective(user.id, objective.id))
+    )
+      return true;
 
     return false;
+  }
+
+  return false;
 };
 
 export const canEditObjective = async (user, objective) => {
-    if (!objective) return false;
-    if (user.role === UserRole.ADMIN_COMPANY) return true;
-    if (objective.owner_id && objective.owner_id === user.id) return true;
-    if (objective.unit_id && await isUnitManager(user.id, objective.unit_id)) return true;
-    return false;
+  if (!objective) return false;
+  if (user.role === UserRole.ADMIN_COMPANY) return true;
+  if (objective.owner_id && objective.owner_id === user.id) return true;
+  if (objective.unit_id && (await isUnitManager(user.id, objective.unit_id)))
+    return true;
+  return false;
 };
 
 export const canApproveObjective = async (user, objective) => {
-    if (!objective) return false;
-    if (user.role === UserRole.ADMIN_COMPANY) return true;
-    if (!user.unit_id) return false;
+  if (!objective) return false;
+  if (user.role === UserRole.ADMIN_COMPANY) return true;
+  if (!user.unit_id) return false;
 
-    const userPath = await getUnitPath(user.unit_id);
-    const objectivePath = objective.access_path ?? (objective.id ? await getObjectiveAccessPath(objective.id) : null);
-    
-    if (!userPath || !objectivePath) return false;
-    return objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath);
+  const userPath = await getUnitPath(user.unit_id);
+  const objectivePath =
+    objective.access_path ??
+    (objective.id ? await getObjectiveAccessPath(objective.id) : null);
+
+  if (!userPath || !objectivePath) return false;
+  return (
+    objectivePath !== userPath && isDescendantOrEqual(objectivePath, userPath)
+  );
 };
 
 export const ensureCycleUnlocked = async (cycleId) => {
-    const cycle = await prisma.cycles.findFirst({
-        where: { id: cycleId },
-        select: { is_locked: true },
-    });
+  const cycle = await prisma.cycles.findFirst({
+    where: { id: cycleId },
+    select: { is_locked: true },
+  });
 
-    if (!cycle) throw new AppError("Cycle not found", 404);
-    if (cycle.is_locked) throw new AppError("Cycle is locked", 403, "CYCLE_LOCKED");
+  if (!cycle) throw new AppError("Cycle not found", 404);
+  if (cycle.is_locked)
+    throw new AppError("Cycle is locked", 403, "CYCLE_LOCKED");
 };
 
 /**
@@ -126,112 +152,123 @@ export const ensureCycleUnlocked = async (cycleId) => {
  * // MINIMIZE: Defect reduction (start: 100, target: 20, current: 60) → 50%
  * // TARGET: Temperature control (start: 20, target: 25, current: 22.5) → 50%
  */
-export const calculateKeyResultProgress = (currentValue, targetValue, startValue, evaluationMethod) => {
-    // Explicitly convert to numbers to handle Decimal/string types from Prisma
-    const actual = parseFloat(currentValue);
-    const target = parseFloat(targetValue);
-    const start = parseFloat(startValue);
+export const calculateKeyResultProgress = (
+  currentValue,
+  targetValue,
+  startValue,
+  evaluationMethod,
+) => {
+  // Explicitly convert to numbers to handle Decimal/string types from Prisma
+  const actual = parseFloat(currentValue);
+  const target = parseFloat(targetValue);
+  const start = parseFloat(startValue);
 
-    // Validate inputs
-    if (isNaN(actual) || isNaN(target) || isNaN(start)) {
-        return 0;
-    }
+  // Validate inputs
+  if (isNaN(actual) || isNaN(target) || isNaN(start)) {
+    return 0;
+  }
 
-    // Edge case: start equals target
-    if (start === target) {
+  // Edge case: start equals target
+  if (start === target) {
+    return actual === target ? 100 : 0;
+  }
+
+  let progress = 0;
+
+  switch (evaluationMethod) {
+    case "MAXIMIZE":
+      // Higher is better. Formula: (actual - start) / (target - start) * 100
+      // Example: start=0, target=100, actual=50 → 50%
+      progress = ((actual - start) / (target - start)) * 100;
+      break;
+
+    case "MINIMIZE":
+      // Lower is better. Formula: (start - actual) / (start - target) * 100
+      // Example: start=100, target=20, actual=60 → 50%
+      progress = ((start - actual) / (start - target)) * 100;
+      break;
+
+    case "TARGET":
+      // Closer to target is better. Formula: (1 - |actual - target| / |start - target|) * 100
+      // Example: start=20, target=25, actual=22.5 → 50%
+      // Symmetric: actual=8 and actual=12 with target=10 are equally off
+      const deviation = Math.abs(actual - target);
+      const maxDeviation = Math.abs(start - target);
+      if (maxDeviation === 0) {
         return actual === target ? 100 : 0;
-    }
+      }
+      progress = (1 - deviation / maxDeviation) * 100;
+      break;
 
-    let progress = 0;
+    default:
+      // Fallback to MAXIMIZE behavior for unknown methods
+      progress = ((actual - start) / (target - start)) * 100;
+  }
 
-    switch (evaluationMethod) {
-        case "MAXIMIZE":
-            // Higher is better. Formula: (actual - start) / (target - start) * 100
-            // Example: start=0, target=100, actual=50 → 50%
-            progress = ((actual - start) / (target - start)) * 100;
-            break;
-
-        case "MINIMIZE":
-            // Lower is better. Formula: (start - actual) / (start - target) * 100
-            // Example: start=100, target=20, actual=60 → 50%
-            progress = ((start - actual) / (start - target)) * 100;
-            break;
-
-        case "TARGET":
-            // Closer to target is better. Formula: (1 - |actual - target| / |start - target|) * 100
-            // Example: start=20, target=25, actual=22.5 → 50%
-            // Symmetric: actual=8 and actual=12 with target=10 are equally off
-            const deviation = Math.abs(actual - target);
-            const maxDeviation = Math.abs(start - target);
-            if (maxDeviation === 0) {
-                return actual === target ? 100 : 0;
-            }
-            progress = (1 - deviation / maxDeviation) * 100;
-            break;
-
-        default:
-            // Fallback to MAXIMIZE behavior for unknown methods
-            progress = ((actual - start) / (target - start)) * 100;
-    }
-
-    // Bound between 0% and 100% for Key Results
-    const boundedProgress = Math.max(0, Math.min(progress, 100));
-    // Round to 2 decimal places
-    return Math.round(boundedProgress * 100) / 100;
+  // Bound between 0% and 100% for Key Results
+  const boundedProgress = Math.max(0, Math.min(progress, 100));
+  // Round to 2 decimal places
+  return Math.round(boundedProgress * 100) / 100;
 };
 
 // Calculate progress status based on progress_percentage
 // Returns ProgressStatus enum values
 const calculateProgressStatus = (progress) => {
-    const p = Number(progress) || 0;
-    if (p === 0) return "NOT_STARTED";
-    if (p >= 100) return "COMPLETED";
-    if (p >= 80) return "ON_TRACK";
-    if (p >= 30) return "AT_RISK";
-    return "CRITICAL";
+  const p = Number(progress) || 0;
+  if (p === 0) return "NOT_STARTED";
+  if (p >= 100) return "COMPLETED";
+  if (p >= 80) return "ON_TRACK";
+  if (p >= 30) return "AT_RISK";
+  return "CRITICAL";
 };
 
 export const recalculateObjectiveProgress = async (objectiveId) => {
-    const keyResults = await prisma.keyResults.findMany({
-        where: { objective_id: objectiveId },
-        select: { progress_percentage: true, weight: true },
-    });
+  const keyResults = await prisma.keyResults.findMany({
+    where: { objective_id: objectiveId },
+    select: { progress_percentage: true, weight: true },
+  });
 
-    const progress = keyResults.reduce(
-        (sum, kr) => sum + (kr.progress_percentage * kr.weight) / 100,
-        0,
-    );
-    // Round to 2 decimal places
-    const roundedProgress = Math.round(progress * 100) / 100;
+  const progress = keyResults.reduce(
+    (sum, kr) => sum + (kr.progress_percentage * kr.weight) / 100,
+    0,
+  );
+  // Round to 2 decimal places
+  const roundedProgress = Math.round(progress * 100) / 100;
 
-    // Get current objective status
-    const objective = await prisma.objectives.findUnique({
-        where: { id: objectiveId },
-        select: { status: true },
-    });
+  // Get current objective status
+  const objective = await prisma.objectives.findUnique({
+    where: { id: objectiveId },
+    select: { status: true },
+  });
 
-    // Only update status if objective is in a progress-based status (not Draft, Pending_Approval, or Rejected)
-    const progressBasedStatuses = ["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"];
-    const updateData = { progress_percentage: roundedProgress };
+  // Only update status if objective is in a progress-based status (not Draft, Pending_Approval, or Rejected)
+  const progressBasedStatuses = [
+    "NOT_STARTED",
+    "ON_TRACK",
+    "AT_RISK",
+    "CRITICAL",
+    "COMPLETED",
+  ];
+  const updateData = { progress_percentage: roundedProgress };
 
-    if (progressBasedStatuses.includes(objective?.status)) {
-        const newStatus = calculateProgressStatus(roundedProgress);
-        updateData.status = newStatus;
-    }
+  if (progressBasedStatuses.includes(objective?.status)) {
+    const newStatus = calculateProgressStatus(roundedProgress);
+    updateData.status = newStatus;
+  }
 
-    await prisma.objectives.update({
-        where: { id: objectiveId },
-        data: updateData,
-    });
+  await prisma.objectives.update({
+    where: { id: objectiveId },
+    data: updateData,
+  });
 
-    return roundedProgress;
+  return roundedProgress;
 };
 
 export default {
-    canViewObjective,
-    canEditObjective,
-    canApproveObjective,
-    ensureCycleUnlocked,
-    calculateKeyResultProgress,
-    recalculateObjectiveProgress,
+  canViewObjective,
+  canEditObjective,
+  canApproveObjective,
+  ensureCycleUnlocked,
+  calculateKeyResultProgress,
+  recalculateObjectiveProgress,
 };
