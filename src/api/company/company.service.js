@@ -61,11 +61,19 @@ export const getCompanyStats = async (user) => {
             },
         }),
         prisma.objectives.findMany({
-            where: { company_id: user.company_id, unit_id: null, deleted_at: null },
+            where: {
+                company_id: user.company_id,
+                unit_id: null,
+                deleted_at: null,
+            },
             select: { progress_percentage: true },
         }),
         prisma.kPIAssignments.findMany({
-            where: { company_id: user.company_id, unit_id: null, deleted_at: null },
+            where: {
+                company_id: user.company_id,
+                unit_id: null,
+                deleted_at: null,
+            },
             select: { progress_percentage: true },
         }),
     ]);
