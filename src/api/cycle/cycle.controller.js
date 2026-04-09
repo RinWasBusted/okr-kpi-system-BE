@@ -177,7 +177,7 @@ export const lockCycle = async (req, res) => {
         const cycleId = parsePositiveInt(req.params.id, null);
         if (!cycleId) throw new AppError("Invalid cycle ID", 400);
 
-        const cycle = await cycleService.lockCycle(companyId, cycleId);
+        const cycle = await cycleService.lockCycle(companyId, cycleId, req.user);
 
         res.success("Cycle locked successfully", 200, { cycle });
     } catch (error) {
@@ -222,7 +222,7 @@ export const cloneCycle = async (req, res) => {
         const result = await cycleService.cloneCycle(companyId, targetCycleId, {
             objective_ids: parsedObjectiveIds,
             kpi_assignment_ids: parsedKpiIds,
-        });
+        }, req.user);
 
         res.success("Items cloned successfully", 201, {
             cloned_objective_ids: result.cloned_objective_ids,

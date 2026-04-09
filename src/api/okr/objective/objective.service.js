@@ -16,6 +16,11 @@ import {
     getUnitAncestors,
     isUnitManager,
 } from "../../../utils/path.js";
+import {
+    notifyObjectiveEvent,
+    notifySpecificUsers,
+    getUsersInUnitAndAncestors,
+} from "../../../utils/notificationHelper.js";
 
 // Visibility hierarchy: PUBLIC (1) < INTERNAL (2) < PRIVATE (3)
 // Child objective visibility must be >= parent visibility (more private)
@@ -558,6 +563,15 @@ export const createObjective = async (user, payload) => {
         select: objectiveBaseSelect,
     });
 
+    // Notify users in the unit
+    await notifyObjectiveEvent({
+        companyId: user.company_id,
+        eventType: "CREATED",
+        objective: { id: objectiveId, title: payload.title, unit_id: unitId, owner_id: payload.owner_id },
+        actorName: user.full_name || user.email,
+        actorId: user.id,
+    });
+
     return await formatObjective(objective, false, user);
 };
 
@@ -627,6 +641,15 @@ export const updateObjective = async (user, objectiveId, updates) => {
         select: objectiveBaseSelect,
     });
 
+    // Notify users in the unit (excluding the updater)
+    await notifyObjectiveEvent({
+        companyId: user.company_id,
+        eventType: "UPDATED",
+        objective: { id: objectiveId, title: objective.title, unit_id: objective.unit_id, owner_id: objective.owner_id },
+        actorName: user.full_name || user.email,
+        actorId: user.id,
+    });
+
     return await formatObjective(updated, false, user);
 };
 
@@ -646,6 +669,19 @@ export const submitObjective = async (user, objectiveId) => {
         data: { status: "Pending_Approval", approved_by: null },
         select: objectiveBaseSelect,
     });
+
+    // Notify managers/approvers in ancestor units
+    if (objective.unit_id) {
+        const approverIds = await getUsersInUnitAndAncestors(objective.unit_id, user.company_id);
+        await notifySpecificUsers({
+            companyId: user.company_id,
+            eventType: "STATUS_CHANGED",
+            objective: { id: objectiveId, title: objective.title, unit_id: objective.unit_id, owner_id: objective.owner_id },
+            actorName: user.full_name || user.email,
+            actorId: user.id,
+            recipientIds: approverIds,
+        });
+    }
 
     return await formatObjective(updated, false, user);
 };
@@ -674,6 +710,18 @@ export const approveObjective = async (user, objectiveId) => {
     });
 
     await recalculateObjectiveProgress(objectiveId);
+
+    // Notify the owner about approval
+    if (objective.owner_id && objective.owner_id !== user.id) {
+        await notifySpecificUsers({
+            companyId: user.company_id,
+            eventType: "STATUS_CHANGED",
+            objective: { id: objectiveId, title: objective.title, unit_id: objective.unit_id, owner_id: objective.owner_id },
+            actorName: user.full_name || user.email,
+            actorId: user.id,
+            recipientIds: [objective.owner_id],
+        });
+    }
 
     return await formatObjective(updated, false, user);
 };
@@ -781,6 +829,18 @@ export const rejectObjective = async (user, objectiveId, comment) => {
                 sentiment: "NEGATIVE",
                 status: "ACTIVE",
             },
+        });
+    }
+
+    // Notify the owner about rejection
+    if (objective.owner_id && objective.owner_id !== user.id) {
+        await notifySpecificUsers({
+            companyId: user.company_id,
+            eventType: "STATUS_CHANGED",
+            objective: { id: objectiveId, title: objective.title, unit_id: objective.unit_id, owner_id: objective.owner_id },
+            actorName: user.full_name || user.email,
+            actorId: user.id,
+            recipientIds: [objective.owner_id],
         });
     }
 

@@ -1,5 +1,6 @@
 import prisma from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
+import { notifyCycleEvent } from "../../utils/notificationHelper.js";
 
 const cycleSelect = {
     id: true,
@@ -302,7 +303,7 @@ export const deleteCycle = async (companyId, cycleId) => {
 
 // ─── Lock ─────────────────────────────────────────────────────────────────────
 
-export const lockCycle = async (companyId, cycleId) => {
+export const lockCycle = async (companyId, cycleId, user = null) => {
     const existing = await prisma.cycles.findFirst({
         where: { id: cycleId, company_id: companyId },
         select: cycleSelect,
@@ -319,6 +320,22 @@ export const lockCycle = async (companyId, cycleId) => {
         select: cycleSelect,
     });
 
+    // Notify all company users about cycle lock
+    if (user) {
+        try {
+            await notifyCycleEvent({
+                companyId,
+                eventType: "LOCKED",
+                cycle: { id: cycleId, name: existing.name },
+                actorName: user.full_name || user.email,
+                actorId: user.id,
+            });
+        } catch (error) {
+            // Log error but don't fail the main operation
+            console.error("Failed to send cycle lock notification:", error);
+        }
+    }
+
     return formatCycle(updated);
 };
 
@@ -327,7 +344,8 @@ export const lockCycle = async (companyId, cycleId) => {
 export const cloneCycle = async (
     companyId,
     targetCycleId,
-    { objective_ids, kpi_assignment_ids }
+    { objective_ids, kpi_assignment_ids },
+    user = null
 ) => {
     // Verify target cycle exists and belongs to company
     const targetCycle = await prisma.cycles.findFirst({
@@ -497,6 +515,29 @@ export const cloneCycle = async (
             cloned_kpi_assignment_ids: Array.from(assignmentIdMap.values()),
         };
     });
+
+    // Notify about successful cloning
+    if (user) {
+        try {
+            const targetCycle = await prisma.cycles.findFirst({
+                where: { id: targetCycleId, company_id: companyId },
+                select: { id: true, name: true },
+            });
+
+            if (targetCycle) {
+                await notifyCycleEvent({
+                    companyId,
+                    eventType: "CLONED",
+                    cycle: { id: targetCycleId, name: targetCycle.name },
+                    actorName: user.full_name || user.email,
+                    actorId: user.id,
+                });
+            }
+        } catch (error) {
+            // Log error but don't fail the main operation
+            console.error("Failed to send cycle clone notification:", error);
+        }
+    }
 
     return result;
 };

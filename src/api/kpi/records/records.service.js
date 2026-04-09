@@ -2,6 +2,7 @@ import prisma from "../../../utils/prisma.js";
 import AppError from "../../../utils/appError.js";
 import { isAncestorUnit } from "../../../utils/path.js";
 import { recalculateCurrentValueFromChildren } from "../assignments/assignments.service.js";
+import { notifyKPIAssignmentEvent } from "../../../utils/notificationHelper.js";
 
 const toDateOnlyUtc = (date) =>
     new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -152,6 +153,25 @@ export const createKPIRecord = async (user, assignmentId, payload) => {
     const totalPeriodDays = (periodEnd - periodStart) / (1000 * 60 * 60 * 24);
     const elapsedDays = Math.max(0, Math.min(totalPeriodDays, (now - periodStart) / (1000 * 60 * 60 * 24)));
     const timeElapsedPercentage = totalPeriodDays > 0 ? (elapsedDays / totalPeriodDays) * 100 : 0;
+
+    // Notify users about KPI progress update
+    try {
+        await notifyKPIAssignmentEvent({
+            companyId: user.company_id,
+            eventType: "UPDATED",
+            assignment: {
+                id: assignmentId,
+                unit_id: assignment.unit_id,
+                owner_id: assignment.owner_id,
+            },
+            kpiName: assignment.kpi_dictionary?.name || "KPI Assignment",
+            actorName: user.full_name || user.email,
+            actorId: user.id,
+        });
+    } catch (error) {
+        // Log error but don't fail the main operation
+        console.error("Failed to send KPI record notification:", error);
+    }
 
     return {
         ...record,

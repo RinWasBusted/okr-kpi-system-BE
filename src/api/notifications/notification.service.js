@@ -1,5 +1,39 @@
 import prisma from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
+import { generateMessage, generateTitle } from "../../utils/notification.js";
+
+const normalizeActorName = (value) => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const resolveActorName = async ({ actorName, actorId, companyId }, tx) => {
+  const normalized = normalizeActorName(actorName);
+  if (normalized) return normalized;
+
+  if (Number.isInteger(actorId) && actorId > 0) {
+    const actor = await tx.users.findFirst({
+      where: {
+        id: actorId,
+        company_id: companyId,
+        deleted_at: null,
+      },
+      select: {
+        full_name: true,
+        email: true,
+      },
+    });
+
+    const fullName = normalizeActorName(actor?.full_name);
+    if (fullName) return fullName;
+
+    const email = normalizeActorName(actor?.email);
+    if (email) return email;
+  }
+
+  return "Người dùng";
+};
 
 export const listNotifications = async (user, { page, pageSize, isRead }) => {
   const skip = (page - 1) * pageSize;
@@ -141,20 +175,42 @@ export const createNotification = async (
     eventType,
     refType,
     refId,
+    actorId,
     actorName,
     entityName,
     recipientIds,
   },
   tx = prisma
 ) => {
-  const { generateMessage, generateTitle } = await import(
-    "../../utils/notification.js"
+  // Validate required parameters
+  if (!Number.isInteger(companyId) || companyId <= 0) {
+    throw new AppError("Invalid company ID: must be a positive integer", 400);
+  }
+  if (!eventType || typeof eventType !== "string" || !eventType.trim()) {
+    throw new AppError("Event type is required and must be a non-empty string", 400);
+  }
+  if (!refType || typeof refType !== "string" || !refType.trim()) {
+    throw new AppError("Ref type is required and must be a non-empty string", 400);
+  }
+  if (!Number.isInteger(refId) || refId <= 0) {
+    throw new AppError("Invalid ref ID: must be a positive integer", 400);
+  }
+  if (!Array.isArray(recipientIds) || recipientIds.length === 0) {
+    throw new AppError("Recipient IDs must be a non-empty array", 400);
+  }
+  if (!recipientIds.every((id) => Number.isInteger(id) && id > 0)) {
+    throw new AppError("All recipient IDs must be positive integers", 400);
+  }
+
+  const finalActorName = await resolveActorName(
+    { actorName, actorId, companyId },
+    tx
   );
 
   const message = generateMessage({
     eventType,
     refType,
-    actorName,
+    actorName: finalActorName,
     entityName,
   });
   const title = generateTitle({ eventType, refType, entityName });

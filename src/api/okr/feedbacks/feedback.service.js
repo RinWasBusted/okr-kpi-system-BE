@@ -3,6 +3,10 @@ import AppError from "../../../utils/appError.js";
 import { UserRole } from "@prisma/client";
 import { canViewObjective } from "../../../utils/okr.js";
 import { getCloudinaryImageUrl } from "../../../utils/cloudinary.js";
+import {
+    notifyFeedbackEvent,
+    getUsersInUnitTree,
+} from "../../../utils/notificationHelper.js";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -175,6 +179,40 @@ export const createFeedback = async (user, objectiveId, payload) => {
         select: feedbackSelect,
     });
 
+    // Notify relevant users about new feedback
+    try {
+        let recipientIds = [];
+
+        // Always notify the objective owner
+        if (objective.owner_id && objective.owner_id !== user.id) {
+            recipientIds.push(objective.owner_id);
+        }
+
+        // Notify users in the unit tree
+        if (objective.unit_id) {
+            const unitUsers = await getUsersInUnitTree(objective.unit_id, user.company_id);
+            recipientIds = [...new Set([...recipientIds, ...unitUsers])];
+        }
+
+        // Filter out the actor
+        recipientIds = recipientIds.filter((id) => id !== user.id);
+
+        if (recipientIds.length > 0) {
+            await notifyFeedbackEvent({
+                companyId: user.company_id,
+                eventType: "COMMENTED",
+                objectiveId,
+                objectiveTitle: objective.title,
+                actorName: user.full_name || user.email,
+                actorId: user.id,
+                recipientIds,
+            });
+        }
+    } catch (error) {
+        // Log error but don't fail the main operation
+        console.error("Failed to send feedback notification:", error);
+    }
+
     return formatFeedback(created);
 };
 
@@ -302,6 +340,51 @@ export const createReply = async (user, parentFeedbackId, payload) => {
         },
         select: feedbackSelect,
     });
+
+    // Notify relevant users about new reply
+    try {
+        // Get the parent feedback creator
+        const parentFeedback = await prisma.feedbacks.findUnique({
+            where: { id: parentFeedbackId },
+            select: { user_id: true },
+        });
+
+        let recipientIds = [];
+
+        // Notify parent feedback creator (if not the actor)
+        if (parentFeedback?.user_id && parentFeedback.user_id !== user.id) {
+            recipientIds.push(parentFeedback.user_id);
+        }
+
+        // Also notify objective owner (if different from parent creator and actor)
+        if (objective.owner_id && objective.owner_id !== user.id && !recipientIds.includes(objective.owner_id)) {
+            recipientIds.push(objective.owner_id);
+        }
+
+        // Notify users in the unit tree
+        if (objective.unit_id) {
+            const unitUsers = await getUsersInUnitTree(objective.unit_id, user.company_id);
+            recipientIds = [...new Set([...recipientIds, ...unitUsers])];
+        }
+
+        // Filter out the actor
+        recipientIds = recipientIds.filter((id) => id !== user.id);
+
+        if (recipientIds.length > 0) {
+            await notifyFeedbackEvent({
+                companyId: user.company_id,
+                eventType: "REPLIED",
+                objectiveId: parent.objective_id,
+                objectiveTitle: objective.title,
+                actorName: user.full_name || user.email,
+                actorId: user.id,
+                recipientIds,
+            });
+        }
+    } catch (error) {
+        // Log error but don't fail the main operation
+        console.error("Failed to send reply notification:", error);
+    }
 
     return formatFeedback(created);
 };
