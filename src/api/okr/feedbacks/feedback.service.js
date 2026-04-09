@@ -8,6 +8,23 @@ import {
   getUsersInUnitTree,
 } from "../../../utils/notificationHelper.js";
 
+const FEEDBACK_ALLOWED_OBJECTIVE_STATUSES = [
+  "NOT_STARTED",
+  "ON_TRACK",
+  "AT_RISK",
+  "CRITICAL",
+  "COMPLETED",
+];
+
+const ensureObjectiveAllowsFeedback = (objective) => {
+  if (!FEEDBACK_ALLOWED_OBJECTIVE_STATUSES.includes(objective.status)) {
+    throw new AppError(
+      "Feedback can only be created on active objectives",
+      400,
+    );
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -69,7 +86,7 @@ const formatFeedback = (fb) => ({
 
 const getObjectiveForFeedback = async (objectiveId) => {
   const rows = await prisma.$queryRaw`
-    SELECT id, status, visibility, unit_id, owner_id, access_path::text AS access_path
+    SELECT id, title, status, visibility, unit_id, owner_id, access_path::text AS access_path
     FROM "Objectives"
     WHERE id = ${objectiveId}
       AND deleted_at IS NULL
@@ -160,13 +177,7 @@ export const listFeedbacks = async (
 
 export const createFeedback = async (user, objectiveId, payload) => {
   const objective = await getObjectiveForFeedback(objectiveId);
-
-  if (objective.status !== "Active") {
-    throw new AppError(
-      "Feedback can only be created on active objectives",
-      400,
-    );
-  }
+  ensureObjectiveAllowsFeedback(objective);
 
   if (!(await canViewObjective(user, objective))) {
     throw new AppError(
@@ -353,13 +364,7 @@ export const createReply = async (user, parentFeedbackId, payload) => {
   }
 
   const objective = await getObjectiveForFeedback(parent.objective_id);
-
-  if (objective.status !== "Active") {
-    throw new AppError(
-      "Feedback can only be created on active objectives",
-      400,
-    );
-  }
+  ensureObjectiveAllowsFeedback(objective);
 
   if (!(await canViewObjective(user, objective))) {
     throw new AppError(
