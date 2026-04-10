@@ -3,7 +3,6 @@ import prisma from "../utils/prisma.js";
 /**
  * Get list of active cycle IDs (is_locked = false)
  * 
- * @param {number} companyId - Company ID to filter cycles
  * @returns {Promise<number[]>} Array of active cycle IDs
  */
 export const getActiveCycles = async () => {

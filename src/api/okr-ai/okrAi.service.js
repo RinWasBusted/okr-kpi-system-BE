@@ -138,16 +138,16 @@ function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObject
     `- Avoid duplicating or rephrasing existing key results.`,
     `- Use ${lang} for all natural language fields.`,
     `- Total weight of NEW suggestions must not exceed remaining_weight_budget (= ${remainingWeight.toFixed(2)}).`,
-    `- If there are no existing key results, total weight of new suggestions should be approximately 1.0 (±0.05).`,
+    `- If there are no existing key results, total weight of new suggestions should be approximately 100 (±5).`,
     `- due_date: Use due_date_hint if provided (must be on or before cycle.end_date if cycle exists); otherwise choose a reasonable date within 90 days.`,
     `- evaluation_method: choose "MAXIMIZE" (higher is better), "MINIMIZE" (lower is better), or "TARGET" (hit a specific value) based on the nature of each KR.`,
-    `- start_value: set a realistic baseline (not always 0); use context clues from the objective and related objectives.`,
+    `- start_value: use context clues from the objective and related objectives. If no clues, default to 0.`,
     `- If parent_objective exists, ensure KRs cascade down from it logically.`,
     `- Include an evaluation for each Key Result (fit_score 0-100, fit_reason, issues).`,
     contextInstruction,
     ``,
     `JSON shape:`,
-    `{"suggestions":[{"title": "...","target_value": 0,"start_value": 0,"unit":"...","weight": 0.2,"due_date":"YYYY-MM-DD","evaluation_method":"MAXIMIZE|MINIMIZE|TARGET","evaluation":{"fit_score": 0,"fit_reason":"...","issues":["..."]}}],"overall_feedback":{"summary":"...","alignment_analysis":"...","risks":["..."],"recommendations":["..."]}}`,
+    `{"suggestions":[{"title": "...","target_value": 0,"start_value": 0,"unit":"...","weight": "...","due_date":"YYYY-MM-DD","evaluation_method":"MAXIMIZE|MINIMIZE|TARGET","evaluation":{"fit_score": 0,"fit_reason":"...","issues":["..."]}}],"overall_feedback":{"summary":"...","alignment_analysis":"...","risks":["..."],"recommendations":["..."]}}`,
     ``,
     `Context JSON:`,
     JSON.stringify(context),
@@ -539,6 +539,7 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
 
     // Get usage from LLM result
     usage = llmResult.usage || usage;
+    console.log("[LLM Usage]", usage);
 
     // Calculate remaining weight budget for normalization
     const existingTotalWeight = existingKeyResults.reduce(
@@ -558,11 +559,14 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
       evaluation: s.evaluation,
     }));
 
+    console.log("[Normalized Suggestions]", suggestions);
+
     result = {
       objective: { id: objective.id, title: objective.title },
       suggestions,
       overall_feedback: parsed.overall_feedback,
     };
+    console.log("[Final Result]", result);
 
     // Calculate credit cost for PAY_AS_YOU_GO plan
     const creditCost = company.ai_plan === AIPlan.PAY_AS_YOU_GO
