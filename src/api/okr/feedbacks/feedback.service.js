@@ -52,7 +52,6 @@ const userSelect = {
 const feedbackSelect = {
   id: true,
   objective_id: true,
-  kr_tag_id: true,
   parent_id: true,
   content: true,
   sentiment: true,
@@ -60,13 +59,17 @@ const feedbackSelect = {
   created_at: true,
   updated_at: true,
   user: { select: userSelect },
-  _count: { select: { replies: true } },
+  key_result: {
+    select: {
+      id: true,
+      title: true,
+    },
+  },
 };
 
 const formatFeedback = (fb) => ({
   id: fb.id,
   objective_id: fb.objective_id,
-  kr_tag_id: fb.kr_tag_id ?? null,
   parent_id: fb.parent_id ?? null,
   content: fb.content,
   sentiment: fb.sentiment,
@@ -81,7 +84,12 @@ const formatFeedback = (fb) => ({
           : null,
       }
     : null,
-  reply_count: fb._count?.replies ?? 0,
+  key_result: fb.key_result
+    ? {
+        id: fb.key_result.id,
+        title: fb.key_result.title,
+      }
+    : null,
 });
 
 // ---------------------------------------------------------------------------
@@ -152,29 +160,54 @@ export const listFeedbacks = async (
     );
   }
 
+  // Build where clause with filters
   const where = {
     objective_id: objectiveId,
-    parent_id: null, // top-level only; replies fetched separately via listReplies
     ...(filters.sentiment && { sentiment: filters.sentiment }),
     ...(filters.status && { status: filters.status }),
     ...(filters.kr_tag_id !== undefined && { kr_tag_id: filters.kr_tag_id }),
   };
 
-  const [total, rows] = await Promise.all([
-    prisma.feedbacks.count({ where }),
-    prisma.feedbacks.findMany({
-      where,
-      orderBy: { created_at: "desc" },
-      skip: (page - 1) * per_page,
-      take: per_page,
-      select: feedbackSelect,
-    }),
-  ]);
+  // Fetch all feedbacks (both top-level and replies)
+  const allFeedbacks = await prisma.feedbacks.findMany({
+    where,
+    orderBy: { created_at: "asc" },
+    select: feedbackSelect,
+  });
+
+  // Build tree structure: group by parent_id
+  const feedbacksMap = new Map();
+  const rootFeedbacks = [];
+  const formattedFeedbacks = allFeedbacks.map(formatFeedback);
+
+  // Create map for quick lookup and identify root feedbacks
+  formattedFeedbacks.forEach((fb) => {
+    feedbacksMap.set(fb.id, { ...fb, replies: [] });
+    if (fb.parent_id === null) {
+      rootFeedbacks.push(fb.id);
+    }
+  });
+
+  // Build parent-child relationships
+  formattedFeedbacks.forEach((fb) => {
+    if (fb.parent_id !== null) {
+      const parent = feedbacksMap.get(fb.parent_id);
+      if (parent) {
+        parent.replies.push(feedbacksMap.get(fb.id));
+      }
+    }
+  });
+
+  // Get paginated root feedbacks
+  const total = rootFeedbacks.length;
+  const offset = (page - 1) * per_page;
+  const paginatedRootIds = rootFeedbacks.slice(offset, offset + per_page);
+  const paginatedData = paginatedRootIds.map((id) => feedbacksMap.get(id));
 
   return {
     total,
     last_page: Math.ceil(total / per_page),
-    data: rows.map(formatFeedback),
+    data: paginatedData,
   };
 };
 
@@ -412,32 +445,19 @@ export const createReply = async (user, parentFeedbackId, payload) => {
     );
   }
 
-  const nextStatus = payload.status;
-
-  const created = await prisma.$transaction(async (tx) => {
-    await tx.feedbacks.update({
-      where: { id: parentFeedbackId },
-      data: {
-        status: nextStatus,
-        ...(payload.kr_tag_id !== undefined && {
-          kr_tag_id: payload.kr_tag_id,
-        }),
-      },
-    });
-
-    return tx.feedbacks.create({
-      data: {
-        company_id: user.company_id,
-        objective_id: parent.objective_id,
-        kr_tag_id: payload.kr_tag_id ?? null,
-        user_id: user.id,
-        parent_id: parentFeedbackId,
-        content: payload.content,
-        sentiment: "UNKNOWN",
-        status: nextStatus,
-      },
-      select: feedbackSelect,
-    });
+  // Create reply without modifying parent feedback
+  const created = await prisma.feedbacks.create({
+    data: {
+      company_id: user.company_id,
+      objective_id: parent.objective_id,
+      kr_tag_id: payload.kr_tag_id ?? null,
+      user_id: user.id,
+      parent_id: parentFeedbackId,
+      content: payload.content,
+      sentiment: "UNKNOWN",
+      status: payload.status,
+    },
+    select: feedbackSelect,
   });
 
   // Notify relevant users about new reply

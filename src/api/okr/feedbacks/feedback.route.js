@@ -32,8 +32,8 @@ router.use(authenticate);
  * @swagger
  * /objectives/{objectiveId}/feedbacks:
  *   get:
- *     summary: List feedbacks for an objective
- *     description: Returns top-level feedbacks only.
+ *     summary: List feedbacks for an objective with tree structure
+ *     description: Returns top-level feedbacks with nested replies as tree structure. Replies are included within each root feedback.
  *     tags: [Feedbacks]
  *     parameters:
  *       - in: path
@@ -68,7 +68,7 @@ router.use(authenticate);
  *           default: 20
  *     responses:
  *       200:
- *         description: Feedbacks retrieved successfully
+ *         description: Feedbacks retrieved successfully with tree structure
  *         content:
  *           application/json:
  *             schema:
@@ -78,6 +78,11 @@ router.use(authenticate);
  *                   type: boolean
  *                 message:
  *                   type: string
+ *                 total:
+ *                   type: integer
+ *                   description: Total number of root-level feedbacks
+ *                 last_page:
+ *                   type: integer
  *                 data:
  *                   type: array
  *                   items:
@@ -87,8 +92,10 @@ router.use(authenticate);
  *                         type: integer
  *                       objective_id:
  *                         type: integer
- *                       user_id:
+ *                       parent_id:
  *                         type: integer
+ *                         nullable: true
+ *                         description: null for root-level feedbacks
  *                       content:
  *                         type: string
  *                       sentiment:
@@ -97,29 +104,78 @@ router.use(authenticate);
  *                       status:
  *                         type: string
  *                         enum: [PRAISE, CONCERN, SUGGESTION, QUESTION, BLOCKER, RESOLVED, FLAGGED]
- *                       kr_tag_id:
- *                         type: integer
+ *                       key_result:
+ *                         type: object
  *                         nullable: true
- *                       parent_feedback_id:
- *                         type: integer
- *                         nullable: true
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           title:
+ *                             type: string
  *                       created_at:
  *                         type: string
  *                         format: date-time
  *                       updated_at:
  *                         type: string
  *                         format: date-time
- *                 meta:
- *                   type: object
- *                   properties:
- *                     total:
- *                       type: integer
- *                     page:
- *                       type: integer
- *                     per_page:
- *                       type: integer
- *                     last_page:
- *                       type: integer
+ *                       user:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           full_name:
+ *                             type: string
+ *                           avatar_url:
+ *                             type: string
+ *                             nullable: true
+ *                           job_title:
+ *                             type: string
+ *                             nullable: true
+ *                       replies:
+ *                         type: array
+ *                         description: Nested replies to this feedback (max depth 1)
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             objective_id:
+ *                               type: integer
+ *                             parent_id:
+ *                               type: integer
+ *                             content:
+ *                               type: string
+ *                             sentiment:
+ *                               type: string
+ *                             status:
+ *                               type: string
+ *                             key_result:
+ *                               type: object
+ *                               nullable: true
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 title:
+ *                                   type: string
+ *                             created_at:
+ *                               type: string
+ *                               format: date-time
+ *                             updated_at:
+ *                               type: string
+ *                               format: date-time
+ *                             user:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 full_name:
+ *                                   type: string
+ *                                 avatar_url:
+ *                                   type: string
+ *                                   nullable: true
+ *                                 job_title:
+ *                                   type: string
+ *                                   nullable: true
  *       403:
  *         description: No permission to view this objective
  *       404:
