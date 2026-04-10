@@ -2,12 +2,13 @@ import express from "express";
 import {
     getKeyResults,
     createKeyResult,
+    createMultipleKeyResults,
     updateKeyResult,
     deleteKeyResult,
 } from "./key-result.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
 import { validate } from "../../../middlewares/validate.js";
-import { createKeyResultSchema, updateKeyResultSchema } from "../../../schemas/kpi.schema.js";
+import { createKeyResultSchema, createMultipleKeyResultsSchema, updateKeyResultSchema } from "../../../schemas/kpi.schema.js";
 
 const router = express.Router();
 
@@ -159,6 +160,102 @@ router.get("/objectives/:objective_id/key-results", getKeyResults);
  *         description: Validation error (missing or invalid fields)
  */
 router.post("/objectives/:objective_id/key-results", validate(createKeyResultSchema), createKeyResult);
+
+/**
+ * @swagger
+ * /objectives/{objective_id}/key-results/batch:
+ *   post:
+ *     summary: Create multiple key results for an objective
+ *     tags: [KeyResults]
+ *     parameters:
+ *       - in: path
+ *         name: objective_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The objective ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - key_results
+ *             properties:
+ *               key_results:
+ *                 type: array
+ *                 minItems: 1
+ *                 maxItems: 50
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - title
+ *                     - target_value
+ *                     - unit
+ *                     - weight
+ *                   properties:
+ *                     title:
+ *                       type: string
+ *                       minLength: 1
+ *                       maxLength: 255
+ *                       description: Key result title
+ *                     target_value:
+ *                       type: number
+ *                       exclusiveMinimum: 0
+ *                       description: Target value to achieve
+ *                     current_value:
+ *                       type: number
+ *                       minimum: 0
+ *                       default: 0
+ *                       description: Current value progress (optional, defaults to 0)
+ *                     unit:
+ *                       type: string
+ *                       minLength: 1
+ *                       maxLength: 50
+ *                       description: Unit of measurement
+ *                     weight:
+ *                       type: number
+ *                       minimum: 0
+ *                       maximum: 100
+ *                       description: Weight percentage
+ *                     due_date:
+ *                       type: string
+ *                       format: date
+ *                       description: Due date in YYYY-MM-DD format (optional)
+ *                     evaluation_method:
+ *                       type: string
+ *                       enum: [MAXIMIZE, MINIMIZE, TARGET]
+ *                       description: Evaluation method (optional, defaults to MAXIMIZE)
+ *     responses:
+ *       201:
+ *         description: Key results created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     key_results:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *       400:
+ *         description: Invalid objective ID or no key results provided
+ *       403:
+ *         description: No permission to edit this objective
+ *       404:
+ *         description: Objective not found
+ *       422:
+ *         description: Validation error (total weight exceeds 100 or other validation errors)
+ */
+router.post("/objectives/:objective_id/key-results/batch", validate(createMultipleKeyResultsSchema), createMultipleKeyResults);
 
 /**
  * @swagger

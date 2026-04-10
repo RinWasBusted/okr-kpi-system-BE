@@ -324,6 +324,106 @@ export const updateKeyResult = async (user, keyResultId, updates) => {
     return formatKeyResult(updated, new Date());
 };
 
+export const createMultipleKeyResults = async (user, objectiveId, payloads) => {
+    if (!Array.isArray(payloads) || payloads.length === 0) {
+        throw new AppError("At least one key result is required", 400);
+    }
+
+    if (payloads.length > 50) {
+        throw new AppError("Cannot create more than 50 key results at once", 422);
+    }
+
+    const objective = await getObjectiveForKeyResult(objectiveId);
+
+    const allowed = await canEditObjective(user, objective);
+    if (!allowed) {
+        throw new AppError(
+            "You do not have permission to edit this objective",
+            403,
+        );
+    }
+
+    ensureObjectiveEditableStatus(objective);
+
+    // Get current weight sum
+    const weightSum = await prisma.keyResults.aggregate({
+        where: { objective_id: objectiveId },
+        _sum: { weight: true },
+    });
+
+    const currentTotal = weightSum._sum.weight ?? 0;
+    
+    // Calculate total weight of new KRs
+    const newWeightsTotal = payloads.reduce((sum, p) => sum + (p.weight || 0), 0);
+    
+    if (currentTotal + newWeightsTotal > 100) {
+        throw new AppError(
+            `Total weight of all key results (${Math.round((currentTotal + newWeightsTotal) * 100) / 100}) cannot exceed 100`,
+            422
+        );
+    }
+
+    // Create all KRs in a transaction
+    const created = await prisma.$transaction(async (tx) => {
+        const results = [];
+
+        for (const payload of payloads) {
+            const startValue = payload.start_value ?? payload.current_value ?? 0;
+            const currentValue = payload.current_value ?? 0;
+            const evaluationMethod = payload.evaluation_method ?? "MAXIMIZE";
+
+            const progressPercentage = calculateKeyResultProgress(
+                currentValue,
+                payload.target_value,
+                startValue,
+                evaluationMethod,
+            );
+
+            const kr = await tx.keyResults.create({
+                data: {
+                    company_id: user.company_id,
+                    objective_id: objectiveId,
+                    title: payload.title,
+                    start_value: startValue,
+                    target_value: payload.target_value,
+                    current_value: currentValue,
+                    unit: payload.unit,
+                    weight: payload.weight,
+                    due_date: payload.due_date,
+                    progress_percentage: progressPercentage,
+                    evaluation_method: evaluationMethod,
+                },
+                select: keyResultSelect,
+            });
+
+            results.push(kr);
+        }
+
+        return results;
+    });
+
+    await recalculateObjectiveProgress(objectiveId);
+
+    // Notify users about batch key result creation
+    await notifyObjectiveEvent({
+        companyId: user.company_id,
+        eventType: "UPDATED",
+        objective: {
+            id: objectiveId,
+            title: objective.title,
+            unit_id: objective.unit_id,
+            owner_id: objective.owner_id,
+        },
+        actorName: user.full_name || user.email,
+        actorId: user.id,
+        extraContext: `${created.length} Key Results được thêm`,
+        refType: "OBJECTIVE",
+    });
+
+    const now = new Date();
+    return created.map((kr) => formatKeyResult(kr, now));
+};
+
 export const deleteKeyResult = async (user, keyResultId) => {
     const keyResult = await getKeyResultOrThrow(keyResultId);
 

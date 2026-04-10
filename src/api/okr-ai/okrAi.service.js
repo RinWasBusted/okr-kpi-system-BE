@@ -134,7 +134,6 @@ function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObject
     `- Each Key Result must be strongly aligned with the Objective and realistically achievable within the cycle.`,
     `- Avoid duplicating or rephrasing existing key results.`,
     `- Use ${lang} for all natural language fields.`,
-    `- Weight: each between 0.05 and 1.0.`,
     `- Total weight of NEW suggestions must not exceed remaining_weight_budget (= ${remainingWeight.toFixed(2)}).`,
     `- If there are no existing key results, total weight of new suggestions should be approximately 1.0 (±0.05).`,
     `- due_date: Use due_date_hint if provided (must be on or before cycle.end_date if cycle exists); otherwise choose a reasonable date within 90 days.`,
@@ -453,7 +452,6 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
   ]);
 
   const prompt = buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObjectives: allVisibleObjectives, input, owner, parentObjective });
-
   // Create AI usage log with PENDING status
   const aiUsageLog = await prisma.aIUsageLogs.create({
     data: {
@@ -555,53 +553,3 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
     throw error;
   }
 }
-
-export async function generateTestKeyResults({ input }) {
-  // Minimal context for test: no objectiveId/cycle/unit.
-  const objective = {
-    id: 0,
-    title: input.objective,
-    status: "active",
-    visibility: "private",
-    progress_percentage: 0,
-    owner_id: null,
-    parent_objective_id: null,
-  };
-
-  const cycle = null;
-  const unit = null;
-  const existingKeyResults = [];
-  const owner = null;
-  const parentObjective = null;
-
-  const prompt = buildPrompt({ objective, cycle, unit, existingKeyResults, input, owner, parentObjective });
-
-  // Try once; if the model returns invalid shape, retry with a stricter instruction.
-  let parsed;
-  try {
-    const llmResult = await callLlm(prompt);
-    parsed = LlmResponseSchema.parse(llmResult.json);
-  } catch (e) {
-    const retryPrompt = `${prompt}\n\nIMPORTANT: Output must match the JSON shape exactly. Do not add extra keys.`;
-    const llmResult = await callLlm(retryPrompt);
-    parsed = LlmResponseSchema.parse(llmResult.json);
-  }
-
-  const suggestions = normalizeWeights(parsed.suggestions).map((s) => ({
-    title: s.title,
-    target_value: s.target_value,
-    start_value: s.start_value ?? 0,
-    unit: s.unit,
-    weight: s.weight,
-    due_date: s.due_date,
-    evaluation_method: s.evaluation_method || "MAXIMIZE",
-    evaluation: s.evaluation,
-  }));
-
-  return {
-    objective: { id: objective.id, title: objective.title },
-    suggestions,
-    overall_feedback: parsed.overall_feedback,
-  };
-}
-
