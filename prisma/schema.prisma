@@ -201,6 +201,7 @@ model KPIRecords {
   period_end          DateTime       @db.Date
   actual_value        Float
   progress_percentage Float
+  evidence_url        String?
   status              ProgressStatus
   trend               KPITrend
   created_at          DateTime       @default(now())
@@ -271,7 +272,7 @@ model CheckIns {
   user_id           Int
   achieved_value    Float
   progress_snapshot Float
-  evidence_url      String
+  evidence_url      String?
   comment           String?
   created_at        DateTime @default(now())
 

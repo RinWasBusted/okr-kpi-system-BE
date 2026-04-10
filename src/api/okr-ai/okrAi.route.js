@@ -55,6 +55,15 @@ const router = express.Router();
  *                   unit:
  *                     type: string
  *                     example: "%"
+ *                   evaluation_method:
+ *                     type: string
+ *                     enum: [MAXIMIZE, MINIMIZE, TARGET]
+ *                     description: Preferred evaluation method for generated KRs
+ *                   context:
+ *                     type: string
+ *                     maxLength: 1000
+ *                     description: Additional context to help AI understand requirements (e.g., business domain, constraints, team size)
+ *                     example: "This is for a fintech startup focusing on mobile payments. Team has 3 engineers."
  *     responses:
  *       200:
  *         description: Generated key results successfully
@@ -92,6 +101,9 @@ const router = express.Router();
  *                           target_value:
  *                             type: number
  *                             example: 75
+ *                           start_value:
+ *                             type: number
+ *                             example: 45
  *                           unit:
  *                             type: string
  *                             example: "%"
@@ -102,6 +114,10 @@ const router = express.Router();
  *                             type: string
  *                             format: date
  *                             example: "2026-12-31"
+ *                           evaluation_method:
+ *                             type: string
+ *                             enum: [MAXIMIZE, MINIMIZE, TARGET]
+ *                             example: MAXIMIZE
  *                           evaluation:
  *                             type: object
  *                             properties:
@@ -117,8 +133,24 @@ const router = express.Router();
  *                                   type: string
  *                                 example: []
  *                     overall_feedback:
- *                       type: string
- *                       example: Suggested KRs are balanced and measurable.
+ *                       type: object
+ *                       properties:
+ *                         summary:
+ *                           type: string
+ *                           example: Suggested KRs are balanced and measurable.
+ *                         alignment_analysis:
+ *                           type: string
+ *                           example: All KRs directly support the objective with clear metrics.
+ *                         risks:
+ *                           type: array
+ *                           items:
+ *                             type: string
+ *                           example: ["High target may be challenging"]
+ *                         recommendations:
+ *                           type: array
+ *                           items:
+ *                             type: string
+ *                           example: ["Consider breaking KR 3 into smaller milestones"]
  *       400:
  *         description: Invalid objectiveId or invalid payload
  *       401:
@@ -174,6 +206,15 @@ router.post(
  *                   unit:
  *                     type: string
  *                     example: "%"
+ *                   evaluation_method:
+ *                     type: string
+ *                     enum: [MAXIMIZE, MINIMIZE, TARGET]
+ *                     description: Preferred evaluation method for generated KRs
+ *                   context:
+ *                     type: string
+ *                     maxLength: 1000
+ *                     description: Additional context to help AI understand requirements (e.g., business domain, constraints, team size)
+ *                     example: "This is for a fintech startup focusing on mobile payments. Team has 3 engineers."
  *     responses:
  *       200:
  *         description: Generate Test completed

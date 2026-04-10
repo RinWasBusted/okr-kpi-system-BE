@@ -127,7 +127,7 @@ export const createKPIRecordSchema = z.object({
 // CheckIn schemas
 export const createCheckInSchema = z.object({
     achieved_value: z.coerce.number(),
-    evidence_url: z.string().url("evidence_url must be a valid URL").max(2048, "evidence_url must not exceed 2048 characters"),
+    evidence_url: z.string().max(2048, "evidence_url must not exceed 2048 characters").nullable().optional(),
     comment: z.string().max(1000).nullable().optional(),
 });
 

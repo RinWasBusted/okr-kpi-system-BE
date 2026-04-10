@@ -4,7 +4,7 @@ import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
 import { canViewObjective } from "../../utils/okr.js";
 import { getUnitPath } from "../../utils/path.js";
-import { UserRole, AIPlan } from "@prisma/client";
+import { UserRole, AIPlan, KPIEvaluationType } from "@prisma/client";
 import 'dotenv/config'
 
 const AI_ENV = {
@@ -20,9 +20,11 @@ const AI_ENV = {
 const LlmKeyResultSchema = z.object({
   title: z.string().min(8).max(160),
   target_value: z.number().finite().positive(),
+  start_value: z.number().finite().default(0),
   unit: z.string().min(1).max(32),
   weight: z.number().finite().min(0.05).max(1),
   due_date: z.string().date(), // YYYY-MM-DD
+  evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]),
   evaluation: z.object({
     fit_score: z.number().int().min(0).max(100),
     fit_reason: z.string().min(1).max(600),
@@ -30,9 +32,16 @@ const LlmKeyResultSchema = z.object({
   }),
 });
 
+const LlmOverallFeedbackSchema = z.object({
+  summary: z.string().min(1).max(400),
+  alignment_analysis: z.string().min(1).max(400),
+  risks: z.array(z.string().min(1).max(200)).max(5),
+  recommendations: z.array(z.string().min(1).max(200)).max(5),
+});
+
 const LlmResponseSchema = z.object({
   suggestions: z.array(LlmKeyResultSchema).min(1).max(10),
-  overall_feedback: z.string().min(1).max(900),
+  overall_feedback: LlmOverallFeedbackSchema,
 });
 
 // function logTokenUsage(provider, model, usage = {}) {
@@ -49,10 +58,19 @@ const LlmResponseSchema = z.object({
 //   });
 // }
 
-function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObjectives, input }) {
+function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObjectives, input, owner, parentObjective }) {
   const lang = input.language === "en" ? "English" : "Vietnamese";
-  const dueDateHint = input.constraints?.due_date || cycle?.end_date || null;
+  // due_date priority: user hint first, then cycle end date, then null
+  const dueDateHint = input.constraints?.due_date || null;
   const unitHint = input.constraints?.unit || null;
+  const additionalContext = input.constraints?.context || null;
+
+  // Calculate remaining weight budget from existing KRs
+  const existingTotalWeight = existingKeyResults.reduce(
+    (sum, kr) => sum + (Number.isFinite(kr.weight) ? kr.weight : 0),
+    0
+  );
+  const remainingWeight = Math.max(0, 1.0 - existingTotalWeight);
 
   const context = {
     objective: {
@@ -61,6 +79,8 @@ function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObject
       status: objective.status,
       visibility: objective.visibility,
       progress_percentage: objective.progress_percentage,
+      owner_job_title: owner?.job_title || null,
+      parent_objective_title: parentObjective?.title || null,
     },
     cycle: cycle
       ? {
@@ -76,21 +96,34 @@ function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObject
       title: kr.title,
       unit: kr.unit,
       target_value: kr.target_value,
+      start_value: kr.start_value ?? 0,
       due_date: kr.due_date,
+      weight: kr.weight,
+      evaluation_method: kr.evaluation_method || "MAXIMIZE",
     })),
     related_objectives: (visibleObjectives || []).map((obj) => ({
       id: obj.id,
       title: obj.title,
       status: obj.status,
+      visibility: obj.visibility,
       progress_percentage: obj.progress_percentage,
+      unit_id: obj.unit_id,
+      owner_id: obj.owner_id,
     })),
     generation_hints: {
       count: input.count,
       language: lang,
       due_date_hint: dueDateHint,
       unit_hint: unitHint,
+      remaining_weight_budget: remainingWeight,
+      evaluation_method_hint: input.constraints?.evaluation_method || null,
     },
+    additional_context: additionalContext,
   };
+
+  const contextInstruction = additionalContext
+    ? `\nAdditional User Context:\n"""\n${additionalContext}\n"""\nUse this additional context to better understand the user's intent, business domain, constraints, or specific requirements when generating Key Results.`
+    : "";
 
   return [
     `You are an OKR coach helping generate measurable Key Results for a single Objective.`,
@@ -101,16 +134,22 @@ function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObject
     `- Each Key Result must be strongly aligned with the Objective and realistically achievable within the cycle.`,
     `- Avoid duplicating or rephrasing existing key results.`,
     `- Use ${lang} for all natural language fields.`,
-    `- Weight: each between 0.05 and 1.0; sum of all weights should be approximately 1.0 (±0.05).`,
-    `- due_date must be within cycle end date if available; otherwise use the due_date_hint; otherwise choose a reasonable date within 90 days.`,
+    `- Weight: each between 0.05 and 1.0.`,
+    `- Total weight of NEW suggestions must not exceed remaining_weight_budget (= ${remainingWeight.toFixed(2)}).`,
+    `- If there are no existing key results, total weight of new suggestions should be approximately 1.0 (±0.05).`,
+    `- due_date: Use due_date_hint if provided (must be on or before cycle.end_date if cycle exists); otherwise choose a reasonable date within 90 days.`,
+    `- evaluation_method: choose "MAXIMIZE" (higher is better), "MINIMIZE" (lower is better), or "TARGET" (hit a specific value) based on the nature of each KR.`,
+    `- start_value: set a realistic baseline (not always 0); use context clues from the objective and related objectives.`,
+    `- If parent_objective exists, ensure KRs cascade down from it logically.`,
     `- Include an evaluation for each Key Result (fit_score 0-100, fit_reason, issues).`,
+    contextInstruction,
     ``,
     `JSON shape:`,
-    `{"suggestions":[{"title": "...","target_value": 0,"unit":"...","weight": 0.2,"due_date":"YYYY-MM-DD","evaluation":{"fit_score": 0,"fit_reason":"...","issues":["..."]}}],"overall_feedback":"..."}`,
+    `{"suggestions":[{"title": "...","target_value": 0,"start_value": 0,"unit":"...","weight": 0.2,"due_date":"YYYY-MM-DD","evaluation_method":"MAXIMIZE|MINIMIZE|TARGET","evaluation":{"fit_score": 0,"fit_reason":"...","issues":["..."]}}],"overall_feedback":{"summary":"...","alignment_analysis":"...","risks":["..."],"recommendations":["..."]}}`,
     ``,
     `Context JSON:`,
     JSON.stringify(context),
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function parseJsonFromText(text, labelForError = "AI provider") {
@@ -250,10 +289,15 @@ function calculateCreditCost(totalTokens) {
   return (totalTokens / 1000000) * AI_ENV.payAsYouGoPricePer1M;
 }
 
-function normalizeWeights(suggestions) {
+function normalizeWeights(suggestions, maxTotalWeight = 1.0) {
   const sum = suggestions.reduce((acc, s) => acc + (Number.isFinite(s.weight) ? s.weight : 0), 0);
   if (sum <= 0) return suggestions;
-  return suggestions.map((s) => ({ ...s, weight: Math.round((s.weight / sum) * 1000) / 1000 }));
+  // Normalize to fit within maxTotalWeight budget
+  const scale = maxTotalWeight / sum;
+  return suggestions.map((s) => ({
+    ...s,
+    weight: Math.round(s.weight * scale * 1000) / 1000,
+  }));
 }
 
 // Get list of objective IDs visible to user (for context filtering)
@@ -312,7 +356,7 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
     throw new AppError("Company not found", 404);
   }
 
-  // Check AI plan and usage limits
+  // Check AI plan and usage limits (best-effort pre-check)
   if (company.ai_plan === AIPlan.FREE || company.ai_plan === AIPlan.SUBSCRIPTION) {
     if (company.token_usage >= company.usage_limit) {
       throw new AppError("AI usage limit exceeded. Please upgrade your plan.", 403);
@@ -330,6 +374,7 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
       cycle_id: true,
       unit_id: true,
       owner_id: true,
+      parent_objective_id: true,
     },
   });
 
@@ -344,7 +389,7 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
   // Get visible objective IDs for context filtering
   const visibleObjectiveIds = await getVisibleObjectiveIdsForUser(user);
 
-  const [cycle, unit, existingKeyResults, allVisibleObjectives] = await Promise.all([
+  const [cycle, unit, existingKeyResults, allVisibleObjectives, owner, parentObjective] = await Promise.all([
     prisma.cycles.findFirst({
       where: { id: objective.cycle_id },
       select: { id: true, name: true, start_date: true, end_date: true },
@@ -355,7 +400,16 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
     }),
     prisma.keyResults.findMany({
       where: { objective_id: objective.id },
-      select: { id: true, title: true, unit: true, target_value: true, due_date: true },
+      select: {
+        id: true,
+        title: true,
+        unit: true,
+        target_value: true,
+        start_value: true,
+        due_date: true,
+        weight: true,
+        evaluation_method: true,
+      },
       orderBy: { id: "asc" },
       take: 50,
     }),
@@ -382,9 +436,23 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
       });
       return objectives.filter((o) => o.id !== objectiveId);
     })(),
+    // Fetch owner information
+    objective.owner_id
+      ? prisma.users.findFirst({
+          where: { id: objective.owner_id },
+          select: { id: true, job_title: true, full_name: true },
+        })
+      : Promise.resolve(null),
+    // Fetch parent objective
+    objective.parent_objective_id
+      ? prisma.objectives.findFirst({
+          where: { id: objective.parent_objective_id },
+          select: { id: true, title: true, status: true },
+        })
+      : Promise.resolve(null),
   ]);
 
-  const prompt = buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObjectives: allVisibleObjectives, input });
+  const prompt = buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObjectives: allVisibleObjectives, input, owner, parentObjective });
 
   // Create AI usage log with PENDING status
   const aiUsageLog = await prisma.aIUsageLogs.create({
@@ -420,12 +488,21 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
     // Get usage from LLM result
     usage = llmResult.usage || usage;
 
-    const suggestions = normalizeWeights(parsed.suggestions).map((s) => ({
+    // Calculate remaining weight budget for normalization
+    const existingTotalWeight = existingKeyResults.reduce(
+      (sum, kr) => sum + (Number.isFinite(kr.weight) ? kr.weight : 0),
+      0
+    );
+    const remainingWeight = Math.max(0, 1.0 - existingTotalWeight);
+
+    const suggestions = normalizeWeights(parsed.suggestions, remainingWeight).map((s) => ({
       title: s.title,
       target_value: s.target_value,
+      start_value: s.start_value ?? 0,
       unit: s.unit,
       weight: s.weight,
       due_date: s.due_date,
+      evaluation_method: s.evaluation_method || "MAXIMIZE",
       evaluation: s.evaluation,
     }));
 
@@ -452,13 +529,13 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
       },
     });
 
-    // Update company token usage and credit cost
+    // Update company token usage and credit cost using atomic increment to avoid race condition
     const updateData = {
-      token_usage: company.token_usage + usage.total_tokens,
+      token_usage: { increment: usage.total_tokens },
     };
 
     if (company.ai_plan === AIPlan.PAY_AS_YOU_GO) {
-      updateData.credit_cost = company.credit_cost + creditCost;
+      updateData.credit_cost = { increment: creditCost };
     }
 
     await prisma.companies.update({
@@ -487,13 +564,17 @@ export async function generateTestKeyResults({ input }) {
     status: "active",
     visibility: "private",
     progress_percentage: 0,
+    owner_id: null,
+    parent_objective_id: null,
   };
 
   const cycle = null;
   const unit = null;
   const existingKeyResults = [];
+  const owner = null;
+  const parentObjective = null;
 
-  const prompt = buildPrompt({ objective, cycle, unit, existingKeyResults, input });
+  const prompt = buildPrompt({ objective, cycle, unit, existingKeyResults, input, owner, parentObjective });
 
   // Try once; if the model returns invalid shape, retry with a stricter instruction.
   let parsed;
@@ -509,9 +590,11 @@ export async function generateTestKeyResults({ input }) {
   const suggestions = normalizeWeights(parsed.suggestions).map((s) => ({
     title: s.title,
     target_value: s.target_value,
+    start_value: s.start_value ?? 0,
     unit: s.unit,
     weight: s.weight,
     due_date: s.due_date,
+    evaluation_method: s.evaluation_method || "MAXIMIZE",
     evaluation: s.evaluation,
   }));
 

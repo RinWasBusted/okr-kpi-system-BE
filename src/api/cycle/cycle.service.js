@@ -49,7 +49,7 @@ export const listCycles = async ({ companyId, is_locked, year, page, per_page })
             where,
             skip: (page - 1) * per_page,
             take: per_page,
-            orderBy: { start_date: "asc" },
+            orderBy: { start_date: "desc" },
             select: cycleSelect,
         }),
     ]);
