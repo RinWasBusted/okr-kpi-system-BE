@@ -3,15 +3,15 @@
 CREATE OR REPLACE VIEW unit_performance AS
 WITH
 
--- Lấy context user từ session variable (set bởi app trước mỗi query)
+-- 1. Lấy context user từ session variable
 user_context AS (
   SELECT
     NULLIF(current_setting('app.current_user_id', true), '')::int           AS user_id,
     NULLIF(current_setting('app.current_user_unit_path', true), '')::ltree  AS user_unit_path,
-    current_setting('app.user_role', true)                    AS user_role
+    current_setting('app.user_role', true)                                 AS user_role
 ),
 
--- OKR mà user được phép xem, gắn với unit_id của OKR đó
+-- 2. OKR mà user được phép xem (Giữ nguyên logic cũ)
 visible_objectives AS (
   SELECT
     o.id,
@@ -20,44 +20,39 @@ visible_objectives AS (
   FROM "Objectives" o, user_context uc
   WHERE
     o.deleted_at IS NULL
-    -- ADMIN_COMPANY thấy tất cả
     AND (
       uc.user_role = 'ADMIN_COMPANY'
-
-      -- PUBLIC: tất cả user trong công ty (RLS đã filter company_id rồi)
       OR o.visibility = 'PUBLIC'
-
-      -- INTERNAL: user phải thuộc nhánh unit của OKR
-      -- (unit_path của user là ancestor, chính nó, hoặc descendant của access_path OKR)
       OR (
         o.visibility = 'INTERNAL'
         AND (
-          uc.user_unit_path <@ o.access_path   -- user ở unit cha của OKR
-          OR uc.user_unit_path @> o.access_path -- user ở unit con của OKR
-          OR uc.user_unit_path = o.access_path  -- user ở đúng unit của OKR
+          uc.user_unit_path <@ o.access_path
+          OR uc.user_unit_path @> o.access_path
+          OR uc.user_unit_path = o.access_path
         )
       )
-
-      -- PRIVATE: chỉ unit cấp trên (ancestor) hoặc chính owner
       OR (
         o.visibility = 'PRIVATE'
         AND (
-          uc.user_unit_path @> o.access_path   -- user ở unit cha (cấp trên)
-          OR o.owner_id = uc.user_id            -- chính là owner
+          uc.user_unit_path @> o.access_path
+          OR o.owner_id = uc.user_id
         )
       )
     )
 ),
 
--- KPI mà user được phép xem
+-- 3. KPI mà user được phép xem (Thêm lọc parent_assignment_id và kẹp giá trị 0-100)
 visible_kpis AS (
   SELECT
     k.id,
     k.unit_id,
-    k.progress_percentage
+    -- Giới hạn progress trong khoảng [0, 100]
+    LEAST(GREATEST(k.progress_percentage, 0), 100) AS clamped_progress
   FROM "KPIAssignments" k, user_context uc
   WHERE
     k.deleted_at IS NULL
+    -- Chỉ tính các KPI cấp cao nhất (không có cha)
+    AND k.parent_assignment_id IS NULL
     AND (
       uc.user_role = 'ADMIN_COMPANY'
       OR k.visibility = 'PUBLIC'
@@ -66,7 +61,6 @@ visible_kpis AS (
         AND (
           uc.user_unit_path <@ k.access_path
           OR uc.user_unit_path @> k.access_path
-          OR uc.user_unit_path = k.access_path
         )
       )
       OR (
@@ -79,7 +73,7 @@ visible_kpis AS (
     )
 ),
 
--- Tổng hợp OKR theo unit
+-- 4. Tổng hợp OKR theo unit
 okr_stats AS (
   SELECT
     unit_id,
@@ -90,25 +84,24 @@ okr_stats AS (
   GROUP BY unit_id
 ),
 
--- Tổng hợp KPI theo unit
+-- 5. Tổng hợp KPI theo unit (Dựa trên giá trị đã xử lý)
 kpi_stats AS (
   SELECT
     unit_id,
     COUNT(*)                  AS total_kpis,
-    AVG(progress_percentage)  AS avg_kpi_progress
+    AVG(clamped_progress)     AS avg_kpi_progress
   FROM visible_kpis
+  WHERE unit_id IS NOT NULL
   GROUP BY unit_id
 ),
 
--- Đếm user thuộc từng unit (bao gồm user của chính unit đó và tất cả sub-units)
+-- 6. Đếm user thực tế của unit và các unit con (ltree logic)
 user_stats AS (
   SELECT
     parent_unit.id AS unit_id,
     COUNT(DISTINCT u.id) AS total_users
   FROM "Units" parent_unit
-  -- Join với các unit con (ltree @> check xem parent có chứa child không)
   JOIN "Units" child_unit ON parent_unit.path @> child_unit.path
-  -- Join user thuộc các unit con đó
   JOIN "Users" u ON u.unit_id = child_unit.id
   WHERE
     u.deleted_at IS NULL
@@ -118,7 +111,7 @@ user_stats AS (
   GROUP BY parent_unit.id
 )
 
--- Join tất cả vào Units
+-- 7. Kết quả cuối cùng
 SELECT
   un.id                                           AS unit_id,
   un.company_id,
@@ -126,18 +119,11 @@ SELECT
   un.parent_id,
   un.manager_id,
   un.path,
-
-  -- User stats (không phụ thuộc permission — ai cũng thấy số lượng member)
   COALESCE(us.total_users, 0)                     AS total_users,
-
-  -- OKR stats (chỉ tính OKR user được phép xem)
   COALESCE(os.total_okrs, 0)                      AS total_okrs,
   COALESCE(os.avg_okr_progress, 0)                AS avg_okr_progress,
-
-  -- KPI stats (chỉ tính KPI user được phép xem)
   COALESCE(ks.total_kpis, 0)                      AS total_kpis,
   COALESCE(ks.avg_kpi_progress, 0)                AS avg_kpi_progress
-
 FROM "Units" un
 LEFT JOIN okr_stats os  ON os.unit_id  = un.id
 LEFT JOIN kpi_stats ks  ON ks.unit_id  = un.id
