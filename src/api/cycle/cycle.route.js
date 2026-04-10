@@ -6,6 +6,7 @@ import {
     updateCycle,
     deleteCycle,
     lockCycle,
+    unlockCycle,
     cloneCycle,
 } from "./cycle.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.js";
@@ -295,6 +296,25 @@ router.delete("/:id", authorize("ADMIN_COMPANY"), deleteCycle);
  *         description: Cycle locked successfully
  */
 router.patch("/:id/lock", authorize("ADMIN_COMPANY"), lockCycle);
+
+/**
+ * @swagger
+ * /cycles/{id}/unlock:
+ *   patch:
+ *     summary: Unlock a cycle
+ *     description: Unlock a cycle to allow modifications. Requires `ADMIN_COMPANY` role.
+ *     tags: [Cycles]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Cycle unlocked successfully
+ */
+router.patch("/:id/unlock", authorize("ADMIN_COMPANY"), unlockCycle);
 
 /**
  * @swagger

@@ -315,6 +315,44 @@ export const lockCycle = async (companyId, cycleId, user = null) => {
     return formatCycle(updated);
 };
 
+// ─── Unlock ───────────────────────────────────────────────────────────────────
+
+export const unlockCycle = async (companyId, cycleId, user = null) => {
+    const existing = await prisma.cycles.findFirst({
+        where: { id: cycleId, company_id: companyId },
+        select: cycleSelect,
+    });
+    if (!existing) throw new AppError("Cycle not found", 404);
+
+    if (!existing.is_locked) {
+        return formatCycle(existing);
+    }
+
+    const updated = await prisma.cycles.update({
+        where: { id: cycleId },
+        data: { is_locked: false },
+        select: cycleSelect,
+    });
+
+    // Notify all company users about cycle unlock
+    if (user) {
+        try {
+            await notifyCycleEvent({
+                companyId,
+                eventType: "UNLOCKED",
+                cycle: { id: cycleId, name: existing.name },
+                actorName: user.full_name || user.email,
+                actorId: user.id,
+            });
+        } catch (error) {
+            // Log error but don't fail the main operation
+            console.error("Failed to send cycle unlock notification:", error);
+        }
+    }
+
+    return formatCycle(updated);
+};
+
 // ─── Clone ────────────────────────────────────────────────────────────────────
 
 export const cloneCycle = async (
