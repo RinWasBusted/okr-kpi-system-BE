@@ -14,6 +14,9 @@ const AI_ENV = {
   openaiModel: process.env.OPENAI_MODEL || "gpt-4.1-mini",
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+  openrouterApiKey: process.env.OPENROUTER_API_KEY || null,
+  openrouterBaseUrl: process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1/chat/completions",
+  openrouterModel: process.env.OPENROUTER_MODEL || "gpt-4.1-mini",
   payAsYouGoPricePer1M: parseFloat(process.env.AI_PAY_AS_YOU_GO_PRICE_PER_1M_TOKENS || "0.5"),
 };
 
@@ -22,7 +25,7 @@ const LlmKeyResultSchema = z.object({
   target_value: z.number().finite().positive(),
   start_value: z.number().finite().default(0),
   unit: z.string().min(1).max(32),
-  weight: z.number().finite().min(0.05).max(1),
+  weight: z.number(),
   due_date: z.string().date(), // YYYY-MM-DD
   evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]),
   evaluation: z.object({
@@ -278,9 +281,59 @@ async function callGeminiJson(prompt) {
   throw new AppError("Gemini call failed after retries", 502);
 }
 
+async function callOpenRouterJson(prompt) {
+  if (!AI_ENV.openrouterApiKey) {
+    throw new AppError("Missing OPENROUTER_API_KEY", 500);
+  }
+
+  const resp = await fetch(AI_ENV.openrouterBaseUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${AI_ENV.openrouterApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: AI_ENV.openrouterModel,
+      messages: [
+        { role: "system", content: "You output strict JSON only." },
+        { role: "user", content: prompt },
+      ],
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new AppError(`AI provider error: ${resp.status} ${text}`.slice(0, 500), 502);
+  }
+
+  const data = await resp.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || content.trim().length === 0) {
+    throw new AppError("AI provider returned empty content", 502);
+  }
+
+  let json;
+  try {
+    json = JSON.parse(content);
+  } catch {
+    throw new AppError("AI provider returned non-JSON content", 502);
+  }
+
+  // Extract usage info from OpenRouter response
+  const usage = {
+    input_tokens: data?.usage?.prompt_tokens ?? 0,
+    output_tokens: data?.usage?.completion_tokens ?? 0,
+    total_tokens: data?.usage?.total_tokens ?? 0,
+  };
+
+  return { json, usage };
+}
+
 async function callLlm(prompt) {
   if (AI_ENV.provider === "openai") return callOpenAiJson(prompt);
   if (AI_ENV.provider === "gemini") return callGeminiJson(prompt);
+  if (AI_ENV.provider === "openrouter") return callOpenRouterJson(prompt);
   throw new AppError(`Unsupported AI_PROVIDER: ${AI_ENV.provider}`, 500);
 }
 
@@ -476,6 +529,7 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
     let llmResult;
     try {
       llmResult = await callLlm(prompt);
+      console.log("[LLM Raw JSON]", llmResult.json);
       parsed = LlmResponseSchema.parse(llmResult.json);
     } catch (e) {
       const retryPrompt = `${prompt}\n\nIMPORTANT: Output must match the JSON shape exactly. Do not add extra keys.`;
