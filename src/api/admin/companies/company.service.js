@@ -394,12 +394,11 @@ export const getCompanyStats = async (id) => {
         prisma.keyResults.count({
             where: { objective: { company_id: id, deleted_at: null } },
         }),
-        prisma.objectives.count({ where: { company_id: id, deleted_at: null, status: { in: ["Active", "Pending_Approval"] } } }),
+        prisma.objectives.count({ where: { company_id: id, deleted_at: null, status: { in: ["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"] } } }),
     ]);
-
     // Calculate completion rate (completed objectives / total objectives)
     const completedObjectives = await prisma.objectives.count({
-        where: { company_id: id, deleted_at: null, status: "Completed" },
+        where: { company_id: id, deleted_at: null, status: "COMPLETED" },
     });
     const completion_rate = total_objectives > 0 ? (completedObjectives / total_objectives) : 0;
 
