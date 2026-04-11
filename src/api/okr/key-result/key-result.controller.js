@@ -67,6 +67,32 @@ export const createKeyResult = async (req, res) => {
     }
 };
 
+// POST /objectives/:objective_id/key-results/batch
+export const createMultipleKeyResults = async (req, res) => {
+    try {
+        const objectiveId = parsePositiveInt(req.params.objective_id, null);
+        if (!objectiveId) throw new AppError("Invalid objective ID", 400);
+
+        const { key_results } = req.validated.body;
+
+        const payloads = key_results.map((kr) => ({
+            title: kr.title.trim(),
+            target_value: kr.target_value,
+            current_value: kr.current_value,
+            unit: kr.unit.trim(),
+            weight: kr.weight,
+            due_date: kr.due_date,
+            evaluation_method: kr.evaluation_method,
+        }));
+
+        const keyResults = await keyResultService.createMultipleKeyResults(req.user, objectiveId, payloads);
+
+        res.success("Key results created successfully", 201, { key_results: keyResults });
+    } catch (error) {
+        throw error;
+    }
+};
+
 // PUT /key-results/:id
 export const updateKeyResult = async (req, res) => {
     try {

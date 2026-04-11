@@ -8,6 +8,8 @@ export const generateKeyResultsSchema = z.object({
     .object({
       due_date: z.string().date().nullable().optional(), // YYYY-MM-DD
       unit: z.string().min(1).max(32).nullable().optional(),
+      evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]).nullable().optional(),
+      context: z.string().max(1000).nullable().optional(), // Additional context for AI
     })
     .optional(),
 });
@@ -21,6 +23,8 @@ export const generateTestKeyResultsSchema = z.object({
     .object({
       due_date: z.string().date().nullable().optional(), // YYYY-MM-DD
       unit: z.string().min(1).max(32).nullable().optional(),
+      evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]).nullable().optional(),
+      context: z.string().max(1000).nullable().optional(), // Additional context for AI
     })
     .optional(),
 });

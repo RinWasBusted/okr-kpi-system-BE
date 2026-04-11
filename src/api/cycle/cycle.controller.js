@@ -185,6 +185,23 @@ export const lockCycle = async (req, res) => {
     }
 };
 
+// PATCH /cycles/:id/unlock
+export const unlockCycle = async (req, res) => {
+    try {
+        const companyId = req.user.company_id;
+        if (!companyId) throw new AppError("Company context is required", 403);
+
+        const cycleId = parsePositiveInt(req.params.id, null);
+        if (!cycleId) throw new AppError("Invalid cycle ID", 400);
+
+        const cycle = await cycleService.unlockCycle(companyId, cycleId, req.user);
+
+        res.success("Cycle unlocked successfully", 200, { cycle });
+    } catch (error) {
+        throw error;
+    }
+};
+
 // POST /cycles/:id/clone
 export const cloneCycle = async (req, res) => {
     try {

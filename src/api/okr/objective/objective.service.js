@@ -945,7 +945,7 @@ export const publishObjective = async (user, objectiveId, updates = {}) => {
   return await formatObjective(updated, false, user);
 };
 
-export const rejectObjective = async (user, objectiveId, comment) => {
+export const  rejectObjective = async (user, objectiveId, comment) => {
   const objective = await getObjectiveOrThrow(objectiveId);
 
   if (!(await canApproveObjective(user, objective))) {
@@ -970,9 +970,7 @@ export const rejectObjective = async (user, objectiveId, comment) => {
       data: {
         company_id: user.company_id,
         objective_id: objectiveId,
-        kr_tag_id: null,
         user_id: user.id,
-        parent_id: null,
         content: comment,
         sentiment: "NEGATIVE",
         status: "CONCERN",

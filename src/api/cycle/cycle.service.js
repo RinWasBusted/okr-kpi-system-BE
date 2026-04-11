@@ -28,22 +28,6 @@ const daysBetweenUtc = (endDate, startDate) => {
     return Math.floor(diffMs / (24 * 60 * 60 * 1000));
 };
 
-const ensureNoOverlap = async ({ companyId, startDate, endDate, excludeId }) => {
-    const overlap = await prisma.cycles.findFirst({
-        where: {
-            company_id: companyId,
-            ...(excludeId !== undefined && { id: { not: excludeId } }),
-            start_date: { lte: endDate },
-            end_date: { gte: startDate },
-        },
-        select: { id: true },
-    });
-
-    if (overlap) {
-        throw new AppError("Cycle date range overlaps with an existing cycle", 422, "DATE_OVERLAP");
-    }
-};
-
 // ─── List ────────────────────────────────────────────────────────────────────
 
 export const listCycles = async ({ companyId, is_locked, year, page, per_page }) => {
@@ -65,7 +49,7 @@ export const listCycles = async ({ companyId, is_locked, year, page, per_page })
             where,
             skip: (page - 1) * per_page,
             take: per_page,
-            orderBy: { start_date: "asc" },
+            orderBy: { start_date: "desc" },
             select: cycleSelect,
         }),
     ]);
@@ -145,7 +129,6 @@ export const createCycle = async (companyId, { name, start_date, end_date }) => 
     if (end_date <= start_date) {
         throw new AppError("end_date must be after start_date", 422, "INVALID_DATE_RANGE");
     }
-    await ensureNoOverlap({ companyId, startDate: start_date, endDate: end_date });
 
     const cycle = await prisma.cycles.create({
         data: {
@@ -177,13 +160,6 @@ export const updateCycle = async (companyId, cycleId, { name, start_date, end_da
     if (nextEnd <= nextStart) {
         throw new AppError("end_date must be after start_date", 422, "INVALID_DATE_RANGE");
     }
-
-    await ensureNoOverlap({
-        companyId,
-        startDate: nextStart,
-        endDate: nextEnd,
-        excludeId: cycleId,
-    });
 
     const updated = await prisma.cycles.update({
         where: { id: cycleId },
@@ -333,6 +309,44 @@ export const lockCycle = async (companyId, cycleId, user = null) => {
         } catch (error) {
             // Log error but don't fail the main operation
             console.error("Failed to send cycle lock notification:", error);
+        }
+    }
+
+    return formatCycle(updated);
+};
+
+// ─── Unlock ───────────────────────────────────────────────────────────────────
+
+export const unlockCycle = async (companyId, cycleId, user = null) => {
+    const existing = await prisma.cycles.findFirst({
+        where: { id: cycleId, company_id: companyId },
+        select: cycleSelect,
+    });
+    if (!existing) throw new AppError("Cycle not found", 404);
+
+    if (!existing.is_locked) {
+        return formatCycle(existing);
+    }
+
+    const updated = await prisma.cycles.update({
+        where: { id: cycleId },
+        data: { is_locked: false },
+        select: cycleSelect,
+    });
+
+    // Notify all company users about cycle unlock
+    if (user) {
+        try {
+            await notifyCycleEvent({
+                companyId,
+                eventType: "UNLOCKED",
+                cycle: { id: cycleId, name: existing.name },
+                actorName: user.full_name || user.email,
+                actorId: user.id,
+            });
+        } catch (error) {
+            // Log error but don't fail the main operation
+            console.error("Failed to send cycle unlock notification:", error);
         }
     }
 

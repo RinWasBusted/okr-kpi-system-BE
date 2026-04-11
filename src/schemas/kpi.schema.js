@@ -91,6 +91,30 @@ export const createKeyResultSchema = z.object({
     evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]).default("MAXIMIZE"),
 });
 
+export const createMultipleKeyResultsSchema = z.object({
+    key_results: z
+        .array(
+            z.object({
+                title: z
+                    .string()
+                    .min(LIMITS.title.min, "title is required")
+                    .max(LIMITS.title.max, `title must not exceed ${LIMITS.title.max} characters`),
+                start_value: z.coerce.number().optional(),
+                target_value: z.coerce.number().positive("target_value must be positive"),
+                current_value: z.coerce.number().min(0).default(0),
+                unit: z
+                    .string()
+                    .min(LIMITS.unit.min, "unit is required")
+                    .max(LIMITS.unit.max, `unit must not exceed ${LIMITS.unit.max} characters`),
+                weight: z.coerce.number().min(0).max(100),
+                due_date: z.string().datetime().nullable().optional(),
+                evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]).default("MAXIMIZE"),
+            })
+        )
+        .min(1, "At least one key result is required")
+        .max(50, "Maximum 50 key results can be created at once"),
+});
+
 export const updateKeyResultSchema = z.object({
     title: z
         .string()
@@ -127,7 +151,7 @@ export const createKPIRecordSchema = z.object({
 // CheckIn schemas
 export const createCheckInSchema = z.object({
     achieved_value: z.coerce.number(),
-    evidence_url: z.string().url("evidence_url must be a valid URL").max(2048, "evidence_url must not exceed 2048 characters"),
+    evidence_url: z.string().max(2048, "evidence_url must not exceed 2048 characters").nullable().optional(),
     comment: z.string().max(1000).nullable().optional(),
 });
 
