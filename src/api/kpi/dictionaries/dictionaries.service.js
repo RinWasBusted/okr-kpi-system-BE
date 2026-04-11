@@ -346,19 +346,6 @@ export const deleteKPIDictionary = async (user, dictionaryId) => {
         }
     }
 
-    // Check if any KPI assignments use this dictionary
-    const assignment = await prisma.kPIAssignments.findFirst({
-        where: { kpi_dictionary_id: dictionaryId },
-        select: { id: true },
-    });
-
-    if (assignment) {
-        throw new AppError(
-            "Cannot delete KPI Dictionary that has active KPI Assignments",
-            400,
-        );
-    }
-
     // Soft delete
     await prisma.kPIDictionaries.update({
         where: { id: dictionaryId },
