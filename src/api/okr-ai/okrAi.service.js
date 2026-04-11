@@ -25,7 +25,7 @@ const LlmKeyResultSchema = z.object({
   target_value: z.number().finite().positive(),
   start_value: z.number().finite().default(0),
   unit: z.string().min(1).max(32),
-  weight: z.number(),
+  weight: z.number().int().min(1).max(100), // Weight as percentage (1-100%)
   due_date: z.string().date(), // YYYY-MM-DD
   evaluation_method: z.enum(["MAXIMIZE", "MINIMIZE", "TARGET"]),
   evaluation: z.object({
@@ -68,12 +68,12 @@ function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObject
   const unitHint = input.constraints?.unit || null;
   const additionalContext = input.constraints?.context || null;
 
-  // Calculate remaining weight budget from existing KRs
+  // Calculate remaining weight budget from existing KRs (weight is in percentage 0-100)
   const existingTotalWeight = existingKeyResults.reduce(
     (sum, kr) => sum + (Number.isFinite(kr.weight) ? kr.weight : 0),
     0
   );
-  const remainingWeight = Math.max(0, 1.0 - existingTotalWeight);
+  const remainingWeight = Math.max(0, 100 - existingTotalWeight);
 
   const context = {
     objective: {
@@ -137,8 +137,9 @@ function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObject
     `- Each Key Result must be strongly aligned with the Objective and realistically achievable within the cycle.`,
     `- Avoid duplicating or rephrasing existing key results.`,
     `- Use ${lang} for all natural language fields.`,
-    `- Total weight of NEW suggestions must not exceed remaining_weight_budget (= ${remainingWeight.toFixed(2)}).`,
-    `- If there are no existing key results, total weight of new suggestions should be approximately 100 (±5).`,
+    `- Total weight of NEW suggestions must not exceed remaining_weight_budget (= ${remainingWeight.toFixed(0)}%).`,
+    `- If there are no existing key results, total weight of new suggestions should sum to approximately 100 (±5).`,
+    `- Weight values must be percentages (e.g., 30 for 30%, not 0.3).`,
     `- due_date: Use due_date_hint if provided (must be on or before cycle.end_date if cycle exists); otherwise choose a reasonable date within 90 days.`,
     `- evaluation_method: choose "MAXIMIZE" (higher is better), "MINIMIZE" (lower is better), or "TARGET" (hit a specific value) based on the nature of each KR.`,
     `- start_value: use context clues from the objective and related objectives. If no clues, default to 0.`,
@@ -147,7 +148,7 @@ function buildPrompt({ objective, cycle, unit, existingKeyResults, visibleObject
     contextInstruction,
     ``,
     `JSON shape:`,
-    `{"suggestions":[{"title": "...","target_value": 0,"start_value": 0,"unit":"...","weight": "...","due_date":"YYYY-MM-DD","evaluation_method":"MAXIMIZE|MINIMIZE|TARGET","evaluation":{"fit_score": 0,"fit_reason":"...","issues":["..."]}}],"overall_feedback":{"summary":"...","alignment_analysis":"...","risks":["..."],"recommendations":["..."]}}`,
+    `{"suggestions":[{"title": "...","target_value": 0,"start_value": 0,"unit":"...","weight": 25,"due_date":"YYYY-MM-DD","evaluation_method":"MAXIMIZE|MINIMIZE|TARGET","evaluation":{"fit_score": 0,"fit_reason":"...","issues":["..."]}}],"overall_feedback":{"summary":"...","alignment_analysis":"...","risks":["..."],"recommendations":["..."]}}`,
     ``,
     `Context JSON:`,
     JSON.stringify(context),
@@ -341,14 +342,14 @@ function calculateCreditCost(totalTokens) {
   return (totalTokens / 1000000) * AI_ENV.payAsYouGoPricePer1M;
 }
 
-function normalizeWeights(suggestions, maxTotalWeight = 1.0) {
+function normalizeWeights(suggestions, maxTotalWeight = 100) {
   const sum = suggestions.reduce((acc, s) => acc + (Number.isFinite(s.weight) ? s.weight : 0), 0);
   if (sum <= 0) return suggestions;
-  // Normalize to fit within maxTotalWeight budget
+  // Normalize to fit within maxTotalWeight budget (percentage scale 0-100)
   const scale = maxTotalWeight / sum;
   return suggestions.map((s) => ({
     ...s,
-    weight: Math.round(s.weight * scale * 1000) / 1000,
+    weight: Math.round(s.weight * scale), // Round to whole percentage
   }));
 }
 
@@ -541,12 +542,12 @@ export async function generateKeyResultsForObjective({ objectiveId, user, input 
     usage = llmResult.usage || usage;
     console.log("[LLM Usage]", usage);
 
-    // Calculate remaining weight budget for normalization
+    // Calculate remaining weight budget for normalization (weight is in percentage 0-100)
     const existingTotalWeight = existingKeyResults.reduce(
       (sum, kr) => sum + (Number.isFinite(kr.weight) ? kr.weight : 0),
       0
     );
-    const remainingWeight = Math.max(0, 1.0 - existingTotalWeight);
+    const remainingWeight = Math.max(0, 100 - existingTotalWeight);
 
     const suggestions = normalizeWeights(parsed.suggestions, remainingWeight).map((s) => ({
       title: s.title,
