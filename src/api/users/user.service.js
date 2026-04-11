@@ -79,6 +79,7 @@ export const listUsers = async ({ unit_id, search, page, per_page }, currentUser
     const where = {
         // Exclude system admin (ADMIN role) - only show ADMIN_COMPANY and EMPLOYEE
         role: { not: UserRole.ADMIN },
+        deleted_at: null,
         ...unitFilter,
         ...(search && {
             OR: [
@@ -110,7 +111,7 @@ export const listUsers = async ({ unit_id, search, page, per_page }, currentUser
 
 export const findUserById = async (userId, currentUser = null) => {
     const user = await prisma.users.findFirst({
-        where: { id: userId },
+        where: { id: userId, deleted_at: null },
         select: userSelect,
     });
 
@@ -158,7 +159,7 @@ export const createUser = async (companyId, { full_name, email, password, unit_i
 
 export const updateUser = async (userId, { full_name, job_title, unit_id, password, is_active }) => {
     const existing = await prisma.users.findFirst({
-        where: { id: userId, role: UserRole.EMPLOYEE },
+        where: { id: userId, role: UserRole.EMPLOYEE, deleted_at: null },
     });
     if (!existing) throw new AppError("User not found", 404);
 
@@ -201,7 +202,7 @@ export const updateUser = async (userId, { full_name, job_title, unit_id, passwo
 
 export const updateUserAvatar = async (userId, publicId) => {
     const existing = await prisma.users.findFirst({
-        where: { id: userId },
+        where: { id: userId, deleted_at: null },
         select: { id: true },
     });
 
@@ -223,7 +224,7 @@ export const updateUserAvatar = async (userId, publicId) => {
 
 export const deleteUserAvatar = async (userId) => {
     const existing = await prisma.users.findFirst({
-        where: { id: userId },
+        where: { id: userId, deleted_at: null },
         select: { id: true, avatar_url: true },
     });
 
