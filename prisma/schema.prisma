@@ -28,7 +28,7 @@ model Companies {
   ai_plan     AIPlan   @default(FREE)
   token_usage Int      @default(0)
   credit_cost Float    @default(0)
-  usage_limit Int      @default(10000)
+  usage_limit Int      @default(1000000)
   created_at  DateTime @default(now())
 
   units            Units[]

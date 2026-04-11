@@ -177,7 +177,7 @@ async function callOpenAiJson(prompt) {
     throw new AppError("Missing OPENAI_API_KEY", 500);
   }
 
-  const resp = await fetch(`${AI_ENV.openaiBaseUrl}/chat/completions`, {
+  const resp = await fetch(`${AI_ENV.openaiBaseUrl}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${AI_ENV.openaiApiKey}`,
