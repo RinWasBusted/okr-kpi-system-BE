@@ -46,7 +46,18 @@ export const getCompanyStats = async (user) => {
         throw new AppError("User is not associated with any company", 400);
     }
 
-    const [company, objectives, kpiAssignments] = await Promise.all([
+    // Get top-level units (parent_id is null) for this company
+    const topLevelUnits = await prisma.units.findMany({
+        where: {
+            company_id: user.company_id,
+            parent_id: null,
+            deleted_at: null,
+        },
+        select: { id: true },
+    });
+    const topLevelUnitIds = topLevelUnits.map((u) => u.id);
+
+    const [company, objectivesAggregate, kpiAggregate] = await Promise.all([
         prisma.companies.findUnique({
             where: { id: user.company_id },
             select: {
@@ -60,21 +71,25 @@ export const getCompanyStats = async (user) => {
                 created_at: true,
             },
         }),
-        prisma.objectives.findMany({
+        // Get objectives stats for top-level units
+        prisma.objectives.aggregate({
             where: {
                 company_id: user.company_id,
-                unit_id: null,
                 deleted_at: null,
+                unit_id: { in: topLevelUnitIds },
             },
-            select: { progress_percentage: true },
+            _avg: { progress_percentage: true },
+            _count: { _all: true },
         }),
-        prisma.kPIAssignments.findMany({
+        // Get KPI assignments stats for top-level units
+        prisma.kPIAssignments.aggregate({
             where: {
                 company_id: user.company_id,
-                unit_id: null,
                 deleted_at: null,
+                unit_id: { in: topLevelUnitIds },
             },
-            select: { progress_percentage: true },
+            _avg: { progress_percentage: true },
+            _count: { _all: true },
         }),
     ]);
 
@@ -82,17 +97,13 @@ export const getCompanyStats = async (user) => {
         throw new AppError("Company not found", 404);
     }
 
-    // Calculate OKR stats (only for company-level objectives: unit_id = null)
-    const total_okr = objectives.length;
-    const okr_progress = total_okr > 0
-        ? Math.round((objectives.reduce((sum, obj) => sum + (obj.progress_percentage || 0), 0) / total_okr) * 100) / 100
-        : 0;
+    // Calculate OKR stats (objectives belonging to top-level units)
+    const total_okr = objectivesAggregate._count._all;
+    const okr_progress = parseFloat((objectivesAggregate._avg.progress_percentage ?? 0).toFixed(2));
 
-    // Calculate KPI stats (only for company-level assignments: unit_id = null)
-    const total_kpi = kpiAssignments.length;
-    const kpi_health = total_kpi > 0
-        ? Math.round((kpiAssignments.reduce((sum, kpi) => sum + (kpi.progress_percentage || 0), 0) / total_kpi) * 100) / 100
-        : 0;
+    // Calculate KPI stats (KPI assignments belonging to top-level units)
+    const total_kpi = kpiAggregate._count._all;
+    const kpi_health = parseFloat((kpiAggregate._avg.progress_percentage ?? 0).toFixed(2));
 
     return {
         id: company.id,
