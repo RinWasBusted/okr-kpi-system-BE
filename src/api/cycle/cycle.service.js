@@ -218,8 +218,8 @@ export const getCycleDetail = async (companyId, cycleId) => {
         statistics: {
             total_objectives: objectivesStats._count.id,
             total_kpis: kpiStats._count.id,
-            avg_objective_progress: objectivesStats._avg.progress_percentage || 0,
-            avg_kpi_progress: kpiStats._avg.progress_percentage || 0,
+            avg_objective_progress: Math.round((objectivesStats._avg.progress_percentage || 0) * 100) / 100,
+            avg_kpi_progress: Math.round((kpiStats._avg.progress_percentage || 0) * 100) / 100,
         },
     };
 };
