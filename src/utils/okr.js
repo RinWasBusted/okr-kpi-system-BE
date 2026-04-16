@@ -193,9 +193,12 @@ export const canApproveObjective = async (user, objective) => {
   );
 };
 
-export const ensureCycleUnlocked = async (cycleId) => {
+export const ensureCycleUnlocked = async (cycleId, companyId = null) => {
   const cycle = await prisma.cycles.findFirst({
-    where: { id: cycleId },
+    where: {
+      id: cycleId,
+      ...(companyId !== null && { company_id: companyId }),
+    },
     select: { is_locked: true },
   });
 

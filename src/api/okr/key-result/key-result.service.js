@@ -170,7 +170,7 @@ export const createKeyResult = async (user, objectiveId, payload) => {
     const objective = await getObjectiveForKeyResult(objectiveId);
 
     // Check if cycle is locked
-    await ensureCycleUnlocked(objective.cycle_id);
+    await ensureCycleUnlocked(objective.cycle_id, user.company_id);
 
     const allowed = await canEditObjective(user, objective);
     if (!allowed) {
@@ -246,7 +246,7 @@ export const updateKeyResult = async (user, keyResultId, updates) => {
     const keyResult = await getKeyResultOrThrow(keyResultId);
 
     // Check if cycle is locked
-    await ensureCycleUnlocked(keyResult.objective.cycle_id);
+    await ensureCycleUnlocked(keyResult.objective.cycle_id, user.company_id);
 
     const allowed = await canEditObjective(user, keyResult.objective);
     if (!allowed) {

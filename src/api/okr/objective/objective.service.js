@@ -169,6 +169,8 @@ const calculateExpectedProgressForObjective = (cycle, now = new Date()) => {
 // Filter function for progress status matching
 const matchesProgressStatus = (objective, progressStatus) => {
   if (!progressStatus) return true;
+  // listObjectives filters already-formatted objectives where progress_status is computed
+  // with the same time-based logic used in the response payload.
   return objective.progress_status === progressStatus;
 };
 
