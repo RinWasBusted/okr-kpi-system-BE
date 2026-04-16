@@ -445,20 +445,26 @@ export const createReply = async (user, parentFeedbackId, payload) => {
     );
   }
 
-  // Create reply without modifying parent feedback
-  const created = await prisma.feedbacks.create({
-    data: {
-      company_id: user.company_id,
-      objective_id: parent.objective_id,
-      kr_tag_id: payload.kr_tag_id ?? null,
-      user_id: user.id,
-      parent_id: parentFeedbackId,
-      content: payload.content,
-      sentiment: "UNKNOWN",
-      status: payload.status,
-    },
-    select: feedbackSelect,
-  });
+  // Create reply and update parent feedback status in transaction
+  const [created] = await prisma.$transaction([
+    prisma.feedbacks.create({
+      data: {
+        company_id: user.company_id,
+        objective_id: parent.objective_id,
+        kr_tag_id: payload.kr_tag_id ?? null,
+        user_id: user.id,
+        parent_id: parentFeedbackId,
+        content: payload.content,
+        sentiment: "UNKNOWN",
+        status: payload.status,
+      },
+      select: feedbackSelect,
+    }),
+    prisma.feedbacks.update({
+      where: { id: parentFeedbackId },
+      data: { status: payload.status },
+    }),
+  ]);
 
   // Notify relevant users about new reply
   try {
@@ -515,7 +521,7 @@ export const createReply = async (user, parentFeedbackId, payload) => {
         objectiveOwnerId: objective.owner_id,
         actorName: user.full_name || user.email,
         actorId: user.id,
-        newStatus: nextStatus,
+        newStatus: payload.status,
       });
     }
   } catch (error) {
