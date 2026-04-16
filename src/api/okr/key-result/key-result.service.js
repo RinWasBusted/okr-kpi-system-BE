@@ -5,6 +5,7 @@ import {
     canEditObjective,
     calculateKeyResultProgress,
     recalculateObjectiveProgress,
+    ensureCycleUnlocked,
 } from "../../../utils/okr.js";
 import { daysBetweenUtc } from "../../../utils/date.js";
 import { getObjectiveAccessPath, getUnitPath } from "../../../utils/path.js";
@@ -144,16 +145,6 @@ const ensureObjectiveEditableStatus = (objective) => {
     }
 };
 
-const ensureCycleNotLocked = async (cycleId) => {
-    const cycle = await prisma.cycles.findFirst({
-        where: { id: cycleId },
-        select: { is_locked: true },
-    });
-    if (cycle?.is_locked) {
-        throw new AppError("Cycle is locked and cannot be modified", 400, "CYCLE_LOCKED");
-    }
-};
-
 export const listKeyResults = async (user, objectiveId) => {
     const objective = await getObjectiveForKeyResult(objectiveId);
 
@@ -179,7 +170,7 @@ export const createKeyResult = async (user, objectiveId, payload) => {
     const objective = await getObjectiveForKeyResult(objectiveId);
 
     // Check if cycle is locked
-    await ensureCycleNotLocked(objective.cycle_id);
+    await ensureCycleUnlocked(objective.cycle_id);
 
     const allowed = await canEditObjective(user, objective);
     if (!allowed) {
@@ -255,7 +246,7 @@ export const updateKeyResult = async (user, keyResultId, updates) => {
     const keyResult = await getKeyResultOrThrow(keyResultId);
 
     // Check if cycle is locked
-    await ensureCycleNotLocked(keyResult.objective.cycle_id);
+    await ensureCycleUnlocked(keyResult.objective.cycle_id);
 
     const allowed = await canEditObjective(user, keyResult.objective);
     if (!allowed) {

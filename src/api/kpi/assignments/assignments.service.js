@@ -699,7 +699,7 @@ export const createKPIAssignment = async (user, payload) => {
   if (!kpiDictionary) throw new AppError("KPI Dictionary not found", 404);
 
   const cycle = await prisma.cycles.findFirst({
-    where: { id: payload.cycle_id },
+    where: { id: payload.cycle_id, company_id: user.company_id },
     select: { id: true, is_locked: true },
   });
 
@@ -863,7 +863,7 @@ export const updateKPIAssignment = async (user, assignmentId, payload) => {
 
   // Check if current cycle is locked
   const currentCycle = await prisma.cycles.findFirst({
-    where: { id: assignment.cycle_id },
+    where: { id: assignment.cycle_id, company_id: user.company_id },
     select: { is_locked: true },
   });
   if (currentCycle?.is_locked) {
@@ -881,7 +881,7 @@ export const updateKPIAssignment = async (user, assignmentId, payload) => {
 
   if (payload.cycle_id !== undefined) {
     const cycle = await prisma.cycles.findFirst({
-      where: { id: payload.cycle_id },
+      where: { id: payload.cycle_id, company_id: user.company_id },
       select: { id: true, is_locked: true },
     });
     if (!cycle) throw new AppError("Cycle not found", 404);

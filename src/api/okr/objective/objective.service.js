@@ -161,20 +161,15 @@ const calculateObjectiveStatus = (actualProgress, expectedProgress) => {
  * Calculate expected progress based on time elapsed in cycle.
  * Returns percentage of time that has passed (0-100).
  */
-const calculateExpectedProgressForObjective = (cycle) => {
+const calculateExpectedProgressForObjective = (cycle, now = new Date()) => {
   if (!cycle?.start_date || !cycle?.end_date) return null;
-  return calculateExpectedProgress(cycle.start_date, cycle.end_date, new Date());
+  return calculateExpectedProgress(cycle.start_date, cycle.end_date, now);
 };
 
 // Filter function for progress status matching
-const matchesProgressStatus = (objective, progressStatus, cycle) => {
+const matchesProgressStatus = (objective, progressStatus) => {
   if (!progressStatus) return true;
-  const expectedProgress = calculateExpectedProgressForObjective(cycle);
-  const currentStatus = calculateObjectiveStatus(
-    objective.progress_percentage,
-    expectedProgress ?? objective.progress_percentage
-  );
-  return currentStatus === progressStatus;
+  return objective.progress_status === progressStatus;
 };
 
 // Calculate permissions for an objective based on user and objective state
@@ -265,7 +260,7 @@ const formatObjective = async (
 
   // Calculate time-based expected progress for OKR
   const expectedProgress = objective.cycle
-    ? calculateExpectedProgressForObjective(objective.cycle)
+    ? calculateExpectedProgressForObjective(objective.cycle, now)
     : null;
 
   // Calculate progress status using time-based comparison
@@ -371,9 +366,9 @@ const getObjectiveOrThrow = async (objectiveId, includeRelations = false) => {
   return objective;
 };
 
-const ensureCycleExists = async (cycleId) => {
+const ensureCycleExists = async (cycleId, companyId) => {
   const cycle = await prisma.cycles.findFirst({
-    where: { id: cycleId },
+    where: { id: cycleId, company_id: companyId },
     select: { id: true, is_locked: true },
   });
   if (!cycle) throw new AppError("Cycle not found", 404);
@@ -533,7 +528,7 @@ export const listObjectives = async ({
 };
 
 export const createObjective = async (user, payload) => {
-  await ensureCycleExists(payload.cycle_id);
+  await ensureCycleExists(payload.cycle_id, user.company_id);
 
   let owner = null;
   if (payload.owner_id) {
@@ -677,7 +672,7 @@ export const updateObjective = async (user, objectiveId, updates) => {
 
   // Check if cycle is locked
   const cycle = await prisma.cycles.findFirst({
-    where: { id: objective.cycle_id },
+    where: { id: objective.cycle_id, company_id: user.company_id },
     select: { is_locked: true },
   });
   if (cycle?.is_locked) {
