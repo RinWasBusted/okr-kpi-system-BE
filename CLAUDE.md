@@ -4,11 +4,11 @@
 
 **OKR-KPI System Backend** is a comprehensive Node.js/Express API for managing Objectives & Key Results (OKR) and Key Performance Indicators (KPI) across multi-tenant organizations. It supports hierarchical organizational units, role-based access control (RBAC), AI-assisted goal generation, and real-time KPI tracking.
 
-**Project Type:** Multi-tenant SaaS Backend API
-**Node.js Version:** v22-alpine (Docker)
-**Database:** PostgreSQL 16 (Neon in production)
-**Cache:** Redis (Upstash in production)
-**ORM:** Prisma v7.6.0 with PrismaPg adapter
+- **Project Type:** Multi-tenant SaaS Backend API
+- **Node.js Version:** v22-alpine (Docker)
+- **Database:** PostgreSQL 16 (Neon in production)
+- **Cache:** Redis (Upstash in production)
+- **ORM:** Prisma v7.6.0 with PrismaPg adapter
 
 ---
 
@@ -72,8 +72,11 @@ okr-kpi-system-BE/
 │   │   │   └── records/
 │   │   ├── okr-ai/                   # AI-powered goal generation
 │   │   ├── ai-usage/                 # Token usage tracking
+│   │   ├── notifications/            # Notification inbox/read-state APIs
+│   │   ├── company/                  # Company self-service APIs (ADMIN_COMPANY)
 │   │   ├── statistic/                # Analytics & reporting
 │   │   ├── health/                   # Liveness/readiness probes
+│   │   ├── okr/feedbacks/            # Objective feedback & reply threads
 │   │   ├── ***/*.controller.js       # Request handlers
 │   │   ├── ***/*.service.js          # Business logic (pure functions)
 │   │   └── ***/*.route.js            # Express routes + Swagger docs
@@ -81,10 +84,19 @@ okr-kpi-system-BE/
 │   │   └── swagger.config.js         # OpenAPI 3.0.0 setup
 │   ├── middlewares/
 │   │   ├── auth.js                   # JWT verification & role authorization
+│   │   ├── validate.js               # Zod request validation middleware
+│   │   ├── rateLimit.js              # Login rate-limit middleware (Redis-backed)
 │   │   ├── errorHandler.js           # Global error catching
 │   │   └── responseHandler.js        # Standardized response wrapping
 │   ├── schemas/
 │   │   ├── auth.schema.js            # Zod validation schemas
+│   │   ├── objective.schema.js
+│   │   ├── kpi.schema.js
+│   │   ├── unit.schema.js
+│   │   ├── user.schema.js
+│   │   ├── feedback.schema.js
+│   │   ├── notification.schema.js
+│   │   ├── company.schema.js
 │   │   └── okrAi.schema.js
 │   ├── utils/
 │   │   ├── prisma.js                 # Prisma client singleton
@@ -99,16 +111,19 @@ okr-kpi-system-BE/
 │   │   ├── cors.js                   # CORS configuration
 │   │   ├── appError.js               # Custom error class
 │   │   ├── multer.js                 # File upload middleware
-│   │   └── wrapMulter.js             # Multer wrapper for context
+│   │   ├── wrapMulter.js             # Multer wrapper for context
+│   │   ├── notification.js           # Notification message generator
+│   │   └── notificationHelper.js     # Notification creation helper
 │   └── jobs/
-│       └── resetTokenUsage.job.js    # Monthly token reset (node-cron)
+│       ├── resetTokenUsage.job.js    # Monthly token reset (node-cron)
+│       └── feedback.smoke.js         # Reserved smoke script (currently empty)
 ├── docker-compose.yml                # Production: app service only
 ├── docker-compose.dev.yml            # Development: app + postgres + redis
 ├── Dockerfile                        # Multi-stage Node.js 22-alpine build
 ├── .dockerignore                     # Files excluded from Docker image
 ├── .env                              # Production environment vars
-├── .env.development                  # Development environment vars
-├── .env.docker                       # Docker template
+├── prisma.config.js                  # Prisma CLI config (schema/migrations/seed)
+├── scripts/studio.js                 # Prisma Studio launcher with DATABASE_ADMIN_URL
 ├── .gitignore
 ├── package.json
 └── README.md
@@ -228,6 +243,38 @@ status (PENDING|SUCCESS|FAILED|BILLED)
 - Normalized across OpenAI/Gemini providers
 - Used for billing & rate limiting
 
+#### **Feedbacks** (Objective Discussion Threads)
+
+```sql
+id (PK), company_id, objective_id, kr_tag_id (nullable), user_id, parent_id
+content (TEXT), sentiment, status, created_at, updated_at
+```
+
+- Supports threaded replies (max depth = 1)
+- `kr_tag_id` can tag a specific key result in the objective
+- Designed for collaboration and issue escalation on objectives
+
+#### **Notifications** + **NotificationRecipients**
+
+```sql
+Notifications: id, company_id, event_type, ref_type, ref_id, message, created_at
+NotificationRecipients: notification_id, recipient_id, read_at (composite PK)
+```
+
+- Event-log style notifications with per-recipient read tracking
+- Supports inbox, unread counter, mark-one, mark-all-read flows
+
+### Additional Enums In Active Use
+
+- `ProgressStatus`: `Draft`, `Pending_Approval`, `Rejected`, `NOT_STARTED`, `ON_TRACK`, `AT_RISK`, `CRITICAL`, `COMPLETED`
+- `KPIEvaluationType`: `MAXIMIZE`, `MINIMIZE`, `TARGET`
+- `KPITrend`: `Upward`, `Downward`, `Stable`
+- `FeedbackSentiment`: `POSITIVE`, `NEUTRAL`, `NEGATIVE`, `MIXED`, `UNKNOWN`
+- `FeedbackStatus`: `PRAISE`, `CONCERN`, `SUGGESTION`, `QUESTION`, `BLOCKER`, `RESOLVED`, `FLAGGED`
+- `ReferenceType`: `KPI`, `OBJECTIVE`, `CYCLE`, `UNIT`, `FEEDBACK`
+- `EventType`: `CREATED`, `UPDATED`, `DELETED`, `ASSIGNED`, `STATUS_CHANGED`, `COMMENTED`, `REPLIED`, `LOCKED`, `CLONED`, `REMINDER`
+- `AIUsageStatus`: `PENDING`, `SUCCESS`, `FAILED`, `REFUNDED`, `BILLED`, `EXCLUDED`
+
 ### Advanced Features
 
 **ltree (PostgreSQL):** Hierarchical paths for org units & objectives
@@ -249,9 +296,14 @@ status (PENDING|SUCCESS|FAILED|BILLED)
 
 ### Authentication
 
-- `POST /api/auth/signup` - Register user
 - `POST /api/auth/login` - Authenticate (sets HttpOnly cookie)
+- `POST /api/auth/refresh-token` - Rotate refresh token, issue new access token
+- `PATCH /api/auth/change-password` - Change current password
+- `GET /api/auth/me` - Get current authenticated user
 - `POST /api/auth/logout` - Clear session
+- `POST /api/auth/logout-all` - Revoke all sessions
+- `GET /api/auth/sessions` - List active sessions
+- `DELETE /api/auth/sessions/:sessionId` - Revoke one session
 
 ### Health Checks (Docker Swarm)
 
@@ -292,6 +344,9 @@ status (PENDING|SUCCESS|FAILED|BILLED)
 - `POST /api/cycles` - Create cycle (start_date, end_date)
 - `PUT /api/cycles/:id` - Update cycle
 - `DELETE /api/cycles/:id` - Delete cycle
+- `PATCH /api/cycles/:id/lock` - Lock cycle
+- `PATCH /api/cycles/:id/unlock` - Unlock cycle
+- `POST /api/cycles/:id/clone` - Clone selected objectives/KPIs into cycle
 
 ### Objectives (OKRs)
 
@@ -301,7 +356,9 @@ status (PENDING|SUCCESS|FAILED|BILLED)
 - `PUT /api/objectives/:id` - Update objective
 - `POST /api/objectives/:id/submit` - Submit for approval
 - `POST /api/objectives/:id/approve` - Approve (requires authority)
+- `PATCH /api/objectives/:id/publish` - Publish objective (Draft -> progress status)
 - `POST /api/objectives/:id/reject` - Reject with comment
+- `POST /api/objectives/:id/revert-to-draft` - Revert objective to Draft
 - `DELETE /api/objectives/:id` - Soft delete
 
 ### Key Results
@@ -317,6 +374,16 @@ status (PENDING|SUCCESS|FAILED|BILLED)
 - `POST /api/check-ins` - Add check-in (achieved_value, evidence_url, comment)
 - `PUT /api/check-ins/:id` - Update check-in
 - `DELETE /api/check-ins/:id` - Delete check-in
+
+### Feedbacks (Objective Collaboration)
+
+- `GET /api/objectives/:objectiveId/feedbacks` - List root feedbacks with reply tree
+- `POST /api/objectives/:objectiveId/feedbacks` - Create feedback on objective
+- `GET /api/objectives/:objectiveId/feedbacks/:feedbackId` - Get single feedback
+- `PATCH /api/objectives/:objectiveId/feedbacks/:feedbackId` - Update feedback
+- `DELETE /api/objectives/:objectiveId/feedbacks/:feedbackId` - Delete feedback and replies
+- `GET /api/feedbacks/:id/replies` - List replies of a root feedback
+- `POST /api/feedbacks/:id/replies` - Create reply (`RESOLVED`/`FLAGGED` flow)
 
 ### KPI Management
 
@@ -344,6 +411,21 @@ status (PENDING|SUCCESS|FAILED|BILLED)
 
 - `GET /api/ai-usage` - List token usage logs (paginated)
 
+### Notifications
+
+- `GET /api/notifications` - List user notifications (filters: read-state, paging)
+- `GET /api/notifications/unread-count` - Unread count
+- `PATCH /api/notifications/read-all` - Mark all as read
+- `PATCH /api/notifications/:id/read` - Mark one as read
+
+### Company (Self-service for ADMIN_COMPANY)
+
+- `GET /api/company/me` - Get own company profile
+- `GET /api/company/stats` - Company-level summary stats
+- `PATCH /api/company/logo` - Upload/update company logo
+- `DELETE /api/company/logo` - Remove company logo
+- `GET /api/company/ai-usage/logs` - Company AI usage logs with filters
+
 ---
 
 ## 🔐 Authentication & Authorization
@@ -351,18 +433,22 @@ status (PENDING|SUCCESS|FAILED|BILLED)
 ### JWT Implementation
 
 - **Token:** Signed with `JWT_SECRET` environment variable
-- **Payload:** `{ userId, companyId, role, email }`
-- **Expiry:** 7 days (configurable)
-- **Storage:** HttpOnly cookie named `accessToken` (prevents XSS)
+- **Payload (active code):** `{ id, company_id, role, email, unit_path }`
+- **Access token TTL:** 15 minutes
+- **Refresh token TTL:** 7 days (or 30 days when `remember_me=true`)
+- **Storage:** HttpOnly cookies `accessToken` + `refreshToken`
 
 ### Middleware Chain
 
 ```javascript
-authenticate → authorize("ADMIN_COMPANY") → controller
+authenticate → requestContext.run(...) → authorize("ADMIN_COMPANY") → controller
 ```
 
 - `authenticate` - Verifies JWT from cookie, extracts user context
+- `authenticate` - Also injects AsyncLocalStorage request context: `company_id`, `role`, `user_id`, `unit_path`
 - `authorize(roles...)` - Checks role against allowed roles
+- `validate(schema, source)` - Validates body/query/params and stores parsed input in `req.validated`
+- `loginRateLimit` - Redis-based throttle (5 attempts/10 minutes per IP), returns `429` + `Retry-After`
 - `errorHandler` - Catches all errors, returns standardized response
 
 ### Role-Based Access Control (RBAC)
@@ -433,7 +519,7 @@ authenticate → authorize("ADMIN_COMPANY") → controller
 
 - Monthly token usage reset (1st of month, 00:00 Asia/Ho_Chi_Minh timezone)
 - Uses node-cron with timezone support
-- Initialized in `server.js`, exported as named export
+- Initialized in `server.js` during app bootstrap
 
 ### 8. **Health Checks**
 
@@ -485,7 +571,11 @@ ADMIN_PASSWORD=SecurePassword123
 AI_PROVIDER=gemini|openai
 GEMINI_API_KEY=xxx
 OPENAI_API_KEY=xxx
-AI_PAY_AS_YOU_GO_PRICE_PER_1M=0.5
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4.1-mini
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MAX_ATTEMPTS=3
+AI_PAY_AS_YOU_GO_PRICE_PER_1M_TOKENS=10000
 
 # Cloudinary
 CLOUDINARY_CLOUD_NAME=xxx
@@ -499,9 +589,10 @@ SWAGGER_ENABLE_ABSOLUTE_SERVER=false
 ### Development Setup
 
 ```bash
-# .env.development - local database + redis
-DATABASE_URL=postgresql://user:pass@localhost:5432/okr_kpi_db
-REDIS_URL=redis://localhost:6379
+# Configure .env (repo currently uses single .env file)
+# Example local URLs:
+# DATABASE_URL=postgresql://user:pass@localhost:5432/okr_kpi_db
+# REDIS_URL=redis://localhost:6379
 
 # Start services
 docker-compose -f docker-compose.dev.yml up -d
@@ -511,6 +602,9 @@ npx prisma migrate dev
 
 # Seed database
 npm run seed
+
+# Prisma Studio with admin database URL override
+npm run studio
 
 # Start dev server (auto-reload)
 npm run dev
@@ -687,6 +781,57 @@ calculateKeyResultProgress(kr, now);
 - Check timezone: Asia/Ho_Chi_Minh
 - Inspect logs: `console.log` in resetTokenUsageJob function
 
+**Validation returns 422**
+
+- Request payload/query/params fails Zod schema in `validate` middleware
+- Error format: `success=false`, `error.code=VALIDATION_ERROR`
+
+**Login gets 429 Too Many Requests**
+
+- Login is rate-limited per IP (5 attempts/10 minutes)
+- Check response header `Retry-After` for retry seconds
+
+---
+
+## 🔄 Documentation Sync Snapshot (April 16, 2026)
+
+This section is an additive sync summary derived from current source files to help coding agents quickly map what each file group is responsible for.
+
+### File Context Map (Current)
+
+- `src/index.js`: Bootstraps app by calling `createApp()` and binding `HOST`/`PORT`.
+- `src/server.js`: App factory; sets middleware stack, swagger, `/api` router, db/redis connections, and scheduled jobs.
+- `src/api/index.js`: Aggregates all feature routers (`auth`, `admin`, `units`, `users`, `cycles`, `okr`, `kpi`, `okr-ai`, `ai-usage`, `statistics`, `notifications`, `company`).
+- `src/api/auth/*`: Cookie-based auth with refresh-token rotation, multi-session management, logout-all, and session revocation.
+- `src/api/company/*`: Company self-service APIs for `ADMIN_COMPANY` (profile/stats/logo/AI usage logs).
+- `src/api/notifications/*`: Notification inbox endpoints with read-state mutation and unread counter.
+- `src/api/okr/objective/*`: Objective lifecycle + approval flow + publish/revert-to-draft.
+- `src/api/okr/feedbacks/*`: Objective feedback threads, KR tagging, one-level reply workflow.
+- `src/api/okr/key-result/*`, `src/api/okr/check-in/*`: KR CRUD and periodic check-ins.
+- `src/api/kpi/*`: KPI dictionary/assignment/record workflows and progress tracking.
+- `src/api/cycle/*`: Cycle CRUD + lock/unlock + clone objective/KPI items.
+- `src/middlewares/auth.js`: Cookie JWT auth + request context injection.
+- `src/middlewares/validate.js`: Zod validation wrapper writing parsed values into `req.validated`.
+- `src/middlewares/rateLimit.js`: Redis login attempt throttling and `Retry-After` support.
+- `src/schemas/*.schema.js`: Zod schemas per domain (auth/user/unit/objective/kpi/feedback/notification/company/okrAi).
+- `src/utils/context.js`: AsyncLocalStorage context container used by auth and DB-aware services.
+- `src/utils/notification.js`, `src/utils/notificationHelper.js`: Notification message generation and persistence helper flow.
+- `src/utils/prisma.js`: Prisma client singleton.
+- `src/utils/redis.js`: Redis client initialization/helpers.
+- `src/jobs/resetTokenUsage.job.js`: Monthly token reset scheduler.
+- `src/jobs/feedback.smoke.js`: Empty placeholder script.
+- `prisma/schema.prisma`: Core data model including feedback + notification tables and expanded enums.
+- `prisma.config.js`: Prisma schema/migration/seed config.
+- `scripts/studio.js`: Launches Prisma Studio with `DATABASE_ADMIN_URL` override.
+
+### Important Corrections vs Older Notes
+
+- Active auth flow is login/refresh/session-based; `signup` endpoint is not present in current `auth.route.js`.
+- Access + refresh cookies are both used; token lifecycle is 15m access with refresh rotation.
+- Objective status and KPI status now share expanded `ProgressStatus` values.
+- Feedback and notification features are first-class modules in API and schema.
+- Repo currently uses `.env` (no `.env.development` or `.env.docker` file in workspace root).
+
 ---
 
 ## 📈 Performance Optimization
@@ -722,7 +867,7 @@ calculateKeyResultProgress(kr, now);
 
 **Created:** Backend team
 **Current Maintainers:** [Tyler Pham]
-**Last Updated:** April 4, 2026
+**Last Updated:** April 16, 2026
 
 ### Git Workflow
 
