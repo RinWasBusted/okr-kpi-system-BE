@@ -20,7 +20,7 @@ import {
  * @example
  * // Cycle: Jan 1 - Jan 31, Today: Jan 16 → Expected: ~50%
  */
-const calculateExpectedProgress = (cycleStart, cycleEnd, now = new Date()) => {
+export const calculateExpectedProgress = (cycleStart, cycleEnd, now = new Date()) => {
   const start = new Date(cycleStart).getTime();
   const end = new Date(cycleEnd).getTime();
   const current = now.getTime();
@@ -53,7 +53,7 @@ const calculateExpectedProgress = (cycleStart, cycleEnd, now = new Date()) => {
  * - AT_RISK: actual >= expected - 20% (chậm 1 chút, trong ngưỡng cho phép)
  * - CRITICAL: actual < expected - 20% (chậm nhiều, cần can thiệp)
  */
-const calculateOKRProgressStatus = (actualProgress, expectedProgress) => {
+export const calculateOKRProgressStatus = (actualProgress, expectedProgress) => {
   const actual = Number(actualProgress) || 0;
 
   if (actual === 0) return "NOT_STARTED";
@@ -358,4 +358,7 @@ export default {
   ensureCycleUnlocked,
   calculateKeyResultProgress,
   recalculateObjectiveProgress,
+  calculateKPIProgressStatus,
+  calculateOKRProgressStatus,
+  calculateExpectedProgress,
 };
