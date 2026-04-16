@@ -215,7 +215,7 @@ const formatAssignment = async (assignment, user = null) => {
       prisma.kPIRecords.findFirst({
         where: { kpi_assignment_id: assignment.id },
         orderBy: { created_at: "desc" },
-        select: { status: true, trend: true },
+        select: { status: true, trend: true, created_at: true },
       }),
       assignment.cycle_id
         ? prisma.cycles.findUnique({
