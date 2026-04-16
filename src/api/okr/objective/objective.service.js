@@ -6,6 +6,8 @@ import {
   canEditObjective,
   recalculateObjectiveProgress,
   calculateKeyResultProgress,
+  calculateOKRProgressStatus,
+  calculateExpectedProgress,
 } from "../../../utils/okr.js";
 import { getCloudinaryImageUrl } from "../../../utils/cloudinary.js";
 import { daysBetweenUtc } from "../../../utils/date.js";
@@ -140,31 +142,39 @@ const formatKeyResult = (kr, now) => ({
   days_until_due: kr.due_date ? daysBetweenUtc(kr.due_date, now) : null,
 });
 
-// Calculate progress status based on progress_percentage
-const calculateProgressStatus = (progress) => {
-  const p = Number(progress) || 0;
-  if (p === 0) return "NOT_STARTED";
-  if (p >= 100) return "COMPLETED";
-  if (p >= 80) return "ON_TRACK";
-  if (p >= 30) return "AT_RISK";
-  return "CRITICAL";
+/**
+ * Calculate OKR progress status based on actual progress vs expected progress.
+ * Uses time-based calculation: compares completion % with expected % based on cycle timeline.
+ *
+ * Logic:
+ * - NOT_STARTED: 0% completion
+ * - COMPLETED: >= 100% completion
+ * - ON_TRACK: actual >= expected (on pace with timeline)
+ * - AT_RISK: actual >= expected - 20% (slightly behind, within tolerance)
+ * - CRITICAL: actual < expected - 20% (significantly behind)
+ */
+const calculateObjectiveStatus = (actualProgress, expectedProgress) => {
+  return calculateOKRProgressStatus(actualProgress, expectedProgress);
 };
 
-const calculateProgressStatusFilter = (progress) => {
-  const p = Number(progress) || 0;
-  if (p === 0) return "NOT_STARTED";
-  if (p >= 100) return "COMPLETED";
-  if (p >= 80) return "ON_TRACK";
-  if (p >= 30) return "AT_RISK";
-  return "CRITICAL";
+/**
+ * Calculate expected progress based on time elapsed in cycle.
+ * Returns percentage of time that has passed (0-100).
+ */
+const calculateExpectedProgressForObjective = (cycle) => {
+  if (!cycle?.start_date || !cycle?.end_date) return null;
+  return calculateExpectedProgress(cycle.start_date, cycle.end_date, new Date());
 };
 
-const matchesProgressStatus = (objective, progressStatus) => {
+// Filter function for progress status matching
+const matchesProgressStatus = (objective, progressStatus, cycle) => {
   if (!progressStatus) return true;
-  return (
-    calculateProgressStatusFilter(objective.progress_percentage) ===
-    progressStatus
+  const expectedProgress = calculateExpectedProgressForObjective(cycle);
+  const currentStatus = calculateObjectiveStatus(
+    objective.progress_percentage,
+    expectedProgress ?? objective.progress_percentage
   );
+  return currentStatus === progressStatus;
 };
 
 // Calculate permissions for an objective based on user and objective state
@@ -253,6 +263,22 @@ const formatObjective = async (
     ? await calculateObjectivePermissions(user, objective)
     : null;
 
+  // Calculate time-based expected progress for OKR
+  const expectedProgress = objective.cycle
+    ? calculateExpectedProgressForObjective(objective.cycle)
+    : null;
+
+  // Calculate progress status using time-based comparison
+  const progressStatus = calculateObjectiveStatus(
+    objective.progress_percentage,
+    expectedProgress ?? objective.progress_percentage,
+  );
+
+  // Calculate days remaining in cycle
+  const daysRemaining = objective.cycle?.end_date
+    ? daysBetweenUtc(new Date(objective.cycle.end_date), now)
+    : null;
+
   const result = {
     id: objective.id,
     title: objective.title,
@@ -260,9 +286,9 @@ const formatObjective = async (
     status: objective.status,
     visibility: objective.visibility,
     progress_percentage: objective.progress_percentage,
-    progress_status: calculateProgressStatusFilter(
-      objective.progress_percentage,
-    ),
+    progress_status: progressStatus,
+    expected_progress: expectedProgress,
+    days_remaining: daysRemaining,
     cycle: objective.cycle ?? null,
     unit_id: objective.unit_id,
     owner_id: objective.owner_id,
@@ -820,8 +846,20 @@ export const approveObjective = async (user, objectiveId) => {
     throw new AppError("Objective is not pending approval", 400);
   }
 
-  // Calculate progress-based status after approval
-  const newStatus = calculateProgressStatus(objective.progress_percentage);
+  // Get cycle for time-based status calculation
+  const cycle = await prisma.cycles.findUnique({
+    where: { id: objective.cycle_id },
+    select: { start_date: true, end_date: true },
+  });
+
+  // Calculate progress-based status after approval (using time-based calculation)
+  const expectedProgress = cycle
+    ? calculateExpectedProgress(cycle.start_date, cycle.end_date, new Date())
+    : objective.progress_percentage;
+  const newStatus = calculateObjectiveStatus(
+    objective.progress_percentage,
+    expectedProgress,
+  );
 
   const updated = await prisma.objectives.update({
     where: { id: objectiveId },
@@ -928,8 +966,20 @@ export const publishObjective = async (user, objectiveId, updates = {}) => {
     throw new AppError("owner_id is required for PRIVATE objectives", 422);
   }
 
-  // Calculate progress-based status
-  const newStatus = calculateProgressStatus(objective.progress_percentage);
+  // Get cycle for time-based status calculation
+  const cycle = await prisma.cycles.findUnique({
+    where: { id: objective.cycle_id },
+    select: { start_date: true, end_date: true },
+  });
+
+  // Calculate progress-based status (using time-based calculation)
+  const expectedProgress = cycle
+    ? calculateExpectedProgress(cycle.start_date, cycle.end_date, new Date())
+    : objective.progress_percentage;
+  const newStatus = calculateObjectiveStatus(
+    objective.progress_percentage,
+    expectedProgress,
+  );
 
   const updated = await prisma.objectives.update({
     where: { id: objectiveId },

@@ -29,8 +29,8 @@ const formatUnitRow = (row, includeStats = false, currentUser = null) => {
     if (includeStats) {
         base.okr_count = Number(row.okr_count ?? 0);
         base.kpi_count = Number(row.kpi_count ?? 0);
-        base.okr_progress = row.okr_progress !== null ? Number(row.okr_progress) : null;
-        base.kpi_health = row.kpi_health !== null ? Number(row.kpi_health) : null;
+        base.okr_progress = row.okr_progress !== null ? Math.round(Number(row.okr_progress) * 100) / 100 : null;
+        base.kpi_health = row.kpi_health !== null ? Math.round(Number(row.kpi_health) * 100) / 100 : null;
     }
 
     // Only add permission for ADMIN_COMPANY
@@ -435,8 +435,8 @@ export const getUnitDetail = async (unitId, currentUser) => {
             member_count: Number(unit.member_count ?? 0),
             okr_count: Number(unit.okr_count ?? 0),
             kpi_count: Number(unit.kpi_count ?? 0),
-            okr_progress: unit.okr_progress !== null ? Number(unit.okr_progress) : null,
-            kpi_health: unit.kpi_health !== null ? Number(unit.kpi_health) : null,
+            okr_progress: unit.okr_progress !== null ? Math.round(Number(unit.okr_progress) * 100) / 100 : null,
+            kpi_health: unit.kpi_health !== null ? Math.round(Number(unit.kpi_health) * 100) / 100 : null,
             created_at: unit.created_at,
         };
 

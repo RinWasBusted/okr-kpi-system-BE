@@ -7,6 +7,7 @@ import {
   isAncestorUnit,
 } from "../../../utils/path.js";
 import { UserRole } from "@prisma/client";
+import { calculateKPIProgressStatus } from "../../../utils/okr.js";
 import {
     notifyKPIAssignmentEvent,
 } from "../../../utils/notificationHelper.js";
@@ -84,15 +85,22 @@ const calculateProgressPercentage = (
   return Math.round(progress * 100) / 100;
 };
 
-// Calculate progress status for KPI
-// Returns ProgressStatus enum values
-const calculateProgressStatus = (progress) => {
-  const p = Number(progress) || 0;
-  if (p === 0) return "NOT_STARTED";
-  if (p >= 100) return "COMPLETED";
-  if (p >= 80) return "ON_TRACK";
-  if (p >= 30) return "AT_RISK";
-  return "CRITICAL";
+/**
+ * Calculate KPI progress status based on fixed thresholds.
+ * KPI uses absolute progress values unlike OKR which uses time-based calculation.
+ *
+ * @param {number} progress - Progress percentage
+ * @returns {string} ProgressStatus enum value
+ *
+ * Logic:
+ * - NOT_STARTED: 0%
+ * - COMPLETED: >= 100%
+ * - ON_TRACK: >= 80%
+ * - AT_RISK: >= 50%
+ * - CRITICAL: < 50%
+ */
+const calculateKPIStatus = (progress) => {
+  return calculateKPIProgressStatus(progress);
 };
 
 // Calculate permissions for a KPI assignment based on user
@@ -177,6 +185,7 @@ const assignmentSelect = {
   id: true,
   kpi_dictionary_id: true,
   target_value: true,
+  start_value: true,
   current_value: true,
   progress_percentage: true,
   visibility: true,
@@ -234,9 +243,10 @@ const formatAssignment = async (assignment, user = null) => {
     id: assignment.id,
     kpi_dictionary: dictionary,
     target_value: assignment.target_value,
+    start_value: assignment.start_value,
     current_value: assignment.current_value,
     progress_percentage: Math.round(assignment.progress_percentage * 100) / 100,
-    progress_status: calculateProgressStatus(assignment.progress_percentage),
+    progress_status: calculateKPIStatus(assignment.progress_percentage),
     status: latestRecord?.status || null,
     visibility: assignment.visibility,
     due_date: assignment.due_date ?? null,
@@ -792,11 +802,12 @@ export const createKPIAssignment = async (user, payload) => {
             0,
             NOW()
         )
-        RETURNING 
+        RETURNING
             id,
             kpi_dictionary_id,
             cycle_id,
             target_value,
+            start_value,
             current_value,
             progress_percentage,
             visibility,
