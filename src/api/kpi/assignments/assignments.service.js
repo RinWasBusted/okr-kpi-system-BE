@@ -690,10 +690,11 @@ export const createKPIAssignment = async (user, payload) => {
 
   const cycle = await prisma.cycles.findFirst({
     where: { id: payload.cycle_id },
-    select: { id: true },
+    select: { id: true, is_locked: true },
   });
 
   if (!cycle) throw new AppError("Cycle not found", 404);
+  if (cycle.is_locked) throw new AppError("Cycle is locked and cannot be modified", 400, "CYCLE_LOCKED");
 
   // Validate owner_id and unit_id are provided and mutually exclusive
   if (!payload.owner_id && !payload.unit_id) {
@@ -844,9 +845,19 @@ export const createKPIAssignment = async (user, payload) => {
 export const updateKPIAssignment = async (user, assignmentId, payload) => {
   const assignment = await prisma.kPIAssignments.findFirst({
     where: { id: assignmentId, deleted_at: null },
+    select: { id: true, cycle_id: true, kpi_dictionary_id: true, unit_id: true, owner_id: true, target_value: true, start_value: true, current_value: true },
   });
 
   if (!assignment) throw new AppError("KPI Assignment not found", 404);
+
+  // Check if current cycle is locked
+  const currentCycle = await prisma.cycles.findFirst({
+    where: { id: assignment.cycle_id },
+    select: { is_locked: true },
+  });
+  if (currentCycle?.is_locked) {
+    throw new AppError("Cycle is locked and cannot be modified", 400, "CYCLE_LOCKED");
+  }
 
   const allowed = await canUpdateKPIAssignment(user, assignment);
   if (!allowed)
@@ -860,9 +871,10 @@ export const updateKPIAssignment = async (user, assignmentId, payload) => {
   if (payload.cycle_id !== undefined) {
     const cycle = await prisma.cycles.findFirst({
       where: { id: payload.cycle_id },
-      select: { id: true },
+      select: { id: true, is_locked: true },
     });
     if (!cycle) throw new AppError("Cycle not found", 404);
+    if (cycle.is_locked) throw new AppError("Target cycle is locked and cannot be modified", 400, "CYCLE_LOCKED");
     updates.cycle_id = payload.cycle_id;
   }
 

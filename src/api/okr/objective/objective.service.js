@@ -146,8 +146,8 @@ const calculateProgressStatus = (progress) => {
   if (p === 0) return "NOT_STARTED";
   if (p >= 100) return "COMPLETED";
   if (p >= 80) return "ON_TRACK";
-  if (p >= 30) return "WARNING";
-  return "DANGER";
+  if (p >= 30) return "AT_RISK";
+  return "CRITICAL";
 };
 
 const calculateProgressStatusFilter = (progress) => {
@@ -348,9 +348,10 @@ const getObjectiveOrThrow = async (objectiveId, includeRelations = false) => {
 const ensureCycleExists = async (cycleId) => {
   const cycle = await prisma.cycles.findFirst({
     where: { id: cycleId },
-    select: { id: true },
+    select: { id: true, is_locked: true },
   });
   if (!cycle) throw new AppError("Cycle not found", 404);
+  if (cycle.is_locked) throw new AppError("Cycle is locked and cannot be modified", 400, "CYCLE_LOCKED");
 };
 
 const ensureUnitExists = async (unitId) => {
@@ -647,6 +648,15 @@ export const createObjective = async (user, payload) => {
 
 export const updateObjective = async (user, objectiveId, updates) => {
   const objective = await getObjectiveOrThrow(objectiveId);
+
+  // Check if cycle is locked
+  const cycle = await prisma.cycles.findFirst({
+    where: { id: objective.cycle_id },
+    select: { is_locked: true },
+  });
+  if (cycle?.is_locked) {
+    throw new AppError("Cycle is locked and cannot be modified", 400, "CYCLE_LOCKED");
+  }
 
   if (!(await canEditObjective(user, objective))) {
     throw new AppError(
