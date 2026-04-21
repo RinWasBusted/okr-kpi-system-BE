@@ -3,7 +3,7 @@
 ** User có role là ADMIN_COMPANY được toàn quyền xem, thêm, xóa, sửa tất cả dữ liệu. **
 
 # Định nghĩa
-- User phân cấp theo Unit mà nó thuộc về, nếu User A thuộc unit có cấp cao hơn unit của User B thì User A là cấp trên của User B.
+- User phân cấp theo Unit mà nó thuộc về, nếu User A thuộc unit có cấp cao hơn và cùng nhánh với unit của User B thì User A là cấp trên của User B.
 - Một Unit có thể có 1 user làm Manager.
 
 # User
