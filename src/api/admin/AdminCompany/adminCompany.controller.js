@@ -1,6 +1,7 @@
 import * as adminCompanyService from "./adminCompany.service.js";
 import AppError from "../../../utils/appError.js";
 import { uploadImageToCloudinary } from "../../../utils/cloudinary.js";
+import { hashPassword } from "../../../utils/bcrypt.js";
 
 const parseBoolean = (value) => {
   if (value === undefined || value === null) return undefined;
@@ -131,7 +132,7 @@ export const updateCompanyAdmin = async (req, res) => {
       if (typeof password !== "string" || password.length < 8) {
         throw new AppError("Password must be at least 8 characters", 400);
       }
-      updates.password = password;
+      updates.password = await hashPassword(password, 10);
     }
     if (is_active !== undefined) {
       const parsed = parseBoolean(is_active);

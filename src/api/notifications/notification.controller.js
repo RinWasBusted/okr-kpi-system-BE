@@ -1,9 +1,9 @@
 import * as notificationService from "./notification.service.js";
-import AppError from "../../utils/appError.js";
 import {
   listNotificationsQuerySchema,
   markNotificationReadParamSchema,
 } from "../../schemas/notification.schema.js";
+import { notificationEventEmitter } from "../../services/eventEmitter.js";
 
 export const listNotifications = async (req, res, next) => {
   try {
@@ -47,6 +47,28 @@ export const getUnreadCount = async (req, res, next) => {
   try {
     const result = await notificationService.getUnreadCount(req.user);
     res.success("Unread notification count retrieved successfully", 200, result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const streamNotifications = async (req, res, next) => {
+  try {
+    // Set headers for SSE 
+    res.set({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+
+    notificationEventEmitter.on("notification", (data) => {
+      // Send notification data as SSE
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    });
+
+    req.on("close", () => {
+      res.end();
+    });
   } catch (error) {
     next(error);
   }

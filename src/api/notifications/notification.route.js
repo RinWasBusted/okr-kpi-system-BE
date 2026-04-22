@@ -173,4 +173,6 @@ router.patch("/read-all", ctrl.markAllRead);
  */
 router.patch("/:id/read", ctrl.markOneRead);
 
+router.get("/stream", ctrl.streamNotifications);
+
 export default router;
