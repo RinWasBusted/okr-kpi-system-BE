@@ -1,6 +1,7 @@
 import prisma from "../../utils/prisma.js";
 import AppError from "../../utils/appError.js";
 import { generateMessage } from "../../utils/notification.js";
+import { sendNotification } from "../../services/notification.js";
 
 const normalizeActorName = (value) => {
     if (typeof value !== "string") return null;
@@ -241,7 +242,7 @@ export const createNotification = async (
         extraContext,
     });
 
-    await tx.notifications.create({
+    const notification = await tx.notifications.create({
         data: {
             company_id: companyId,
             event_type: eventType,
@@ -253,4 +254,6 @@ export const createNotification = async (
             },
         },
     });
+
+    sendNotification(recipientIds, notification);
 };
