@@ -84,7 +84,7 @@ export const streamNotifications = async (req, res, next) => {
     // }, 2000);
 
     req.on("close", async () => {
-      clearInterval(intervalId);
+      // clearInterval(intervalId);
       await stopListening(req.user.id, onNotification);
       res.end();
     });
