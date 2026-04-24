@@ -3,7 +3,7 @@ import {
   listNotificationsQuerySchema,
   markNotificationReadParamSchema,
 } from "../../schemas/notification.schema.js";
-import { notificationEventEmitter } from "../../services/eventEmitter.js";
+import { notificationEventListener, stopListening, sendNotification  } from "../../services/notification.js";
 
 export const listNotifications = async (req, res, next) => {
   try {
@@ -54,19 +54,38 @@ export const getUnreadCount = async (req, res, next) => {
 
 export const streamNotifications = async (req, res, next) => {
   try {
-    // Set headers for SSE 
-    res.set({
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    });
+    // Set headers for SSE - use setHeader to preserve CORS headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
 
-    notificationEventEmitter.on("notification", (data) => {
-      // Send notification data as SSE
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
-    });
+    res.write("\n"); // Send initial data to establish the connection
 
-    req.on("close", () => {
+    const onNotification = (data) => {
+      res.write(`data: ${data}\n\n`);
+    };
+
+    await notificationEventListener(req.user.id, onNotification);
+
+    // Uncomment the following block for testing SSE with dummy data.
+    // let cnt = 1;
+    // const intervalId = setInterval(() => {
+    //   // res.write(`data: {"id":${cnt},"message":"Người dùng John Doe đã cập nhật mục tiêu","ref_type":"OBJECTIVE","ref_id":456,"event_type":"UPDATED","created_at":"2026-04-22T10:30:45.000Z"}\n\n`);
+    //   sendNotification([req.user.id], {
+    //     id: cnt,
+    //     message: `Notification ${cnt}`,
+    //     ref_type: "TEST",
+    //     ref_id: cnt,
+    //     event_type: "CREATED",
+    //     created_at: new Date().toISOString(),
+    //   });
+    //   cnt++;
+    // }, 2000);
+
+    req.on("close", async () => {
+      clearInterval(intervalId);
+      await stopListening(req.user.id, onNotification);
       res.end();
     });
   } catch (error) {

@@ -173,6 +173,110 @@ router.patch("/read-all", ctrl.markAllRead);
  */
 router.patch("/:id/read", ctrl.markOneRead);
 
+/**
+ * @swagger
+ * /notifications/stream:
+ *   get:
+ *     summary: Stream real-time notifications using Server-Sent Events (SSE)
+ *     description: |
+ *       Establishes a persistent connection to receive real-time notifications for the authenticated user.
+ *       This endpoint uses Server-Sent Events (SSE) to push notification data to the client as they occur.
+ *       The connection remains open until the client closes it or an error occurs.
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: |
+ *           SSE stream connection established successfully.
+ *           The response streams notifications in Server-Sent Events format.
+ *           Each notification is sent as a separate event with JSON data payload.
+ *         headers:
+ *           Content-Type:
+ *             schema:
+ *               type: string
+ *               example: text/event-stream
+ *             description: Content type for Server-Sent Events
+ *           Cache-Control:
+ *             schema:
+ *               type: string
+ *               example: no-cache
+ *             description: Disable caching for real-time events
+ *           Connection:
+ *             schema:
+ *               type: string
+ *               example: keep-alive
+ *             description: Keep the connection open for streaming
+ *         content:
+ *           text/event-stream:
+ *             schema:
+ *               type: object
+ *               description: |
+ *                 Each SSE event contains notification data in JSON format.
+ *                 Format: data: {JSON_OBJECT}\n\n
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                   description: Unique identifier of the notification
+ *                   example: 123
+ *                 message:
+ *                   type: string
+ *                   description: Human-readable notification message
+ *                   example: "Người dùng John Doe đã cập nhật mục tiêu"
+ *                 ref_type:
+ *                   type: string
+ *                   description: Type of resource referenced in the notification
+ *                   enum: [OBJECTIVE, KPI, KEY_RESULT, KPI_ASSIGNMENT, FEEDBACK, USER]
+ *                   example: "OBJECTIVE"
+ *                 ref_id:
+ *                   type: integer
+ *                   description: ID of the referenced resource
+ *                   example: 456
+ *                 event_type:
+ *                   type: string
+ *                   description: Type of event that triggered the notification
+ *                   enum: [CREATED, UPDATED, DELETED, STATUS_CHANGED, ASSIGNED, FEEDBACK_SUBMITTED]
+ *                   example: "UPDATED"
+ *                 created_at:
+ *                   type: string
+ *                   format: date-time
+ *                   description: Timestamp when the notification was created
+ *                   example: "2026-04-22T10:30:45.000Z"
+ *             example: |
+ *               data: {"id":123,"message":"Người dùng John Doe đã cập nhật mục tiêu","ref_type":"OBJECTIVE","ref_id":456,"event_type":"UPDATED","created_at":"2026-04-22T10:30:45.000Z"}
+ *       401:
+ *         description: Unauthorized - Invalid or missing authentication token
+ *       500:
+ *         description: Internal server error - Stream connection failed
+ *     x-code-samples:
+ *       - lang: JavaScript
+ *         label: JavaScript/Browser
+ *         source: |
+ *           const token = 'your-jwt-token';
+ *           const eventSource = new EventSource(
+ *             '/api/notifications/stream',
+ *             {
+ *               headers: {
+ *                 'Authorization': `Bearer ${token}`
+ *               }
+ *             }
+ *           );
+ *
+ *           eventSource.onmessage = (event) => {
+ *             const notification = JSON.parse(event.data);
+ *             console.log('New notification:', notification);
+ *           };
+ *
+ *           eventSource.onerror = () => {
+ *             console.error('Stream connection error');
+ *             eventSource.close();
+ *           };
+ *       - lang: cURL
+ *         label: cURL
+ *         source: |
+ *           curl -X GET http://localhost:3000/api/notifications/stream \
+ *             -H "Authorization: Bearer your-jwt-token"
+ */
 router.get("/stream", ctrl.streamNotifications);
 
 export default router;
