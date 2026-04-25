@@ -5,6 +5,7 @@ import {
     canEditObjective,
     calculateKeyResultProgress,
     recalculateObjectiveProgress,
+    ensureCycleUnlocked,
 } from "../../../utils/okr.js";
 import { daysBetweenUtc } from "../../../utils/date.js";
 import { getObjectiveAccessPath, getUnitPath } from "../../../utils/path.js";
@@ -87,7 +88,7 @@ const formatKeyResult = (kr, now) => ({
 
 const getObjectiveForKeyResult = async (objectiveId) => {
     const objective = await prisma.$queryRaw`
-                SELECT id, status, visibility, unit_id, owner_id, access_path::text AS access_path
+                SELECT id, status, visibility, unit_id, owner_id, cycle_id, access_path::text AS access_path
                 FROM "Objectives"
                 WHERE id = ${objectiveId}
         `;
@@ -101,7 +102,7 @@ const getKeyResultOrThrow = async (keyResultId) => {
     const keyResult = await prisma.$queryRaw`
                 SELECT
                         kr.id, kr.objective_id, kr.title, kr.start_value, kr.target_value, kr.current_value, kr.unit, kr.weight, kr.due_date, kr.progress_percentage, kr.evaluation_method,
-                        obj.id AS objective_id_obj, obj.status, obj.visibility, obj.unit_id, obj.owner_id, obj.access_path::text AS access_path
+                        obj.id AS objective_id_obj, obj.status, obj.visibility, obj.unit_id, obj.owner_id, obj.cycle_id, obj.access_path::text AS access_path
                 FROM "KeyResults" kr
                 JOIN "Objectives" obj ON kr.objective_id = obj.id
                 WHERE kr.id = ${keyResultId}
@@ -129,6 +130,7 @@ const getKeyResultOrThrow = async (keyResultId) => {
             visibility: kr.visibility,
             unit_id: kr.unit_id,
             owner_id: kr.owner_id,
+            cycle_id: kr.cycle_id,
             access_path: kr.access_path,
         },
     };
@@ -166,6 +168,9 @@ export const listKeyResults = async (user, objectiveId) => {
 
 export const createKeyResult = async (user, objectiveId, payload) => {
     const objective = await getObjectiveForKeyResult(objectiveId);
+
+    // Check if cycle is locked
+    await ensureCycleUnlocked(objective.cycle_id, user.company_id);
 
     const allowed = await canEditObjective(user, objective);
     if (!allowed) {
@@ -239,6 +244,9 @@ export const createKeyResult = async (user, objectiveId, payload) => {
 
 export const updateKeyResult = async (user, keyResultId, updates) => {
     const keyResult = await getKeyResultOrThrow(keyResultId);
+
+    // Check if cycle is locked
+    await ensureCycleUnlocked(keyResult.objective.cycle_id, user.company_id);
 
     const allowed = await canEditObjective(user, keyResult.objective);
     if (!allowed) {
