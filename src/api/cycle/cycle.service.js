@@ -57,28 +57,30 @@ export const listCycles = async ({ companyId, is_locked, year, page, per_page })
     // Get all cycle IDs for batch querying statistics
     const cycleIds = cycles.map((c) => c.id);
 
-    // Fetch objectives statistics for all cycles in batch
-    const objectivesByCycle = await prisma.objectives.groupBy({
-        by: ["cycle_id"],
-        where: {
-            company_id: companyId,
-            cycle_id: { in: cycleIds },
-            deleted_at: null,
-        },
-        _count: { id: true },
-        _avg: { progress_percentage: true },
-    });
+    const { objectivesByCycle, kpiByCycle } = await prisma.$withLockedCycleFilterBypassed(async (tx) => {
+        const objectivesByCycle = await tx.objectives.groupBy({
+            by: ["cycle_id"],
+            where: {
+                company_id: companyId,
+                cycle_id: { in: cycleIds },
+                deleted_at: null,
+            },
+            _count: { id: true },
+            _avg: { progress_percentage: true },
+        });
 
-    // Fetch KPI assignments statistics for all cycles in batch
-    const kpiByCycle = await prisma.kPIAssignments.groupBy({
-        by: ["cycle_id"],
-        where: {
-            company_id: companyId,
-            cycle_id: { in: cycleIds },
-            deleted_at: null,
-        },
-        _count: { id: true },
-        _avg: { progress_percentage: true },
+        const kpiByCycle = await tx.kPIAssignments.groupBy({
+            by: ["cycle_id"],
+            where: {
+                company_id: companyId,
+                cycle_id: { in: cycleIds },
+                deleted_at: null,
+            },
+            _count: { id: true },
+            _avg: { progress_percentage: true },
+        });
+
+        return { objectivesByCycle, kpiByCycle };
     });
 
     // Create lookup maps
@@ -186,26 +188,28 @@ export const getCycleDetail = async (companyId, cycleId) => {
         throw new AppError("Cycle not found", 404);
     }
 
-    // Get objectives statistics
-    const objectivesStats = await prisma.objectives.aggregate({
-        where: {
-            company_id: companyId,
-            cycle_id: cycleId,
-            deleted_at: null,
-        },
-        _count: { id: true },
-        _avg: { progress_percentage: true },
-    });
+    const { objectivesStats, kpiStats } = await prisma.$withLockedCycleFilterBypassed(async (tx) => {
+        const objectivesStats = await tx.objectives.aggregate({
+            where: {
+                company_id: companyId,
+                cycle_id: cycleId,
+                deleted_at: null,
+            },
+            _count: { id: true },
+            _avg: { progress_percentage: true },
+        });
 
-    // Get KPI assignments statistics
-    const kpiStats = await prisma.kPIAssignments.aggregate({
-        where: {
-            company_id: companyId,
-            cycle_id: cycleId,
-            deleted_at: null,
-        },
-        _count: { id: true },
-        _avg: { progress_percentage: true },
+        const kpiStats = await tx.kPIAssignments.aggregate({
+            where: {
+                company_id: companyId,
+                cycle_id: cycleId,
+                deleted_at: null,
+            },
+            _count: { id: true },
+            _avg: { progress_percentage: true },
+        });
+
+        return { objectivesStats, kpiStats };
     });
 
     const today = new Date();
@@ -235,13 +239,24 @@ export const deleteCycle = async (companyId, cycleId) => {
 
     if (!cycle) throw new AppError("Cycle not found", 404);
 
-    // Check if cycle has objectives
-    const objectivesCount = await prisma.objectives.count({
-        where: {
-            company_id: companyId,
-            cycle_id: cycleId,
-            deleted_at: null,
-        },
+    const { objectivesCount, assignmentsCount } = await prisma.$withLockedCycleFilterBypassed(async (tx) => {
+        const objectivesCount = await tx.objectives.count({
+            where: {
+                company_id: companyId,
+                cycle_id: cycleId,
+                deleted_at: null,
+            },
+        });
+
+        const assignmentsCount = await tx.kPIAssignments.count({
+            where: {
+                company_id: companyId,
+                cycle_id: cycleId,
+                deleted_at: null,
+            },
+        });
+
+        return { objectivesCount, assignmentsCount };
     });
 
     if (objectivesCount > 0) {
@@ -251,15 +266,6 @@ export const deleteCycle = async (companyId, cycleId) => {
             "CYCLE_HAS_DATA"
         );
     }
-
-    // Check if cycle has KPI assignments
-    const assignmentsCount = await prisma.kPIAssignments.count({
-        where: {
-            company_id: companyId,
-            cycle_id: cycleId,
-            deleted_at: null,
-        },
-    });
 
     if (assignmentsCount > 0) {
         throw new AppError(
@@ -385,22 +391,24 @@ export const cloneCycle = async (
         ...(shouldCloneKpis && { id: { in: kpi_assignment_ids } }),
     };
 
-    // Fetch objectives if cloning
-    const objectives = shouldCloneObjectives
-        ? await prisma.objectives.findMany({
-              where: objectiveWhere,
-              include: { key_results: true },
-              orderBy: { id: "asc" },
-          })
-        : [];
+    const { objectives, assignments } = await prisma.$withLockedCycleFilterBypassed(async (tx) => {
+        const objectives = shouldCloneObjectives
+            ? await tx.objectives.findMany({
+                  where: objectiveWhere,
+                  include: { key_results: true },
+                  orderBy: { id: "asc" },
+              })
+            : [];
 
-    // Fetch KPI assignments if cloning
-    const assignments = shouldCloneKpis
-        ? await prisma.kPIAssignments.findMany({
-              where: kpiWhere,
-              orderBy: { id: "asc" },
-          })
-        : [];
+        const assignments = shouldCloneKpis
+            ? await tx.kPIAssignments.findMany({
+                  where: kpiWhere,
+                  orderBy: { id: "asc" },
+              })
+            : [];
+
+        return { objectives, assignments };
+    });
 
     // Fetch unit paths for access_path calculation
     const unitIds = new Set();
