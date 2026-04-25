@@ -62,12 +62,6 @@ router.use(authenticate);
  *           enum: [Draft, Pending_Approval, Rejected, NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED]
  *           example: ON_TRACK
  *       - in: query
- *         name: progress_status
- *         schema:
- *           type: string
- *           enum: [NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED]
- *           description: Filter by progress status (calculated from progress_percentage)
- *       - in: query
  *         name: visibility
  *         schema:
  *           type: string
@@ -135,10 +129,6 @@ router.use(authenticate);
  *                         enum: [PUBLIC, INTERNAL, PRIVATE]
  *                       progress_percentage:
  *                         type: number
- *                       progress_status:
- *                         type: string
- *                         enum: [NOT_STARTED, ON_TRACK, AT_RISK, CRITICAL, COMPLETED]
- *                         description: Calculated from progress_percentage
  *                       cycle:
  *                         type: object
  *                         nullable: true

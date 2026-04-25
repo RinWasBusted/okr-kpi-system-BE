@@ -166,12 +166,10 @@ const calculateExpectedProgressForObjective = (cycle, now = new Date()) => {
   return calculateExpectedProgress(cycle.start_date, cycle.end_date, now);
 };
 
-// Filter function for progress status matching
-const matchesProgressStatus = (objective, progressStatus) => {
-  if (!progressStatus) return true;
-  // listObjectives filters already-formatted objectives where progress_status is computed
-  // with the same time-based logic used in the response payload.
-  return objective.progress_status === progressStatus;
+// Filter function for status matching (including health statuses)
+const matchesStatus = (objective, status) => {
+  if (!status) return true;
+  return objective.status === status;
 };
 
 // Calculate permissions for an objective based on user and objective state
@@ -266,10 +264,15 @@ const formatObjective = async (
     : null;
 
   // Calculate progress status using time-based comparison
-  const progressStatus = calculateObjectiveStatus(
+  const healthStatus = calculateObjectiveStatus(
     objective.progress_percentage,
     expectedProgress ?? objective.progress_percentage,
   );
+
+  // Use the computed health status as the main status if the objective is in an active state
+  // This ensures the status is always up-to-date with time and progress
+  const activeStatuses = ["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"];
+  const displayStatus = activeStatuses.includes(objective.status) ? healthStatus : objective.status;
 
   // Calculate days remaining in cycle
   const daysRemaining = objective.cycle?.end_date
@@ -280,10 +283,9 @@ const formatObjective = async (
     id: objective.id,
     title: objective.title,
     description: objective.description ?? null,
-    status: objective.status,
+    status: displayStatus,
     visibility: objective.visibility,
     progress_percentage: objective.progress_percentage,
-    progress_status: progressStatus,
     expected_progress: expectedProgress,
     days_remaining: daysRemaining,
     cycle: objective.cycle ?? null,
@@ -471,9 +473,9 @@ export const listObjectives = async ({
     ),
   );
 
-  if (filters.progress_status !== undefined) {
+  if (filters.status !== undefined) {
     formattedObjectives = formattedObjectives.filter((objective) =>
-      matchesProgressStatus(objective, filters.progress_status),
+      matchesStatus(objective, filters.status),
     );
   }
 

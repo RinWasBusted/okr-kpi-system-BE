@@ -51,7 +51,6 @@ export const getObjectives = async (req, res) => {
       unit_id,
       owner_id,
       status,
-      progress_status,
       parent_objective_id,
       visibility,
       include_key_results,
@@ -65,7 +64,6 @@ export const getObjectives = async (req, res) => {
       unit_id,
       owner_id,
       status,
-      progress_status,
       parent_objective_id,
       visibility,
     };
