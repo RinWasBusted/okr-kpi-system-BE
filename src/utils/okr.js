@@ -33,9 +33,12 @@ export const calculateExpectedProgress = (cycleStart, cycleEnd, now = new Date()
 
   // Calculate percentage of time elapsed
   const totalDuration = end - start;
-  const elapsed = current - start;
+  if (totalDuration <= 0) return 100; // Default to 100 if dates are invalid or start >= end
 
-  return Math.round((elapsed / totalDuration) * 100);
+  const elapsed = current - start;
+  const progress = (elapsed / totalDuration) * 100;
+
+  return Math.max(0, Math.min(100, Math.round(progress)));
 };
 
 /**
