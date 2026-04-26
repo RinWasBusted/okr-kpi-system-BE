@@ -372,7 +372,7 @@ router.get("/:id/detail", getUnitDetail);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name]
+ *             required: [name, parent_id]
  *             properties:
  *               name:
  *                 type: string
@@ -381,9 +381,8 @@ router.get("/:id/detail", getUnitDetail);
  *                 example: "Frontend Team"
  *               parent_id:
  *                 type: integer
- *                 nullable: true
  *                 example: 1
- *                 description: ID of the parent unit. Omit or set null for a top-level unit.
+ *                 description: ID of the parent unit. Required — the root company unit is created automatically with the company.
  *               manager_id:
  *                 type: integer
  *                 nullable: true
@@ -546,9 +545,8 @@ router.post("/", authorize("ADMIN_COMPANY"), validate(createUnitSchema), createU
  *                 example: "Backend Team"
  *               parent_id:
  *                 type: integer
- *                 nullable: true
  *                 example: 2
- *                 description: New parent unit. Set null to promote to top-level.
+ *                 description: New parent unit. Cannot be set to null — the root unit is immutable.
  *               manager_id:
  *                 type: integer
  *                 nullable: true

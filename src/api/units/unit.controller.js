@@ -1,21 +1,6 @@
 import * as unitService from "./unit.service.js";
 import AppError from "../../utils/appError.js";
 
-const parsePositiveInt = (value, fallback) => {
-    const parsed = Number(value);
-    if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
-    return parsed;
-};
-
-const parseOptionalId = (value) => {
-    if (value === undefined) return undefined;
-    if (value === null) return null;
-    if (value === 0 || value === "0" || value === null) return null; // explicit null to unset
-    const parsed = Number(value);
-    if (!Number.isInteger(parsed) || parsed <= 0) return undefined; // invalid → ignore
-    return parsed;
-};
-
 // GET /units
 export const getUnits = async (req, res) => {
     try {
@@ -47,7 +32,7 @@ export const createUnit = async (req, res) => {
 
         const unit = await unitService.createUnit(companyId, {
             name: name.trim(),
-            parent_id: parent_id ?? undefined,
+            parent_id,
             manager_id: manager_id ?? undefined,
         });
 
