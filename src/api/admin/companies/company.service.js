@@ -143,22 +143,38 @@ export const createCompany = async ({ name, slug, logo, ai_plan = "FREE" }) => {
     }
 
     try {
-        const company = await prisma.companies.create({
-            data: { name, slug, is_active: true, logo: logo ?? null, ai_plan },
-            select: {
-                id: true,
-                name: true,
-                slug: true,
-                logo: true,
-                is_active: true,
-                ai_plan: true,
-                created_at: true,
-            },
+        const result = await prisma.$transaction(async (tx) => {
+            const company = await tx.companies.create({
+                data: { name, slug, is_active: true, logo: logo ?? null, ai_plan },
+                select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    logo: true,
+                    is_active: true,
+                    ai_plan: true,
+                    created_at: true,
+                },
+            });
+
+            // Create the root unit representing the company itself
+            // All other units in this company must be children of this root unit
+            const nextIdRows = await tx.$queryRaw`
+                SELECT nextval(pg_get_serial_sequence('"Units"', 'id'))::int AS id
+            `;
+            const rootUnitId = nextIdRows[0]?.id;
+
+            await tx.$executeRaw`
+                INSERT INTO "Units" (id, company_id, name, parent_id, manager_id, path)
+                VALUES (${rootUnitId}, ${company.id}, ${name}, NULL, NULL, ${String(rootUnitId)}::ltree)
+            `;
+
+            return company;
         });
 
         return {
-            ...company,
-            logo_url: company.logo ? getCloudinaryImageUrl(company.logo, 80, 80, "fill") : null,
+            ...result,
+            logo_url: result.logo ? getCloudinaryImageUrl(result.logo, 80, 80, "fill") : null,
             admin_count: 0,
             employee_count: 0,
         };
