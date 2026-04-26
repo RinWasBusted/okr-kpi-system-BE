@@ -31,18 +31,21 @@ model Companies {
   usage_limit Int      @default(1000000)
   created_at  DateTime @default(now())
 
-  units            Units[]
-  users            Users[]
-  cycles           Cycles[]
-  kpi_dictionaries KPIDictionaries[]
-  kpi_assignments  KPIAssignments[]
-  kpi_records      KPIRecords[]
-  objectives       Objectives[]
-  key_results      KeyResults[]
-  check_ins        CheckIns[]
-  feedbacks        Feedbacks[]
-  notifications    Notifications[]
-  ai_usage_logs    AIUsageLogs[]
+  units             Units[]
+  users             Users[]
+  cycles            Cycles[]
+  kpi_dictionaries  KPIDictionaries[]
+  kpi_assignments   KPIAssignments[]
+  kpi_records       KPIRecords[]
+  objectives        Objectives[]
+  key_results       KeyResults[]
+  check_ins         CheckIns[]
+  feedbacks         Feedbacks[]
+  notifications     Notifications[]
+  ai_usage_logs     AIUsageLogs[]
+  employee_features EmployeeFeatures[]
+  risk_scores       RiskScores[]
+  ai_alerts         AIAlerts[]
 }
 
 model Units {
@@ -97,6 +100,9 @@ model Users {
   feedbacks               Feedbacks[]
   notification_recipients NotificationRecipients[]
   ai_usage_logs           AIUsageLogs[]
+  employee_features       EmployeeFeatures[]
+  risk_scores             RiskScores[]
+  ai_alerts               AIAlerts[]
 
   @@unique([email, company_id])
   @@index([company_id])
@@ -398,6 +404,80 @@ model AIUsageLogs {
   user    Users?     @relation(fields: [user_id], references: [id])
 
   @@index([company_id])
+}
+
+enum KNNRiskLabel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  UNREAD
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model EmployeeFeatures {
+  id                            Int      @id @default(autoincrement())
+  company_id                    Int
+  user_id                       Int
+  period                        DateTime @db.Date
+  kpi_completion_rate           Float
+  checkin_delay_days            Float
+  feedback_sentiment_score      Float
+  objective_participation_ratio Float
+  checkin_frequency             Int
+  created_at                    DateTime @default(now())
+
+  company Companies @relation(fields: [company_id], references: [id])
+  user    Users     @relation(fields: [user_id], references: [id])
+
+  @@unique([user_id, period])
+  @@index([company_id, user_id])
+}
+
+model RiskScores {
+  id                 Int          @id @default(autoincrement())
+  company_id         Int
+  user_id            Int
+  score_date         DateTime     @db.Date
+  statistical_alert  Boolean      @default(false)
+  knn_risk_label     KNNRiskLabel @default(LOW)
+  risk_score         Float
+  triggered_features Json
+  created_at         DateTime     @default(now())
+
+  company Companies @relation(fields: [company_id], references: [id])
+  user    Users     @relation(fields: [user_id], references: [id])
+
+  @@index([company_id, user_id])
+}
+
+model AIAlerts {
+  id                 String        @id @default(uuid())
+  company_id         Int
+  user_id            Int
+  generated_at       DateTime      @default(now())
+  risk_score         Float
+  severity           AlertSeverity
+  summary            String        @db.Text
+  triggered_features Json
+  action_items       Json
+  retrieved_docs     Json
+  llm_narrative      String        @db.Text
+  status             AlertStatus   @default(UNREAD)
+
+  company Companies @relation(fields: [company_id], references: [id])
+  user    Users     @relation(fields: [user_id], references: [id])
+
+  @@index([company_id, user_id])
 }
 
 view UnitPerformance {
