@@ -31,7 +31,7 @@ export const updateCompanySchema = z.object({
         .max(LIMITS.slug.max, `slug must not exceed ${LIMITS.slug.max} characters`)
         .regex(/^[a-z0-9-]+$/, "slug must contain only lowercase letters, numbers, and hyphens")
         .optional(),
-    // Note: is_active is intentionally excluded - use separate deactivate/reactivate endpoints
+    is_active: z.boolean().optional(),
     ai_plan: z.enum(["FREE", "SUBSCRIPTION", "PAY_AS_YOU_GO"]).optional(),
     usage_limit: z.coerce.number().int().min(0).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
