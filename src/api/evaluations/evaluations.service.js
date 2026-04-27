@@ -595,18 +595,18 @@ export const getCycleEvaluationsSummary = async (
 };
 
 export const listUnitEvaluations = async (companyId, unitId, cycleId) => {
-    const [unit, cycle, rows] = await Promise.all([
-        prisma.units.findFirst({
-            where: {
-                id: unitId,
-                company_id: companyId,
-                deleted_at: null,
-            },
-            select: {
-                id: true,
-                name: true,
-            },
-        }),
+    const [unitRows, cycle] = await Promise.all([
+        prisma.$queryRaw`
+            SELECT
+                id,
+                name,
+                path::text AS path
+            FROM "Units"
+            WHERE id = ${unitId}
+              AND company_id = ${companyId}
+              AND deleted_at IS NULL
+            LIMIT 1
+        `,
         prisma.cycles.findFirst({
             where: {
                 id: cycleId,
@@ -616,33 +616,9 @@ export const listUnitEvaluations = async (companyId, unitId, cycleId) => {
                 id: true,
             },
         }),
-        prisma.$queryRaw`
-            SELECT
-                u.id AS user_id,
-                u.full_name,
-                u.job_title,
-                u.avatar_url,
-                e.id AS evaluation_id,
-                COALESCE(e.okr_count, 0) AS okr_count,
-                COALESCE(e.kpi_count, 0) AS kpi_count,
-                COALESCE(e.avg_okr_progress, 0) AS avg_okr_progress,
-                COALESCE(e.avg_kpi_progress, 0) AS avg_kpi_progress,
-                COALESCE(e.composite_score, 0) AS composite_score,
-                e.rating::text AS rating,
-                e.created_at
-            FROM "Users" u
-            LEFT JOIN "Evaluations" e
-                ON e.evaluatee_id = u.id
-               AND e.cycle_id = ${cycleId}
-               AND e.deleted_at IS NULL
-            WHERE u.company_id = ${companyId}
-              AND u.unit_id = ${unitId}
-              AND u.is_active = true
-              AND u.deleted_at IS NULL
-              AND u.role != ${UserRole.ADMIN}::"UserRole"
-            ORDER BY COALESCE(e.composite_score, 0) DESC, u.full_name ASC
-        `,
     ]);
+
+    const unit = unitRows[0] ?? null;
 
     if (!unit) {
         throw new AppError("Unit not found", 404);
@@ -651,6 +627,37 @@ export const listUnitEvaluations = async (companyId, unitId, cycleId) => {
     if (!cycle) {
         throw new AppError("Cycle not found", 404);
     }
+
+    const rows = await prisma.$queryRaw`
+        SELECT
+            u.id AS user_id,
+            u.full_name,
+            u.job_title,
+            u.avatar_url,
+            e.id AS evaluation_id,
+            COALESCE(e.okr_count, 0) AS okr_count,
+            COALESCE(e.kpi_count, 0) AS kpi_count,
+            COALESCE(e.avg_okr_progress, 0) AS avg_okr_progress,
+            COALESCE(e.avg_kpi_progress, 0) AS avg_kpi_progress,
+            COALESCE(e.composite_score, 0) AS composite_score,
+            e.rating::text AS rating,
+            e.created_at
+        FROM "Users" u
+        JOIN "Units" uu
+            ON uu.id = u.unit_id
+           AND uu.company_id = ${companyId}
+           AND uu.deleted_at IS NULL
+        LEFT JOIN "Evaluations" e
+            ON e.evaluatee_id = u.id
+           AND e.cycle_id = ${cycleId}
+           AND e.deleted_at IS NULL
+        WHERE u.company_id = ${companyId}
+          AND uu.path <@ ${unit.path}::ltree
+          AND u.is_active = true
+          AND u.deleted_at IS NULL
+          AND u.role != ${UserRole.ADMIN}::"UserRole"
+        ORDER BY COALESCE(e.composite_score, 0) DESC, u.full_name ASC
+    `;
 
     return rows.map((row) => ({
         user_id: Number(row.user_id),
