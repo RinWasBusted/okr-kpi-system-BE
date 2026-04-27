@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # OKR KPI Backend API
   app:
-    image: tylerpham2708/okr-kpi-system-server:latest
+    image: tylerpham2708/okr-kpi-system-server:${IMAGE_TAG:-latest}
 
     ports:
       - "3000:3000"
