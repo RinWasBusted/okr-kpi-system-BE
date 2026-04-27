@@ -282,6 +282,7 @@ model CheckIns {
   user_id           Int
   achieved_value    Float
   progress_snapshot Float
+  obj_progress_snapshot Float @default(0)
   evidence_url      String?
   comment           String?
   created_at        DateTime @default(now())

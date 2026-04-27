@@ -307,8 +307,12 @@ export const calculateKPIProgressStatus = (progress) => {
   return "CRITICAL";
 };
 
-export const recalculateObjectiveProgress = async (objectiveId, now = new Date()) => {
-  const keyResults = await prisma.keyResults.findMany({
+export const recalculateObjectiveProgress = async (
+  objectiveId,
+  now = new Date(),
+  db = prisma,
+) => {
+  const keyResults = await db.keyResults.findMany({
     where: { objective_id: objectiveId },
     select: { progress_percentage: true, weight: true },
   });
@@ -321,7 +325,7 @@ export const recalculateObjectiveProgress = async (objectiveId, now = new Date()
   const roundedProgress = Math.round(progress * 100) / 100;
 
   // Get current objective with cycle info for time-based calculation
-  const objective = await prisma.objectives.findUnique({
+  const objective = await db.objectives.findUnique({
     where: { id: objectiveId },
     select: {
       status: true,
@@ -349,7 +353,7 @@ export const recalculateObjectiveProgress = async (objectiveId, now = new Date()
     updateData.status = newStatus;
   }
 
-  await prisma.objectives.update({
+  await db.objectives.update({
     where: { id: objectiveId },
     data: updateData,
   });

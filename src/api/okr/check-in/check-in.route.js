@@ -72,6 +72,9 @@ router.use(authenticate);
  *                     progress_snapshot:
  *                       type: number
  *                       description: Progress percentage at time of check-in (2 decimal places)
+ *                     obj_progress_snapshot:
+ *                       type: number
+ *                       description: Objective progress percentage after this check-in was applied (2 decimal places)
  *                     kr_progress:
  *                       type: number
  *                       description: Current key result progress percentage (2 decimal places)
@@ -133,6 +136,9 @@ router.post("/key-results/:kr_id/check-ins", validate(createCheckInSchema), crea
  *                       progress_snapshot:
  *                         type: number
  *                         description: Progress percentage at time of this check-in (2 decimal places)
+ *                       obj_progress_snapshot:
+ *                         type: number
+ *                         description: Objective progress percentage captured at time of this check-in (2 decimal places)
  *                       evidence_url:
  *                         type: string
  *                       comment:

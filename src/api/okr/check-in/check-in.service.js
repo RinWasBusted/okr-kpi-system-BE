@@ -12,6 +12,7 @@ const checkInSelect = {
     id: true,
     achieved_value: true,
     progress_snapshot: true,
+    obj_progress_snapshot: true,
     evidence_url: true,
     comment: true,
     created_at: true,
@@ -61,28 +62,42 @@ export const createCheckIn = async (user, keyResultId, payload) => {
         keyResult.evaluation_method,
     );
 
-    const checkIn = await prisma.checkIns.create({
-        data: {
-            company_id: user.company_id,
-            key_result_id: keyResultId,
-            user_id: user.id,
-            achieved_value: payload.achieved_value,
-            progress_snapshot: krProgress,
-            evidence_url: payload.evidence_url,
-            comment: payload.comment ?? null,
-        },
-        select: checkInSelect,
-    });
+    const now = new Date();
 
-    await prisma.keyResults.update({
-        where: { id: keyResultId },
-        data: {
-            current_value: payload.achieved_value,
-            progress_percentage: krProgress,
-        },
-    });
+    const { checkIn, objectiveProgress } = await prisma.$transaction(async (tx) => {
+        await tx.keyResults.update({
+            where: { id: keyResultId },
+            data: {
+                current_value: payload.achieved_value,
+                progress_percentage: krProgress,
+            },
+        });
 
-    const objectiveProgress = await recalculateObjectiveProgress(keyResult.objective_id);
+        const updatedObjectiveProgress = await recalculateObjectiveProgress(
+            keyResult.objective_id,
+            now,
+            tx,
+        );
+
+        const createdCheckIn = await tx.checkIns.create({
+            data: {
+                company_id: user.company_id,
+                key_result_id: keyResultId,
+                user_id: user.id,
+                achieved_value: payload.achieved_value,
+                progress_snapshot: krProgress,
+                obj_progress_snapshot: updatedObjectiveProgress,
+                evidence_url: payload.evidence_url,
+                comment: payload.comment ?? null,
+            },
+            select: checkInSelect,
+        });
+
+        return {
+            checkIn: createdCheckIn,
+            objectiveProgress: updatedObjectiveProgress,
+        };
+    });
 
     return {
         check_in: checkIn,
