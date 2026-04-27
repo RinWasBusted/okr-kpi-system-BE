@@ -11,6 +11,7 @@ import { calculateKPIProgressStatus } from "../../../utils/okr.js";
 import {
     notifyKPIAssignmentEvent,
 } from "../../../utils/notificationHelper.js";
+import { getCloudinaryImageUrl } from "../../../utils/cloudinary.js";
 
 const toDateOnlyUtc = (date) =>
   new Date(
@@ -206,7 +207,7 @@ const formatAssignment = async (assignment, user = null) => {
       assignment.owner_id
         ? prisma.users.findUnique({
             where: { id: assignment.owner_id },
-            select: { id: true, full_name: true, email: true },
+            select: { id: true, full_name: true, email: true, avatar_url: true },
           })
         : null,
       assignment.unit_id
@@ -242,15 +243,20 @@ const formatAssignment = async (assignment, user = null) => {
   const result = {
     id: assignment.id,
     kpi_dictionary: dictionary,
-    target_value: assignment.target_value,
-    start_value: assignment.start_value,
-    current_value: assignment.current_value,
-    progress_percentage: Math.round(assignment.progress_percentage * 100) / 100,
+    target_value: Math.round((assignment.target_value || 0) * 100) / 100,
+    start_value: Math.round((assignment.start_value || 0) * 100) / 100,
+    current_value: Math.round((assignment.current_value || 0) * 100) / 100,
+    progress_percentage: Math.round((assignment.progress_percentage || 0) * 100) / 100,
     progress_status: calculateKPIStatus(assignment.progress_percentage),
     status: latestRecord?.status || null,
     visibility: assignment.visibility,
     due_date: assignment.due_date ?? null,
-    owner: owner,
+    owner: owner ? {
+      ...owner,
+      avatar_url: owner.avatar_url
+        ? getCloudinaryImageUrl(owner.avatar_url, 50, 50, "fill")
+        : null,
+    } : null,
     unit: unit,
     cycle: cycle,
     parent_assignment: parentAssignment,

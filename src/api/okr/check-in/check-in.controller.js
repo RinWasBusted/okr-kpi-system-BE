@@ -60,3 +60,42 @@ export const getCheckIns = async (req, res) => {
         throw error;
     }
 };
+
+// GET /objectives/:objective_id/check-ins
+export const getObjectiveCheckIns = async (req, res) => {
+    try {
+        const objectiveId = parsePositiveInt(req.params.objective_id, null);
+        if (!objectiveId) throw new AppError("Invalid objective ID", 400);
+
+        const data = await checkInService.listObjectiveCheckIns(req.user, objectiveId);
+
+        res.success(
+            "Objective check-ins retrieved successfully",
+            200,
+            data.map((checkIn) => ({
+                ...checkIn,
+                progress_snapshot: roundProgress(checkIn.progress_snapshot),
+                obj_progress_snapshot: roundProgress(checkIn.obj_progress_snapshot),
+            })),
+        );
+    } catch (error) {
+        throw error;
+    }
+};
+
+// GET /check-ins/my-activities
+export const getMyActivities = async (req, res) => {
+    try {
+        const cycleId = parsePositiveInt(req.query.cycle_id, null);
+        const limit = parsePositiveInt(req.query.limit, 10);
+
+        const data = await checkInService.listUserActivities(req.user, { 
+            cycle_id: cycleId, 
+            limit 
+        });
+
+        res.success("My check-in activities retrieved successfully", 200, data);
+    } catch (error) {
+        throw error;
+    }
+};
