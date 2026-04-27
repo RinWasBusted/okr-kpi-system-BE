@@ -430,7 +430,6 @@ model EmployeeFeatures {
   user_id                       Int
   period                        DateTime @db.Date
   kpi_completion_rate           Float
-  checkin_delay_days            Float
   feedback_sentiment_score      Float
   objective_participation_ratio Float
   checkin_frequency             Int
