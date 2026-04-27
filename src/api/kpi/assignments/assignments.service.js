@@ -7,6 +7,7 @@ import {
   isAncestorUnit,
 } from "../../../utils/path.js";
 import { UserRole } from "@prisma/client";
+import { calculateKPIProgressStatus } from "../../../utils/okr.js";
 import {
     notifyKPIAssignmentEvent,
 } from "../../../utils/notificationHelper.js";
@@ -84,15 +85,22 @@ const calculateProgressPercentage = (
   return Math.round(progress * 100) / 100;
 };
 
-// Calculate progress status for KPI
-// Returns ProgressStatus enum values
-const calculateProgressStatus = (progress) => {
-  const p = Number(progress) || 0;
-  if (p === 0) return "NOT_STARTED";
-  if (p >= 100) return "COMPLETED";
-  if (p >= 80) return "ON_TRACK";
-  if (p >= 30) return "AT_RISK";
-  return "CRITICAL";
+/**
+ * Calculate KPI progress status based on fixed thresholds.
+ * KPI uses absolute progress values unlike OKR which uses time-based calculation.
+ *
+ * @param {number} progress - Progress percentage
+ * @returns {string} ProgressStatus enum value
+ *
+ * Logic:
+ * - NOT_STARTED: 0%
+ * - COMPLETED: >= 100%
+ * - ON_TRACK: >= 80%
+ * - AT_RISK: >= 50%
+ * - CRITICAL: < 50%
+ */
+const calculateKPIStatus = (progress) => {
+  return calculateKPIProgressStatus(progress);
 };
 
 // Calculate permissions for a KPI assignment based on user
@@ -177,6 +185,7 @@ const assignmentSelect = {
   id: true,
   kpi_dictionary_id: true,
   target_value: true,
+  start_value: true,
   current_value: true,
   progress_percentage: true,
   visibility: true,
@@ -215,7 +224,7 @@ const formatAssignment = async (assignment, user = null) => {
       prisma.kPIRecords.findFirst({
         where: { kpi_assignment_id: assignment.id },
         orderBy: { created_at: "desc" },
-        select: { status: true, trend: true },
+        select: { status: true, trend: true, created_at: true },
       }),
       assignment.cycle_id
         ? prisma.cycles.findUnique({
@@ -234,9 +243,10 @@ const formatAssignment = async (assignment, user = null) => {
     id: assignment.id,
     kpi_dictionary: dictionary,
     target_value: assignment.target_value,
+    start_value: assignment.start_value,
     current_value: assignment.current_value,
     progress_percentage: Math.round(assignment.progress_percentage * 100) / 100,
-    progress_status: calculateProgressStatus(assignment.progress_percentage),
+    progress_status: calculateKPIStatus(assignment.progress_percentage),
     status: latestRecord?.status || null,
     visibility: assignment.visibility,
     due_date: assignment.due_date ?? null,
@@ -689,11 +699,12 @@ export const createKPIAssignment = async (user, payload) => {
   if (!kpiDictionary) throw new AppError("KPI Dictionary not found", 404);
 
   const cycle = await prisma.cycles.findFirst({
-    where: { id: payload.cycle_id },
-    select: { id: true },
+    where: { id: payload.cycle_id, company_id: user.company_id },
+    select: { id: true, is_locked: true },
   });
 
   if (!cycle) throw new AppError("Cycle not found", 404);
+  if (cycle.is_locked) throw new AppError("Cycle is locked and cannot be modified", 400, "CYCLE_LOCKED");
 
   // Validate owner_id and unit_id are provided and mutually exclusive
   if (!payload.owner_id && !payload.unit_id) {
@@ -791,11 +802,12 @@ export const createKPIAssignment = async (user, payload) => {
             0,
             NOW()
         )
-        RETURNING 
+        RETURNING
             id,
             kpi_dictionary_id,
             cycle_id,
             target_value,
+            start_value,
             current_value,
             progress_percentage,
             visibility,
@@ -844,9 +856,19 @@ export const createKPIAssignment = async (user, payload) => {
 export const updateKPIAssignment = async (user, assignmentId, payload) => {
   const assignment = await prisma.kPIAssignments.findFirst({
     where: { id: assignmentId, deleted_at: null },
+    select: { id: true, cycle_id: true, kpi_dictionary_id: true, unit_id: true, owner_id: true, target_value: true, start_value: true, current_value: true },
   });
 
   if (!assignment) throw new AppError("KPI Assignment not found", 404);
+
+  // Check if current cycle is locked
+  const currentCycle = await prisma.cycles.findFirst({
+    where: { id: assignment.cycle_id, company_id: user.company_id },
+    select: { is_locked: true },
+  });
+  if (currentCycle?.is_locked) {
+    throw new AppError("Cycle is locked and cannot be modified", 400, "CYCLE_LOCKED");
+  }
 
   const allowed = await canUpdateKPIAssignment(user, assignment);
   if (!allowed)
@@ -859,10 +881,11 @@ export const updateKPIAssignment = async (user, assignmentId, payload) => {
 
   if (payload.cycle_id !== undefined) {
     const cycle = await prisma.cycles.findFirst({
-      where: { id: payload.cycle_id },
-      select: { id: true },
+      where: { id: payload.cycle_id, company_id: user.company_id },
+      select: { id: true, is_locked: true },
     });
     if (!cycle) throw new AppError("Cycle not found", 404);
+    if (cycle.is_locked) throw new AppError("Target cycle is locked and cannot be modified", 400, "CYCLE_LOCKED");
     updates.cycle_id = payload.cycle_id;
   }
 
@@ -1126,7 +1149,6 @@ export const getAvailableParentKPIs = async (user, unitId, kpiDictionaryId) => {
   const where = {
     deleted_at: null,
     unit_id: { in: relevantUnitIds },
-    parent_assignment_id: null, // Only root assignments can be parents
   };
 
   // If kpiDictionaryId is provided, filter by it

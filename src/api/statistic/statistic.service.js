@@ -424,6 +424,60 @@ export const getOKRTimelineData = async (user, cycleId, groupBy = "month") => {
     };
 };
 
+export const getStatisticsSummary = async (user) => {
+    const companyId = user.company_id;
+    if (!companyId) {
+        throw new AppError("Company context is required", 403);
+    }
+
+    const [user_count, unit_count, cycle_count] = await Promise.all([
+        prisma.users.count({
+            where: {
+                company_id: companyId,
+                deleted_at: null,
+            },
+        }),
+        prisma.units.count({
+            where: {
+                company_id: companyId,
+                deleted_at: null,
+            },
+        }),
+        prisma.cycles.count({
+            where: {
+                company_id: companyId,
+            },
+        }),
+    ]);
+
+    const { objective_count, kpi_count } = await prisma.$withLockedCycleFilterBypassed(async (tx) => {
+        const [objective_count, kpi_count] = await Promise.all([
+            tx.objectives.count({
+                where: {
+                    company_id: companyId,
+                    deleted_at: null,
+                },
+            }),
+            tx.kPIAssignments.count({
+                where: {
+                    company_id: companyId,
+                    deleted_at: null,
+                },
+            }),
+        ]);
+
+        return { objective_count, kpi_count };
+    });
+
+    return {
+        user_count,
+        unit_count,
+        cycle_count,
+        objective_count,
+        kpi_count,
+    };
+};
+
 // Helper: Check if user can view assignment
 const canViewAssignment = async (user, assignment) => {
     if (user.role === "ADMIN_COMPANY") return true;

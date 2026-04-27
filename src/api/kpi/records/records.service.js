@@ -1,6 +1,7 @@
 import prisma from "../../../utils/prisma.js";
 import AppError from "../../../utils/appError.js";
 import { isAncestorUnit } from "../../../utils/path.js";
+import { calculateKPIProgressStatus } from "../../../utils/okr.js";
 import { recalculateCurrentValueFromChildren } from "../assignments/assignments.service.js";
 import { notifyKPIAssignmentEvent } from "../../../utils/notificationHelper.js";
 
@@ -20,13 +21,22 @@ const recordSelect = {
   created_at: true,
 };
 
+/**
+ * Calculate KPI record status based on fixed thresholds.
+ * Uses the same logic as KPI assignment status calculation.
+ *
+ * @param {number} progress - Progress percentage
+ * @returns {string} ProgressStatus enum value
+ *
+ * Logic:
+ * - NOT_STARTED: 0%
+ * - COMPLETED: >= 100%
+ * - ON_TRACK: >= 80%
+ * - AT_RISK: >= 50%
+ * - CRITICAL: < 50%
+ */
 const calculateStatus = (progress) => {
-  // An toàn (xanh lá): progress >= 80%
-  if (progress >= 80) return "ON_TRACK";
-  // Chú ý (vàng): 50% <= progress < 80%
-  if (progress >= 50) return "AT_RISK";
-  // Nguy hiểm (đỏ): progress < 50%
-  return "CRITICAL";
+  return calculateKPIProgressStatus(progress);
 };
 
 const calculateTrend = (currentValue, previousValue) => {

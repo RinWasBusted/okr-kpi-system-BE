@@ -1,4 +1,5 @@
 import * as statisticService from "./statistic.service.js";
+import * as evaluationService from "../evaluations/evaluations.service.js";
 import AppError from "../../utils/appError.js";
 
 const parsePositiveInt = (value, fallback) => {
@@ -45,4 +46,18 @@ export const getOKRTimeline = async (req, res) => {
     } catch (error) {
         throw error;
     }
+};
+
+// GET /api/statistics
+export const getStatisticsSummary = async (req, res) => {
+    const companyId = req.user.company_id;
+    if (!companyId) throw new AppError("Company context is required", 403);
+
+    const summary = await statisticService.getStatisticsSummary(req.user);
+    const evaluationSummary = await evaluationService.getEvaluationStatisticsSummary(companyId);
+
+    res.success("Statistics summary retrieved successfully", 200, {
+        ...summary,
+        ...evaluationSummary,
+    });
 };

@@ -63,9 +63,6 @@ export const listObjectivesQuerySchema = z
         "COMPLETED",
       ])
       .optional(),
-    progress_status: z
-      .enum(["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"])
-      .optional(),
     visibility: z.enum(["PUBLIC", "INTERNAL", "PRIVATE"]).optional(),
     parent_objective_id: z.string().regex(/^\d+$/).transform(Number).optional(),
     page: z.string().regex(/^\d+$/).transform(Number).optional().default("1"),

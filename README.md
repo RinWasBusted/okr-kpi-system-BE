@@ -98,6 +98,7 @@ okr-kpi-system-BE/
 - `npm run seed` - Seeding database and setting policies
 - `npx prisma migrate dev` - Create and run migrations
 - `npx prisma generate` - Generate Prisma Client
+- `env $(grep -v '^#' .env | xargs) docker stack deploy -c docker-compose.yml okr_kpi_system_server` - Run BE docker compose file on VPS
 
 ## 📝 License
 

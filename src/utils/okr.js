@@ -8,6 +8,76 @@ import {
   isUnitManager,
 } from "./path.js";
 
+/**
+ * Calculate expected progress percentage based on time elapsed in cycle.
+ * Used for OKR to determine if objective is on track relative to timeline.
+ *
+ * @param {Date} cycleStart - Cycle start date
+ * @param {Date} cycleEnd - Cycle end date
+ * @param {Date} now - Current date (default: new Date())
+ * @returns {number} Expected progress percentage (0-100)
+ *
+ * @example
+ * // Cycle: Jan 1 - Jan 31, Today: Jan 16 → Expected: ~50%
+ */
+export const calculateExpectedProgress = (cycleStart, cycleEnd, now = new Date()) => {
+  const start = new Date(cycleStart).getTime();
+  const end = new Date(cycleEnd).getTime();
+  const current = now.getTime();
+
+  // Cycle hasn't started yet
+  if (current <= start) return 0;
+
+  // Cycle has ended
+  if (current >= end) return 100;
+
+  // Calculate percentage of time elapsed
+  const totalDuration = end - start;
+  if (totalDuration <= 0) return 100; // Default to 100 if dates are invalid or start >= end
+
+  const elapsed = current - start;
+  const progress = (elapsed / totalDuration) * 100;
+
+  return Math.max(0, Math.min(100, Math.round(progress)));
+};
+
+/**
+ * Calculate OKR progress status based on actual progress vs expected progress.
+ * Compares current completion % with expected % based on time elapsed.
+ *
+ * @param {number} actualProgress - Current progress percentage (0-100)
+ * @param {number} expectedProgress - Expected progress based on time elapsed (0-100)
+ * @returns {string} ProgressStatus enum value
+ *
+ * Logic:
+ * - NOT_STARTED: 0% completion
+ * - COMPLETED: 100% completion
+ * - ON_TRACK: actual >= expected (tiến độ đạt hoặc vượt kỳ vọng)
+ * - AT_RISK: actual >= expected - 20% (chậm 1 chút, trong ngưỡng cho phép)
+ * - CRITICAL: actual < expected - 20% (chậm nhiều, cần can thiệp)
+ */
+export const calculateOKRProgressStatus = (actualProgress, expectedProgress) => {
+  const actual = Number(actualProgress) || 0;
+
+  if (actual === 0) return "NOT_STARTED";
+  if (actual >= 100) return "COMPLETED";
+
+  const expected = Number(expectedProgress) || 0;
+  const tolerance = 20; // Ngưỡng chấp nhận được (20%)
+
+  // So sánh thực tế với kỳ vọng
+  if (actual >= expected) {
+    // Tiến độ đạt hoặc vượt kỳ vọng theo thời gian
+    return "ON_TRACK";
+  } else if (actual >= expected - tolerance) {
+    // Chậm hơn kỳ vọng nhưng trong ngưỡng cho phép (20%)
+    return "AT_RISK";
+  } else {
+    // Chậm nhiều so với kỳ vọng
+    return "CRITICAL";
+  }
+};
+
 const isDescendantOrEqual = (candidate, ancestor) => {
   if (!candidate || !ancestor) return false;
   return candidate === ancestor || candidate.startsWith(`${ancestor}.`);
@@ -126,9 +196,12 @@ export const canApproveObjective = async (user, objective) => {
   );
 };
 
-export const ensureCycleUnlocked = async (cycleId) => {
+export const ensureCycleUnlocked = async (cycleId, companyId = null) => {
   const cycle = await prisma.cycles.findFirst({
-    where: { id: cycleId },
+    where: {
+      id: cycleId,
+      ...(companyId !== null && { company_id: companyId }),
+    },
     select: { is_locked: true },
   });
 
@@ -211,19 +284,35 @@ export const calculateKeyResultProgress = (
   return Math.round(boundedProgress * 100) / 100;
 };
 
-// Calculate progress status based on progress_percentage
-// Returns ProgressStatus enum values
-const calculateProgressStatus = (progress) => {
+/**
+ * Calculate KPI progress status based on fixed thresholds.
+ * Used for KPI assignments where status is determined by absolute progress values.
+ *
+ * @param {number} progress - Progress percentage (can be negative or >100%)
+ * @returns {string} ProgressStatus enum value
+ *
+ * Logic:
+ * - NOT_STARTED: 0%
+ * - COMPLETED: >= 100%
+ * - ON_TRACK: >= 80%
+ * - AT_RISK: >= 50%
+ * - CRITICAL: < 50%
+ */
+export const calculateKPIProgressStatus = (progress) => {
   const p = Number(progress) || 0;
   if (p === 0) return "NOT_STARTED";
   if (p >= 100) return "COMPLETED";
   if (p >= 80) return "ON_TRACK";
-  if (p >= 30) return "AT_RISK";
+  if (p >= 50) return "AT_RISK";
   return "CRITICAL";
 };
 
-export const recalculateObjectiveProgress = async (objectiveId) => {
-  const keyResults = await prisma.keyResults.findMany({
+export const recalculateObjectiveProgress = async (
+  objectiveId,
+  now = new Date(),
+  db = prisma,
+) => {
+  const keyResults = await db.keyResults.findMany({
     where: { objective_id: objectiveId },
     select: { progress_percentage: true, weight: true },
   });
@@ -235,10 +324,13 @@ export const recalculateObjectiveProgress = async (objectiveId) => {
   // Round to 2 decimal places
   const roundedProgress = Math.round(progress * 100) / 100;
 
-  // Get current objective status
-  const objective = await prisma.objectives.findUnique({
+  // Get current objective with cycle info for time-based calculation
+  const objective = await db.objectives.findUnique({
     where: { id: objectiveId },
-    select: { status: true },
+    select: {
+      status: true,
+      cycle: { select: { start_date: true, end_date: true } }
+    },
   });
 
   // Only update status if objective is in a progress-based status (not Draft, Pending_Approval, or Rejected)
@@ -252,11 +344,16 @@ export const recalculateObjectiveProgress = async (objectiveId) => {
   const updateData = { progress_percentage: roundedProgress };
 
   if (progressBasedStatuses.includes(objective?.status)) {
-    const newStatus = calculateProgressStatus(roundedProgress);
+    // For OKR: calculate status based on time elapsed vs actual progress
+    const expectedProgress = objective?.cycle?.start_date && objective?.cycle?.end_date
+      ? calculateExpectedProgress(objective.cycle.start_date, objective.cycle.end_date, now)
+      : roundedProgress; // Fallback: use actual progress if no cycle dates
+
+    const newStatus = calculateOKRProgressStatus(roundedProgress, expectedProgress);
     updateData.status = newStatus;
   }
 
-  await prisma.objectives.update({
+  await db.objectives.update({
     where: { id: objectiveId },
     data: updateData,
   });
@@ -271,4 +368,7 @@ export default {
   ensureCycleUnlocked,
   calculateKeyResultProgress,
   recalculateObjectiveProgress,
+  calculateKPIProgressStatus,
+  calculateOKRProgressStatus,
+  calculateExpectedProgress,
 };

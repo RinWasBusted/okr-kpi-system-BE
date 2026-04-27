@@ -3,7 +3,6 @@ import AppError from "../../utils/appError.js";
 import { UserRole } from "@prisma/client";
 import { getCloudinaryImageUrl } from "../../utils/cloudinary.js";
 import {
-    getUnitPath,
     updateObjectivesAccessPathForUnit,
     updateKPIAssignmentsAccessPathForUnit,
     updateAccessPathForUserOwnedItems,
@@ -29,15 +28,17 @@ const formatUnitRow = (row, includeStats = false, currentUser = null) => {
     if (includeStats) {
         base.okr_count = Number(row.okr_count ?? 0);
         base.kpi_count = Number(row.kpi_count ?? 0);
-        base.okr_progress = row.okr_progress !== null ? Number(row.okr_progress) : null;
-        base.kpi_health = row.kpi_health !== null ? Number(row.kpi_health) : null;
+        base.okr_progress = row.okr_progress !== null ? Math.round(Number(row.okr_progress) * 100) / 100 : null;
+        base.kpi_health = row.kpi_health !== null ? Math.round(Number(row.kpi_health) * 100) / 100 : null;
     }
 
     // Only add permission for ADMIN_COMPANY
+    // Root company unit (parent_id is null) cannot be edited or deleted
     if (isAdmin) {
+        const isRootUnit = (row.parent_id ?? null) === null;
         base.permission = {
-            editable: true,
-            deletable: true,
+            editable: !isRootUnit,
+            deletable: !isRootUnit,
         };
     }
 
@@ -156,13 +157,10 @@ export const listUnits = async ({ page, per_page, mode = "tree" }, currentUser) 
 
 export const createUnit = async (companyId, { name, parent_id, manager_id }) => {
     return prisma.$transaction(async (tx) => {
-        let parentPath = null;
-
-        if (parent_id !== undefined && parent_id !== null) {
-            const parent = await getUnitCore(tx, parent_id);
-            if (!parent) throw new AppError("Parent unit not found", 404);
-            parentPath = parent.path;
-        }
+        // parent_id is always required — root unit (parent_id=null) is only created with the company
+        const parent = await getUnitCore(tx, parent_id);
+        if (!parent) throw new AppError("Parent unit not found", 404);
+        const parentPath = parent.path;
 
         if (manager_id !== undefined && manager_id !== null) {
             const manager = await tx.$queryRaw`
@@ -174,9 +172,7 @@ export const createUnit = async (companyId, { name, parent_id, manager_id }) => 
             `;
             if (manager.length === 0) throw new AppError("Manager not found or is not eligible to be assigned as a unit manager", 404);
 
-            // Check if manager already belongs to a unit
             // For new units, manager must not belong to any other unit
-            // (since the unit doesn't exist yet, they can't have this unit_id)
             const managerUnitId = manager[0].unit_id;
             if (managerUnitId !== null) {
                 throw new AppError("Manager must not be assigned to any unit before becoming a manager", 400);
@@ -191,11 +187,9 @@ export const createUnit = async (companyId, { name, parent_id, manager_id }) => 
                 await tx.$executeRaw`
                     UPDATE "Units" SET manager_id = null WHERE id = ${oldUnitId}
                 `;
-                // Update unit_id for the old manager's user record
                 await tx.$executeRaw`
                     UPDATE "Users" SET unit_id = null WHERE id = ${manager_id}
                 `;
-                // Update access_path for old manager's owned items
                 await updateAccessPathForUserOwnedItems(tx, manager_id, null);
             }
         }
@@ -206,11 +200,11 @@ export const createUnit = async (companyId, { name, parent_id, manager_id }) => 
         const nextId = nextIdRows[0]?.id;
         if (!nextId) throw new AppError("Failed to allocate unit ID", 500);
 
-        const path = parentPath ? `${parentPath}.${nextId}` : `${nextId}`;
+        const path = `${parentPath}.${nextId}`;
 
         await tx.$executeRaw`
             INSERT INTO "Units" (id, company_id, name, parent_id, manager_id, path)
-            VALUES (${nextId}, ${companyId}, ${name}, ${parent_id ?? null}, ${manager_id ?? null}, ${path}::ltree)
+            VALUES (${nextId}, ${companyId}, ${name}, ${parent_id}, ${manager_id ?? null}, ${path}::ltree)
         `;
 
         if (manager_id !== undefined && manager_id !== null) {
@@ -233,9 +227,14 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
         const existing = await getUnitCore(tx, unitId);
         if (!existing) throw new AppError("Unit not found", 404);
 
+        // Prevent modifying the root company unit's parent
+        if (existing.parent_id === null && parent_id !== undefined) {
+            throw new AppError("Cannot change the parent of the root company unit", 400);
+        }
+
         let parentPath = null;
 
-        if (parent_id !== undefined && parent_id !== null) {
+        if (parent_id !== undefined) {
             if (parent_id === unitId) throw new AppError("Unit cannot be its own parent", 400);
 
             const parent = await getUnitCore(tx, parent_id);
@@ -295,10 +294,10 @@ export const updateUnit = async (unitId, { name, parent_id, manager_id }) => {
         }
 
         const parentChanged =
-            parentProvided && (parent_id ?? null) !== (existing.parent_id ?? null);
+            parentProvided && parent_id !== (existing.parent_id ?? null);
 
         if (parentChanged) {
-            const newPath = parent_id === null ? `${unitId}` : `${parentPath}.${unitId}`;
+            const newPath = `${parentPath}.${unitId}`;
             const oldPath = existing.path;
 
             await tx.$executeRaw`
@@ -336,6 +335,7 @@ export const deleteUnit = async (unitId) => {
         const rows = await tx.$queryRaw`
             SELECT
                 u.id,
+                u.parent_id,
                 (SELECT COUNT(*) FROM "Users" uu WHERE uu.unit_id = u.id) AS member_count,
                 (SELECT COUNT(*) FROM "Units" c WHERE c.parent_id = u.id) AS child_count
             FROM "Units" u
@@ -344,6 +344,12 @@ export const deleteUnit = async (unitId) => {
 
         const unit = rows[0];
         if (!unit) throw new AppError("Unit not found", 404);
+
+        // Prevent deleting the root company unit
+        if (unit.parent_id === null) {
+            throw new AppError("Cannot delete the root company unit", 400);
+        }
+
         if (Number(unit.member_count) > 0) {
             throw new AppError("Unit still has members and cannot be deleted", 400);
         }
@@ -435,16 +441,18 @@ export const getUnitDetail = async (unitId, currentUser) => {
             member_count: Number(unit.member_count ?? 0),
             okr_count: Number(unit.okr_count ?? 0),
             kpi_count: Number(unit.kpi_count ?? 0),
-            okr_progress: unit.okr_progress !== null ? Number(unit.okr_progress) : null,
-            kpi_health: unit.kpi_health !== null ? Number(unit.kpi_health) : null,
+            okr_progress: unit.okr_progress !== null ? Math.round(Number(unit.okr_progress) * 100) / 100 : null,
+            kpi_health: unit.kpi_health !== null ? Math.round(Number(unit.kpi_health) * 100) / 100 : null,
             created_at: unit.created_at,
         };
 
         // Only add permission for ADMIN_COMPANY
+        // Root company unit (parent_id is null) cannot be edited or deleted
         if (isAdmin) {
+            const isRootUnit = (unit.parent_id ?? null) === null;
             result.permission = {
-                editable: true,
-                deletable: true,
+                editable: !isRootUnit,
+                deletable: !isRootUnit,
             };
         }
 

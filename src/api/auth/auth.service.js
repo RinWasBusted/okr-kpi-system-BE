@@ -100,6 +100,7 @@ export const loginService = async (email, password, company_slug = '', remember_
             });
 
             if (!user || !(await comparePassword(password, user.password))) {
+                console.log(`Failed login for password:`, password, `and user password hash:`, user ? user.password : 'N/A');
                 throw new AppError("Invalid email or password", 401);
             }
 

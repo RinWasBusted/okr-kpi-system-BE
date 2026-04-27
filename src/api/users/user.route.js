@@ -2,6 +2,7 @@ import express from "express";
 import {
     getUsers,
     getUserById,
+    getUserEvaluations,
     createUser,
     updateUser,
     uploadAvatar,
@@ -176,6 +177,7 @@ router.use(authenticate);
  *                       example: "Access denied"
  */
 router.get("/", validate(listUsersQuerySchema, "query"), getUsers);
+router.get("/:id/evaluations", getUserEvaluations);
  
 /**
  * @swagger

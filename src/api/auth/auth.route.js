@@ -183,8 +183,8 @@ const router = express.Router();
  *                   type: string
  *                   example: "Too many attempts. Try again after 14 minutes."
  */
-router.post("/login", loginRateLimit, login);
-// router.post("/login", login);
+// router.post("/login", loginRateLimit, login);
+router.post("/login", login);
 
 /**
  * @swagger

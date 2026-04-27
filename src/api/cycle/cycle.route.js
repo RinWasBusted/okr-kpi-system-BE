@@ -2,6 +2,7 @@ import express from "express";
 import {
     getCycles,
     getCycleById,
+    getCycleEvaluations,
     createCycle,
     updateCycle,
     deleteCycle,
@@ -105,9 +106,14 @@ router.get("/", authenticate, getCycles);
  * @swagger
  * /cycles:
  *   post:
- *     summary: Create a new cycle
- *     description: Create a new cycle. Requires `accessToken` cookie and `ADMIN_COMPANY` role.
+ *     summary: Tạo một chu kỳ mới
+ *     description: |
+ *       Tạo một chu kỳ OKR/KPI mới.
+ *       Các ngày end_date phải sau start_date.
+ *       Chỉ Admin công ty mới có quyền tạo. Requires `accessToken` cookie.
  *     tags: [Cycles]
+ *     security:
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -118,22 +124,214 @@ router.get("/", authenticate, getCycles);
  *             properties:
  *               name:
  *                 type: string
+ *                 minLength: 1
  *                 example: "Q2/2026"
+ *                 description: Tên chu kỳ
  *               start_date:
  *                 type: string
  *                 format: date
  *                 example: "2026-04-01"
+ *                 description: Ngày bắt đầu (YYYY-MM-DD)
  *               end_date:
  *                 type: string
  *                 format: date
  *                 example: "2026-06-30"
+ *                 description: Ngày kết thúc (YYYY-MM-DD), phải sau start_date
  *     responses:
  *       201:
- *         description: Cycle created successfully
+ *         description: Chu kỳ được tạo thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Cycle created successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cycle:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                           example: 5
+ *                         name:
+ *                           type: string
+ *                           example: "Q2/2026"
+ *                         start_date:
+ *                           type: string
+ *                           format: date-time
+ *                           example: "2026-04-01T00:00:00Z"
+ *                         end_date:
+ *                           type: string
+ *                           format: date-time
+ *                           example: "2026-06-30T00:00:00Z"
+ *                         is_locked:
+ *                           type: boolean
+ *                           example: false
+ *       400:
+ *         description: Company context required hoặc bad request
+ *       403:
+ *         description: Forbidden - chỉ ADMIN_COMPANY mới có quyền
  *       422:
- *         description: Validation error (DATE_OVERLAP or invalid dates)
+ *         description: Validation error (invalid date format hoặc end_date không sau start_date)
  */
 router.post("/", authorize("ADMIN_COMPANY"),createCycle);
+
+/**
+ * @swagger
+ * /cycles/{id}/evaluations:
+ *   get:
+ *     summary: Lấy danh sách đánh giá của chu kỳ
+ *     description: |
+ *       Lấy danh sách đánh giá hiệu suất của tất cả nhân viên trong một chu kỳ cụ thể.
+ *       Hỗ trợ lọc theo đơn vị, xếp hạng và phân trang.
+ *       Chỉ Admin công ty mới có quyền xem. Requires `accessToken` cookie.
+ *     tags: [Cycles]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID của chu kỳ
+ *         example: 1
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Trang (bắt đầu từ 1)
+ *         example: 1
+ *       - in: query
+ *         name: per_page
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *         description: Số lượng kết quả trên một trang (tối đa 100)
+ *         example: 20
+ *       - in: query
+ *         name: unit_id
+ *         schema:
+ *           type: integer
+ *         description: Lọc theo ID đơn vị (optional)
+ *         example: 5
+ *       - in: query
+ *         name: rating
+ *         schema:
+ *           type: string
+ *           enum: [EXCELLENT, GOOD, ABOVE_AVERAGE, SATISFACTORY, NEEDS_IMPROVEMENT]
+ *         description: Lọc theo xếp hạng (optional)
+ *         example: "EXCELLENT"
+ *     responses:
+ *       200:
+ *         description: Danh sách đánh giá được lấy thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Cycle evaluations retrieved successfully"
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         example: 1
+ *                       evaluatee:
+ *                         type: object
+ *                         description: Thông tin nhân viên được đánh giá
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                             example: 10
+ *                           full_name:
+ *                             type: string
+ *                             example: "Nguyễn Văn A"
+ *                           job_title:
+ *                             type: string
+ *                             nullable: true
+ *                             example: "Senior Developer"
+ *                           avatar_url:
+ *                             type: string
+ *                             nullable: true
+ *                             format: url
+ *                             example: "https://res.cloudinary.com/image.jpg"
+ *                       unit:
+ *                         type: object
+ *                         description: Thông tin đơn vị
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                             example: 5
+ *                           name:
+ *                             type: string
+ *                             example: "Engineering"
+ *                       okr_count:
+ *                         type: integer
+ *                         example: 3
+ *                       kpi_count:
+ *                         type: integer
+ *                         example: 5
+ *                       avg_okr_progress:
+ *                         type: number
+ *                         description: Tiến độ trung bình OKR (0-100)
+ *                         example: 85.5
+ *                       avg_kpi_progress:
+ *                         type: number
+ *                         description: Tiến độ trung bình KPI (0-100)
+ *                         example: 78.2
+ *                       composite_score:
+ *                         type: number
+ *                         description: Điểm hợp thành (trung bình của OKR và KPI progress)
+ *                         example: 81.85
+ *                       rating:
+ *                         type: string
+ *                         enum: [EXCELLENT, GOOD, ABOVE_AVERAGE, SATISFACTORY, NEEDS_IMPROVEMENT]
+ *                         example: "EXCELLENT"
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         example: "2025-04-20T10:30:00Z"
+ *                 meta:
+ *                   type: object
+ *                   description: Thông tin phân trang
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                       example: 100
+ *                     page:
+ *                       type: integer
+ *                       example: 1
+ *                     per_page:
+ *                       type: integer
+ *                       example: 20
+ *                     last_page:
+ *                       type: integer
+ *                       example: 5
+ *       400:
+ *         description: Invalid cycle ID
+ *       403:
+ *         description: Forbidden - chỉ ADMIN_COMPANY mới có quyền
+ *       404:
+ *         description: Cycle not found
+ */
+router.get("/:id/evaluations", authorize("ADMIN_COMPANY"), getCycleEvaluations);
 
 /**
  * @swagger
@@ -203,15 +401,22 @@ router.get("/:id", getCycleById);
  * @swagger
  * /cycles/{id}:
  *   put:
- *     summary: Update a cycle
- *     description: Update a cycle when it is not locked. Requires `ADMIN_COMPANY` role.
+ *     summary: Cập nhật thông tin chu kỳ
+ *     description: |
+ *       Cập nhật tên, ngày bắt đầu hoặc ngày kết thúc của chu kỳ.
+ *       Chu kỳ không được khóa mới có thể cập nhật.
+ *       Chỉ Admin công ty mới có quyền. Requires `accessToken` cookie.
  *     tags: [Cycles]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: integer
+ *         description: ID của chu kỳ
+ *         example: 1
  *     requestBody:
  *       required: true
  *       content:
@@ -221,35 +426,22 @@ router.get("/:id", getCycleById);
  *             properties:
  *               name:
  *                 type: string
+ *                 minLength: 1
+ *                 example: "Q3/2026"
+ *                 description: Tên chu kỳ (optional)
  *               start_date:
  *                 type: string
  *                 format: date
+ *                 example: "2026-07-01"
+ *                 description: Ngày bắt đầu YYYY-MM-DD (optional)
  *               end_date:
  *                 type: string
  *                 format: date
+ *                 example: "2026-09-30"
+ *                 description: Ngày kết thúc YYYY-MM-DD (optional)
  *     responses:
  *       200:
- *         description: Cycle updated successfully
- */
-router.put("/:id", authorize("ADMIN_COMPANY"), updateCycle);
-
-/**
- * @swagger
- * /cycles/{id}:
- *   delete:
- *     summary: Delete a cycle
- *     description: Delete a cycle that has no objectives or KPI assignments. Requires `ADMIN_COMPANY` role.
- *     tags: [Cycles]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: Cycle ID
- *     responses:
- *       200:
- *         description: Cycle deleted successfully
+ *         description: Chu kỳ được cập nhật thành công
  *         content:
  *           application/json:
  *             schema:
@@ -257,8 +449,77 @@ router.put("/:id", authorize("ADMIN_COMPANY"), updateCycle);
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 message:
  *                   type: string
+ *                   example: "Cycle updated successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cycle:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                           example: 1
+ *                         name:
+ *                           type: string
+ *                           example: "Q3/2026"
+ *                         start_date:
+ *                           type: string
+ *                           format: date-time
+ *                           example: "2026-07-01T00:00:00Z"
+ *                         end_date:
+ *                           type: string
+ *                           format: date-time
+ *                           example: "2026-09-30T00:00:00Z"
+ *                         is_locked:
+ *                           type: boolean
+ *                           example: false
+ *       400:
+ *         description: Bad request (chu kỳ bị khóa, end_date không sau start_date, hoặc không có field để cập nhật)
+ *       403:
+ *         description: Forbidden - chỉ ADMIN_COMPANY mới có quyền
+ *       404:
+ *         description: Cycle not found
+ *       422:
+ *         description: Validation error (invalid date format)
+ */
+router.put("/:id", authorize("ADMIN_COMPANY"), updateCycle);
+
+/**
+ * @swagger
+ * /cycles/{id}:
+ *   delete:
+ *     summary: Xóa chu kỳ
+ *     description: |
+ *       Xóa một chu kỳ. Chỉ có thể xóa chu kỳ khi không có Objective hoặc KPI Assignment nào.
+ *       Chỉ Admin công ty mới có quyền. Requires `accessToken` cookie.
+ *     tags: [Cycles]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID của chu kỳ
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Chu kỳ được xóa thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Cycle deleted successfully"
  *                 data:
  *                   type: object
  *                   properties:
@@ -267,12 +528,14 @@ router.put("/:id", authorize("ADMIN_COMPANY"), updateCycle);
  *                       properties:
  *                         id:
  *                           type: integer
+ *                           example: 1
  *                         name:
  *                           type: string
+ *                           example: "Q1/2026"
  *       400:
- *         description: Cannot delete cycle - has existing objectives or KPI assignments
+ *         description: Bad request - chu kỳ vẫn còn Objectives hoặc KPI Assignments
  *       403:
- *         description: Not authorized
+ *         description: Forbidden - chỉ ADMIN_COMPANY mới có quyền
  *       404:
  *         description: Cycle not found
  */
@@ -282,18 +545,57 @@ router.delete("/:id", authorize("ADMIN_COMPANY"), deleteCycle);
  * @swagger
  * /cycles/{id}/lock:
  *   patch:
- *     summary: Lock a cycle
- *     description: Lock a cycle to make it read-only. Requires `ADMIN_COMPANY` role.
+ *     summary: Khóa chu kỳ
+ *     description: |
+ *       Khóa một chu kỳ để cho phép chỉ đọc các OKR/KPI.
+ *       Khi chu kỳ bị khóa, không thể tạo, sửa hoặc xóa Objectives và KPI Assignments.
+ *       Chỉ Admin công ty mới có quyền. Requires `accessToken` cookie.
  *     tags: [Cycles]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: integer
+ *         description: ID của chu kỳ
+ *         example: 1
  *     responses:
  *       200:
- *         description: Cycle locked successfully
+ *         description: Chu kỳ được khóa thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Cycle locked successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cycle:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                           example: 1
+ *                         name:
+ *                           type: string
+ *                           example: "Q1/2026"
+ *                         is_locked:
+ *                           type: boolean
+ *                           example: true
+ *       400:
+ *         description: Bad request - Company context required
+ *       403:
+ *         description: Forbidden - chỉ ADMIN_COMPANY mới có quyền
+ *       404:
+ *         description: Cycle not found
  */
 router.patch("/:id/lock", authorize("ADMIN_COMPANY"), lockCycle);
 
@@ -301,18 +603,57 @@ router.patch("/:id/lock", authorize("ADMIN_COMPANY"), lockCycle);
  * @swagger
  * /cycles/{id}/unlock:
  *   patch:
- *     summary: Unlock a cycle
- *     description: Unlock a cycle to allow modifications. Requires `ADMIN_COMPANY` role.
+ *     summary: Mở khóa chu kỳ
+ *     description: |
+ *       Mở khóa một chu kỳ để cho phép sửa các OKR/KPI.
+ *       Khi chu kỳ được mở khóa, có thể tạo, sửa hoặc xóa Objectives và KPI Assignments.
+ *       Chỉ Admin công ty mới có quyền. Requires `accessToken` cookie.
  *     tags: [Cycles]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: integer
+ *         description: ID của chu kỳ
+ *         example: 1
  *     responses:
  *       200:
- *         description: Cycle unlocked successfully
+ *         description: Chu kỳ được mở khóa thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Cycle unlocked successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cycle:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                           example: 1
+ *                         name:
+ *                           type: string
+ *                           example: "Q1/2026"
+ *                         is_locked:
+ *                           type: boolean
+ *                           example: false
+ *       400:
+ *         description: Bad request - Company context required
+ *       403:
+ *         description: Forbidden - chỉ ADMIN_COMPANY mới có quyền
+ *       404:
+ *         description: Cycle not found
  */
 router.patch("/:id/unlock", authorize("ADMIN_COMPANY"), unlockCycle);
 
@@ -320,16 +661,25 @@ router.patch("/:id/unlock", authorize("ADMIN_COMPANY"), unlockCycle);
  * @swagger
  * /cycles/{id}/clone:
  *   post:
- *     summary: Clone objectives and KPIs from another cycle into this cycle
- *     description: Copy objectives and KPI assignments from a source cycle into the target cycle (cycle ID in URL). Requires `ADMIN_COMPANY` role.
+ *     summary: Sao chép Objectives và KPIs vào chu kỳ này
+ *     description: |
+ *       Sao chép các Objectives và KPI Assignments từ chu kỳ khác vào chu kỳ đích (ID trong URL).
+ *       - Progress của các items được sao chép sẽ được reset về 0
+ *       - Các mối quan hệ parent-child sẽ được bảo toàn
+ *       - Key Results được tự động sao chép cùng Objectives
+ *       - Chu kỳ đích không được khóa
+ *       Chỉ Admin công ty mới có quyền. Requires `accessToken` cookie.
  *     tags: [Cycles]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: integer
- *         description: Target cycle ID to copy into
+ *         description: ID của chu kỳ đích (nơi sao chép vào)
+ *         example: 2
  *     requestBody:
  *       required: true
  *       content:
@@ -342,16 +692,16 @@ router.patch("/:id/unlock", authorize("ADMIN_COMPANY"), unlockCycle);
  *                 items:
  *                   type: integer
  *                 example: [1, 5, 12]
- *                 description: Objective IDs to clone (if empty or not provided, no objectives will be cloned)
+ *                 description: Danh sách ID của Objectives cần sao chép (nếu để trống hoặc không cung cấp, sẽ không sao chép Objectives)
  *               kpi_assignment_ids:
  *                 type: array
  *                 items:
  *                   type: integer
  *                 example: [3, 8]
- *                 description: KPI assignment IDs to clone (if empty or not provided, no KPIs will be cloned)
+ *                 description: Danh sách ID của KPI Assignments cần sao chép (nếu để trống hoặc không cung cấp, sẽ không sao chép KPIs)
  *     responses:
  *       201:
- *         description: Items cloned successfully
+ *         description: Sao chép thành công
  *         content:
  *           application/json:
  *             schema:
@@ -359,8 +709,10 @@ router.patch("/:id/unlock", authorize("ADMIN_COMPANY"), unlockCycle);
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 message:
  *                   type: string
+ *                   example: "Items cloned successfully"
  *                 data:
  *                   type: object
  *                   properties:
@@ -368,16 +720,22 @@ router.patch("/:id/unlock", authorize("ADMIN_COMPANY"), unlockCycle);
  *                       type: array
  *                       items:
  *                         type: integer
- *                       description: List of cloned objective IDs
+ *                       description: Danh sách ID của Objectives đã được sao chép (các ID mới)
+ *                       example: [101, 102, 103]
  *                     cloned_kpi_assignment_ids:
  *                       type: array
  *                       items:
  *                         type: integer
- *                       description: List of cloned KPI assignment IDs
+ *                       description: Danh sách ID của KPI Assignments đã được sao chép (các ID mới)
+ *                       example: [201, 202]
  *       400:
- *         description: Invalid request (target cycle locked)
+ *         description: Bad request (chu kỳ đích bị khóa hoặc company context bị thiếu)
+ *       403:
+ *         description: Forbidden - chỉ ADMIN_COMPANY mới có quyền
+ *       404:
+ *         description: Target cycle not found
  *       422:
- *         description: Validation error (invalid IDs)
+ *         description: Validation error (objective_ids hoặc kpi_assignment_ids không phải array)
  */
 router.post("/:id/clone", authorize("ADMIN_COMPANY"), cloneCycle);
 

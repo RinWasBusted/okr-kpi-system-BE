@@ -1,4 +1,5 @@
 import * as userService from "./user.service.js";
+import * as evaluationService from "../evaluations/evaluations.service.js";
 import AppError from "../../utils/appError.js";
 import { uploadImageToCloudinary } from "../../utils/cloudinary.js";
 
@@ -81,6 +82,22 @@ export const getUserById = async (req, res) => {
     } catch (error) {
         throw error;
     }
+};
+
+// GET /users/:id/evaluations
+export const getUserEvaluations = async (req, res) => {
+    const userId = parsePositiveInt(req.params.id, null);
+    if (!userId) throw new AppError("Invalid user ID", 400);
+
+    const page = parsePositiveInt(req.query.page, 1);
+    const per_page = Math.min(parsePositiveInt(req.query.per_page, 10), 100);
+
+    const result = await evaluationService.listUserEvaluations(req.user, userId, {
+        page,
+        per_page,
+    });
+
+    res.success("User evaluations retrieved successfully", 200, result.data, result.meta);
 };
 
 // POST /users
@@ -221,4 +238,3 @@ export const deleteUser = async (req, res) => {
         throw error;
     }
 };
-

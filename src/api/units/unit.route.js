@@ -5,7 +5,8 @@ import {
     updateUnit,
     deleteUnit,
     getUnitDetail,
-    getUnitInfo
+    getUnitInfo,
+    getUnitEvaluations,
 } from "./unit.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.js";
 import { validate } from "../../middlewares/validate.js";
@@ -251,6 +252,190 @@ router.get("/:id/info", getUnitInfo);
 
 /**
  * @swagger
+ * /units/{id}/evaluations:
+ *   get:
+ *     summary: Get unit evaluations
+ *     description: |
+ *       Retrieve performance evaluations for all members of a specific unit in a given cycle.
+ *       Returns a list of evaluations including OKR/KPI progress, composite scores, and performance ratings.
+ *       Only `ADMIN_COMPANY` users can access this endpoint. Requires `accessToken` cookie.
+ *     tags: [Units]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Unit ID
+ *       - in: query
+ *         name: cycle_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: OKR/KPI cycle ID for which to retrieve evaluations
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Unit evaluations retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Unit evaluations retrieved successfully"
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: Evaluation ID
+ *                         example: 1
+ *                       evaluatee:
+ *                         type: object
+ *                         description: Employee being evaluated
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                             example: 10
+ *                           full_name:
+ *                             type: string
+ *                             example: "Nguyễn Văn A"
+ *                           job_title:
+ *                             type: string
+ *                             nullable: true
+ *                             example: "Senior Developer"
+ *                           avatar_url:
+ *                             type: string
+ *                             nullable: true
+ *                             format: url
+ *                             example: "https://res.cloudinary.com/image.jpg"
+ *                       unit:
+ *                         type: object
+ *                         description: Unit information
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                             example: 5
+ *                           name:
+ *                             type: string
+ *                             example: "Engineering"
+ *                       okr_count:
+ *                         type: integer
+ *                         description: Number of OKRs assigned to employee
+ *                         example: 3
+ *                       kpi_count:
+ *                         type: integer
+ *                         description: Number of KPIs assigned to employee
+ *                         example: 5
+ *                       avg_okr_progress:
+ *                         type: number
+ *                         description: Average OKR progress percentage (0-100)
+ *                         example: 85.5
+ *                       avg_kpi_progress:
+ *                         type: number
+ *                         description: Average KPI progress percentage (0-100)
+ *                         example: 78.2
+ *                       composite_score:
+ *                         type: number
+ *                         description: Overall performance score (weighted average of OKR and KPI progress)
+ *                         example: 81.85
+ *                       rating:
+ *                         type: string
+ *                         enum: [EXCELLENT, GOOD, ABOVE_AVERAGE, SATISFACTORY, NEEDS_IMPROVEMENT]
+ *                         description: Performance rating based on composite_score
+ *                         example: "EXCELLENT"
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         example: "2025-04-20T10:30:00Z"
+ *       400:
+ *         description: Invalid unit ID or missing cycle_id parameter
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "BAD_REQUEST"
+ *                     message:
+ *                       type: string
+ *                       example: "cycle_id is required"
+ *       401:
+ *         description: Access token missing or invalid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "UNAUTHORIZED"
+ *                     message:
+ *                       type: string
+ *                       example: "Access token is missing"
+ *       403:
+ *         description: Forbidden - Only ADMIN_COMPANY users can access
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "FORBIDDEN"
+ *                     message:
+ *                       type: string
+ *                       example: "Access denied"
+ *       404:
+ *         description: Unit or cycle not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "NOT_FOUND"
+ *                     message:
+ *                       type: string
+ *                       example: "Unit not found"
+ */
+router.get("/:id/evaluations", authorize("ADMIN_COMPANY"), getUnitEvaluations);
+
+/**
+ * @swagger
  * /units/{id}/detail:
  *   get:
  *     summary: Get unit details
@@ -372,7 +557,7 @@ router.get("/:id/detail", getUnitDetail);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name]
+ *             required: [name, parent_id]
  *             properties:
  *               name:
  *                 type: string
@@ -381,9 +566,8 @@ router.get("/:id/detail", getUnitDetail);
  *                 example: "Frontend Team"
  *               parent_id:
  *                 type: integer
- *                 nullable: true
  *                 example: 1
- *                 description: ID of the parent unit. Omit or set null for a top-level unit.
+ *                 description: ID of the parent unit. Required — the root company unit is created automatically with the company.
  *               manager_id:
  *                 type: integer
  *                 nullable: true
@@ -546,9 +730,8 @@ router.post("/", authorize("ADMIN_COMPANY"), validate(createUnitSchema), createU
  *                 example: "Backend Team"
  *               parent_id:
  *                 type: integer
- *                 nullable: true
  *                 example: 2
- *                 description: New parent unit. Set null to promote to top-level.
+ *                 description: New parent unit. Cannot be set to null — the root unit is immutable.
  *               manager_id:
  *                 type: integer
  *                 nullable: true
