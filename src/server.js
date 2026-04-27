@@ -9,6 +9,7 @@ import errorHandler from './middlewares/errorHandler.js';
 import responseHandler from './middlewares/responseHandler.js';
 import { setupSwagger } from './config/swagger.config.js';
 import resetTokenUsageJob from './jobs/resetTokenUsage.job.js';
+import { runDailyETL } from './jobs/behaviorAnalysis.job.js';
 
 const createApp = async () => {
   const app = express();
@@ -60,6 +61,7 @@ const createApp = async () => {
 
   // Initialize scheduled jobs
   resetTokenUsageJob();
+  // behaviorAnalysis job is scheduled internally
   
   return app;
 };

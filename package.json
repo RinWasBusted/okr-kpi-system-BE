@@ -7,6 +7,7 @@
     "start": "NODE_ENV=production node src/index.js",
     "dev": "cross-env NODE_ENV=development tsx watch src/index.js",
     "seed": "prisma db seed",
+    "import-excel": "node scripts/import_excel.js",
     "studio": "dotenv -e .env -- bash -c 'DATABASE_URL=$DATABASE_ADMIN_URL npx prisma studio'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -32,6 +33,7 @@
     "resend": "^6.12.2",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {
