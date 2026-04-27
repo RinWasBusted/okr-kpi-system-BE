@@ -3,6 +3,7 @@ name: Deploy Backend to VPS
 on:
   push:
     branches: [main]
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -26,13 +27,19 @@ jobs:
             tylerpham2708/okr-kpi-system-server:latest
             tylerpham2708/okr-kpi-system-server:${{ github.sha }}
 
-      - name: Copy docker-compose.yml to VPS
+      # Bước mới: Tạo file .env từ Secret BE_ENV
+      - name: Create .env file
+        run: |
+          echo "${{ secrets.BE_ENV }}" > .env
+
+      # Cập nhật bước SCP: Copy cả docker-compose.yml và .env
+      - name: Copy files to VPS
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "docker-compose.yml"
+          source: "docker-compose.yml,.env"
           target: "~/okr-kpi-system/okr-kpi-system-be/"
 
       - name: Executing remote SSH commands to deploy
@@ -45,5 +52,16 @@ jobs:
             IMAGE_TAG=${{ github.sha }}
           script: |
             cd ~/okr-kpi-system/okr-kpi-system-be/
-            env IMAGE_TAG=$IMAGE_TAG $(grep -v '^#' .env | xargs) docker stack deploy --with-registry-auth -c docker-compose.yml okr_kpi_system_server
+            
+            # 1. Export IMAGE_TAG để docker-compose interpolation nhận diện được
+            export IMAGE_TAG=$IMAGE_TAG
+            
+            # 2. Load các biến từ file .env vừa mới được copy lên để dùng trong stack deploy
+            # Lệnh này sẽ nạp các biến vào môi trường hiện tại của shell trên VPS
+            export $(grep -v '^#' .env | xargs)
+            
+            # 3. Deploy stack với tag cụ thể
+            docker stack deploy --with-registry-auth -c docker-compose.yml okr_kpi_system_server
+            
+            # Dọn dẹp image cũ để tránh đầy ổ cứng VPS
             docker image prune -f
