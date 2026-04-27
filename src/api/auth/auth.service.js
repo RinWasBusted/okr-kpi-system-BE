@@ -119,12 +119,26 @@ export const loginService = async (email, password, company_slug = '', remember_
                 unit_path = unitData[0]?.unit_path || null;
             }
 
+            // Check if user is manager of any non-deleted unit in their company
+            let is_manager = false;
+            if (user.company_id) {
+                const managerCheck = await prisma.units.count({
+                    where: {
+                        company_id: user.company_id,
+                        manager_id: user.id,
+                        deleted_at: null,
+                    },
+                });
+                is_manager = managerCheck > 0;
+            }
+
             const tokenPayload = {
                 id: user.id,
                 role: user.role,
                 company_id: user.company_id,
                 unit_id: user.unit_id,
                 unit_path: unit_path,
+                is_manager,
             };
 
             const ttlSeconds = remember_me ? SESSION_TTL_30D : SESSION_TTL_7D;
@@ -150,7 +164,8 @@ export const loginService = async (email, password, company_slug = '', remember_
                     company_id: user.company_id,
                     company_slug: user.company?.slug || null,
                     unit_id: user.unit_id,
-                    unit_name: user.unit?.name || null
+                    unit_name: user.unit?.name || null,
+                    is_manager,
                 },
                 accessToken,
                 refreshToken,
@@ -190,7 +205,20 @@ export const refreshTokenService = async (refreshToken) => {
             unit_path = unitData[0]?.unit_path || null;
         }
 
-        const tokenPayload = { id: user.id, role: user.role, company_id: user.company_id, unit_id: user.unit_id, unit_path };
+        // Check if user is manager of any non-deleted unit in their company
+        let is_manager = false;
+        if (user.company_id) {
+            const managerCheck = await prisma.units.count({
+                where: {
+                    company_id: user.company_id,
+                    manager_id: user.id,
+                    deleted_at: null,
+                },
+            });
+            is_manager = managerCheck > 0;
+        }
+
+        const tokenPayload = { id: user.id, role: user.role, company_id: user.company_id, unit_id: user.unit_id, unit_path, is_manager };
         const accessToken = generateToken(tokenPayload, '15m');
 
         const ttlDays = Math.ceil(ttl_seconds / (24 * 60 * 60));
@@ -250,6 +278,19 @@ export const getCurrentUser = async (userId) => {
             ? getCloudinaryImageUrl(user.avatar_url, 100, 100, "fill")
             : null;
 
+        // Check if user is manager of any non-deleted unit
+        let is_manager = false;
+        if (user.company_id) {
+            const managerCheck = await prisma.units.count({
+                where: {
+                    company_id: user.company_id,
+                    manager_id: user.id,
+                    deleted_at: null,
+                },
+            });
+            is_manager = managerCheck > 0;
+        }
+
         // eslint-disable-next-line no-unused-vars
         const { company, unit, unit_id, unit_name, ...userRest } = user;
 
@@ -258,7 +299,8 @@ export const getCurrentUser = async (userId) => {
             avatar_url: avatarUrl,
             company_slug: company?.slug || null,
             company_name: company?.name || null,
-            unit: unit_id ? { id: unit_id, name: unit?.name || null } : null
+            unit: unit_id ? { id: unit_id, name: unit?.name || null } : null,
+            is_manager,
         };
     } catch (error) {
         throw new AppError("Error occurred while fetching user", 500);

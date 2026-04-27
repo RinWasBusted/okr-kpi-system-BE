@@ -57,17 +57,53 @@ const validateCycleAccess = async (user, cycleId) => {
     return cycle;
 };
 
+// Validate filter authorization for timeline endpoints
+const validateTimelineFilters = async (user, { unitId, userId }) => {
+    if (user.role === 'ADMIN_COMPANY') return; // unrestricted
+
+    if (unitId) {
+        // Check if user is manager of this unit
+        const isUnitManager = await prisma.units.count({
+            where: { id: unitId, manager_id: user.id, deleted_at: null },
+        });
+        if (isUnitManager > 0) return; // manager can access their managed units
+
+        // Employee: allowed only if unit_id matches their own
+        if (user.unit_id !== unitId) {
+            throw new AppError("You do not have permission to view this unit's data", 403);
+        }
+        return;
+    }
+
+    if (userId) {
+        // Employees can only see their own data
+        if (user.role === 'EMPLOYEE' && userId !== user.id) {
+            throw new AppError("You can only view your own data", 403);
+        }
+    }
+};
+
 // Get KPI timeline data for chart
-export const getKPITimelineData = async (user, cycleId, groupBy = "month") => {
+export const getKPITimelineData = async (user, cycleId, groupBy = "month", filters = {}) => {
+    const { unitId, userId } = filters;
+    await validateTimelineFilters(user, { unitId, userId });
     const cycle = await validateCycleAccess(user, cycleId);
+
+    // Build where clause with optional filters
+    const whereClause = {
+        company_id: user.company_id,
+        cycle_id: cycleId,
+        deleted_at: null,
+    };
+    if (unitId) {
+        whereClause.unit_id = unitId;
+    } else if (userId) {
+        whereClause.owner_id = userId;
+    }
 
     // Get all KPI assignments in this cycle with their dictionaries
     const assignments = await prisma.kPIAssignments.findMany({
-        where: {
-            company_id: user.company_id,
-            cycle_id: cycleId,
-            deleted_at: null,
-        },
+        where: whereClause,
         select: {
             id: true,
             target_value: true,
@@ -75,7 +111,6 @@ export const getKPITimelineData = async (user, cycleId, groupBy = "month") => {
             unit_id: true,
             owner_id: true,
             visibility: true,
-            access_path: true,
             kpi_dictionary: {
                 select: {
                     id: true,
@@ -154,8 +189,8 @@ export const getKPITimelineData = async (user, cycleId, groupBy = "month") => {
                 kpi_name: dict.name,
                 unit: dict.unit,
                 evaluation_method: dict.evaluation_method,
-                target_value: assignment.target_value,
-                current_progress: Math.round(assignment.progress_percentage * 100) / 100,
+                target_value: Math.round((assignment.target_value || 0) * 100) / 100,
+                current_progress: Math.round((assignment.progress_percentage || 0) * 100) / 100,
                 assignments: [],
                 timeline: new Map(),
             });
@@ -188,8 +223,8 @@ export const getKPITimelineData = async (user, cycleId, groupBy = "month") => {
                 period,
                 period_start: record.period_start.toISOString().split("T")[0],
                 period_end: record.period_end.toISOString().split("T")[0],
-                actual_value: record.actual_value,
-                progress_percentage: Math.round(record.progress_percentage * 100) / 100,
+                actual_value: Math.round((record.actual_value || 0) * 100) / 100,
+                progress_percentage: Math.round((record.progress_percentage || 0) * 100) / 100,
                 status: record.status,
                 trend: record.trend,
             });
@@ -219,16 +254,28 @@ export const getKPITimelineData = async (user, cycleId, groupBy = "month") => {
 };
 
 // Get OKR timeline data for chart
-export const getOKRTimelineData = async (user, cycleId, groupBy = "month") => {
+export const getOKRTimelineData = async (user, cycleId, groupBy = "month", filters = {}) => {
+    const { unitId, userId } = filters;
+    await validateTimelineFilters(user, { unitId, userId });
     const cycle = await validateCycleAccess(user, cycleId);
+
+    // Build where clause with optional filters
+    const whereClause = {
+        company_id: user.company_id,
+        cycle_id: cycleId,
+        deleted_at: null,
+        // Only include active statuses - Draft, Pending_Approval, Rejected don't count
+        status: { in: ["NOT_STARTED", "ON_TRACK", "AT_RISK", "CRITICAL", "COMPLETED"] },
+    };
+    if (unitId) {
+        whereClause.unit_id = unitId;
+    } else if (userId) {
+        whereClause.owner_id = userId;
+    }
 
     // Get all objectives in this cycle
     const objectives = await prisma.objectives.findMany({
-        where: {
-            company_id: user.company_id,
-            cycle_id: cycleId,
-            deleted_at: null,
-        },
+        where: whereClause,
         select: {
             id: true,
             title: true,
@@ -237,7 +284,6 @@ export const getOKRTimelineData = async (user, cycleId, groupBy = "month") => {
             unit_id: true,
             owner_id: true,
             visibility: true,
-            access_path: true,
             unit: {
                 select: {
                     id: true,
@@ -312,7 +358,7 @@ export const getOKRTimelineData = async (user, cycleId, groupBy = "month") => {
             objective_id: objective.id,
             objective_title: objective.title,
             status: objective.status,
-            current_progress: Math.round(objective.progress_percentage * 100) / 100,
+            current_progress: Math.round((objective.progress_percentage || 0) * 100) / 100,
             unit_id: objective.unit_id,
             unit_name: objective.unit?.name || null,
             owner_id: objective.owner_id,
@@ -320,9 +366,9 @@ export const getOKRTimelineData = async (user, cycleId, groupBy = "month") => {
             key_results: objective.key_results.map((kr) => ({
                 kr_id: kr.id,
                 title: kr.title,
-                target_value: kr.target_value,
-                current_value: kr.current_value,
-                progress_percentage: Math.round(kr.progress_percentage * 100) / 100,
+                target_value: Math.round((kr.target_value || 0) * 100) / 100,
+                current_value: Math.round((kr.current_value || 0) * 100) / 100,
+                progress_percentage: Math.round((kr.progress_percentage || 0) * 100) / 100,
                 weight: kr.weight,
             })),
             timeline: new Map(),
@@ -512,11 +558,8 @@ const canViewObjective = async (user, objective) => {
 
     const userPath = user.unit_id ? await getUnitPath(user.unit_id) : null;
 
-    // Get objective's access path
-    let objectivePath = objective.access_path;
-    if (!objectivePath && objective.unit_id) {
-        objectivePath = await getUnitPath(objective.unit_id);
-    }
+    // Get objective's access path via unit hierarchy
+    const objectivePath = objective.unit_id ? await getUnitPath(objective.unit_id) : null;
 
     if (objective.visibility === "INTERNAL") {
         if (!objectivePath || !userPath) return false;

@@ -77,6 +77,7 @@ export const listUsers = async ({ unit_id, search, page, per_page }, currentUser
     }
 
     const where = {
+        company_id: currentUser?.company_id,
         // Exclude system admin (ADMIN role) - only show ADMIN_COMPANY and EMPLOYEE
         role: { not: UserRole.ADMIN },
         deleted_at: null,
@@ -95,7 +96,7 @@ export const listUsers = async ({ unit_id, search, page, per_page }, currentUser
             where,
             skip: (page - 1) * per_page,
             take: per_page,
-            orderBy: { id: "asc" },
+            orderBy: { id: "desc" },
             select: userSelect,
         }),
     ]);
@@ -159,7 +160,7 @@ export const createUser = async (companyId, { full_name, email, password, unit_i
 
 export const updateUser = async (userId, { full_name, job_title, unit_id, password, is_active }) => {
     const existing = await prisma.users.findFirst({
-        where: { id: userId, role: UserRole.EMPLOYEE, deleted_at: null },
+        where: { id: userId, role: { not: UserRole.ADMIN }, deleted_at: null },
     });
     if (!existing) throw new AppError("User not found", 404);
 

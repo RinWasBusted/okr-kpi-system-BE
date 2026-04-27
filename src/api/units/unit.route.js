@@ -432,7 +432,7 @@ router.get("/:id/info", getUnitInfo);
  *                       type: string
  *                       example: "Unit not found"
  */
-router.get("/:id/evaluations", authorize("ADMIN_COMPANY"), getUnitEvaluations);
+router.get("/:id/evaluations", authorize("ADMIN_COMPANY", "MANAGER"), getUnitEvaluations);
 
 /**
  * @swagger

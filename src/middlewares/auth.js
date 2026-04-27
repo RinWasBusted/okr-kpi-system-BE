@@ -30,7 +30,14 @@ export const authorize = (...roles) => {
             return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } });
         }
 
-        if (!roles.includes(req.user.role)) {
+        const userRoles = [req.user.role];
+        if (req.user.is_manager) {
+            userRoles.push('MANAGER');
+        }
+
+        const hasPermission = roles.some(role => userRoles.includes(role));
+
+        if (!hasPermission) {
             return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Forbidden' } });
         }
 

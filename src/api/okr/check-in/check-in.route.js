@@ -1,5 +1,5 @@
 import express from "express";
-import { createCheckIn, getCheckIns } from "./check-in.controller.js";
+import { createCheckIn, getCheckIns, getObjectiveCheckIns, getMyActivities } from "./check-in.controller.js";
 import { authenticate } from "../../../middlewares/auth.js";
 import { validate } from "../../../middlewares/validate.js";
 import { createCheckInSchema } from "../../../schemas/kpi.schema.js";
@@ -154,5 +154,31 @@ router.post("/key-results/:kr_id/check-ins", validate(createCheckInSchema), crea
  *         description: Key result not found
  */
 router.get("/key-results/:kr_id/check-ins", getCheckIns);
+
+/**
+ * @swagger
+ * /objectives/{objective_id}/check-ins:
+ *   get:
+ *     summary: Get all check-in history for an objective
+ *     tags: [CheckIns]
+ *     parameters:
+ *       - in: path
+ *         name: objective_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The objective ID
+ *     responses:
+ *       200:
+ *         description: Check-ins retrieved successfully
+ *       400:
+ *         description: Invalid objective ID
+ *       403:
+ *         description: No permission to view this objective
+ *       404:
+ *         description: Objective not found
+ */
+router.get("/objectives/:objective_id/check-ins", getObjectiveCheckIns);
+router.get("/my-activities", getMyActivities);
 
 export default router;
