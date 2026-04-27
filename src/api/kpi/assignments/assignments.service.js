@@ -1149,7 +1149,6 @@ export const getAvailableParentKPIs = async (user, unitId, kpiDictionaryId) => {
   const where = {
     deleted_at: null,
     unit_id: { in: relevantUnitIds },
-    parent_assignment_id: null, // Only root assignments can be parents
   };
 
   // If kpiDictionaryId is provided, filter by it

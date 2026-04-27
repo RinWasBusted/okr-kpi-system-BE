@@ -1,10 +1,12 @@
 import express from "express";
-import { getKPITimeline, getOKRTimeline } from "./statistic.controller.js";
-import { authenticate } from "../../middlewares/auth.js";
+import { getKPITimeline, getOKRTimeline, getStatisticsSummary } from "./statistic.controller.js";
+import { authenticate, authorize } from "../../middlewares/auth.js";
 
 const router = express.Router();
 
 router.use(authenticate);
+
+router.get("/", authorize("ADMIN_COMPANY"), getStatisticsSummary);
 
 /**
  * @swagger

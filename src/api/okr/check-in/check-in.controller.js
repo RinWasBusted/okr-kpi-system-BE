@@ -7,12 +7,7 @@ const parsePositiveInt = (value, fallback) => {
     return parsed;
 };
 
-const parseNumber = (value) => {
-    if (value === undefined || value === null || value === "") return undefined;
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return undefined;
-    return parsed;
-};
+const roundProgress = (value) => Math.round(value * 100) / 100;
 
 // POST /key-results/:kr_id/check-ins
 export const createCheckIn = async (req, res) => {
@@ -31,9 +26,10 @@ export const createCheckIn = async (req, res) => {
         res.success("Check-in created successfully", 200, {
             id: result.check_in.id,
             achieved_value: result.check_in.achieved_value,
-            progress_snapshot: Math.round(result.check_in.progress_snapshot * 100) / 100,
-            kr_progress: Math.round(result.kr_progress * 100) / 100,
-            objective_progress: Math.round(result.objective_progress * 100) / 100,
+            progress_snapshot: roundProgress(result.check_in.progress_snapshot),
+            obj_progress_snapshot: roundProgress(result.check_in.obj_progress_snapshot),
+            kr_progress: roundProgress(result.kr_progress),
+            objective_progress: roundProgress(result.objective_progress),
             evidence_url: result.check_in.evidence_url,
             comment: result.check_in.comment,
             created_at: result.check_in.created_at,
@@ -51,7 +47,15 @@ export const getCheckIns = async (req, res) => {
 
         const data = await checkInService.listCheckIns(req.user, keyResultId);
 
-        res.success("Check-ins retrieved successfully", 200, data);
+        res.success(
+            "Check-ins retrieved successfully",
+            200,
+            data.map((checkIn) => ({
+                ...checkIn,
+                progress_snapshot: roundProgress(checkIn.progress_snapshot),
+                obj_progress_snapshot: roundProgress(checkIn.obj_progress_snapshot),
+            })),
+        );
     } catch (error) {
         throw error;
     }

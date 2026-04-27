@@ -12,6 +12,7 @@ import healthRoutes from "./health/health.route.js";
 import statisticRoutes from "./statistic/statistic.route.js";
 import notificationRoutes from "./notifications/notification.route.js";
 import companyRoutes from "./company/company.route.js";
+import evaluationRoutes from "./evaluations/evaluations.route.js";
 const router = express.Router();
 
 router.use("/health", healthRoutes);
@@ -27,5 +28,6 @@ router.use("/ai-usage", aiUsageRoutes);
 router.use("/statistics", statisticRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/company", companyRoutes);
+router.use("/evaluations", evaluationRoutes);
 
 export default router;

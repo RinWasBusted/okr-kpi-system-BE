@@ -1,4 +1,6 @@
+import { PerformanceRating } from "@prisma/client";
 import * as cycleService from "./cycle.service.js";
+import * as evaluationService from "../evaluations/evaluations.service.js";
 import AppError from "../../utils/appError.js";
 
 // DELETE /cycles/:id
@@ -119,6 +121,33 @@ export const getCycleById = async (req, res) => {
     } catch (error) {
         throw error;
     }
+};
+
+// GET /cycles/:id/evaluations
+export const getCycleEvaluations = async (req, res) => {
+    const companyId = req.user.company_id;
+    if (!companyId) throw new AppError("Company context is required", 403);
+
+    const cycleId = parsePositiveInt(req.params.id, null);
+    if (!cycleId) throw new AppError("Invalid cycle ID", 400);
+
+    const page = parsePositiveInt(req.query.page, 1);
+    const per_page = Math.min(parsePositiveInt(req.query.per_page, 20), 100);
+    const unit_id = req.query.unit_id ? parsePositiveInt(req.query.unit_id, undefined) : undefined;
+    const rating = req.query.rating;
+
+    if (rating !== undefined && !Object.values(PerformanceRating).includes(rating)) {
+        throw new AppError("Invalid rating", 422);
+    }
+
+    const result = await evaluationService.getCycleEvaluationsSummary(companyId, cycleId, {
+        page,
+        per_page,
+        unit_id,
+        rating,
+    });
+
+    res.success("Cycle evaluations retrieved successfully", 200, result.data, result.meta);
 };
 
 // PUT /cycles/:id
