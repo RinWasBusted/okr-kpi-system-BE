@@ -75,13 +75,13 @@ const keyResultSelect = {
 const formatKeyResult = (kr, now) => ({
     id: kr.id,
     title: kr.title,
-    start_value: kr.start_value,
-    target_value: kr.target_value,
-    current_value: kr.current_value,
+    target_value: Math.round((kr.target_value || 0) * 100) / 100,
+    current_value: Math.round((kr.current_value || 0) * 100) / 100,
+    start_value: Math.round((kr.start_value || 0) * 100) / 100,
     unit: kr.unit,
     weight: kr.weight,
     due_date: kr.due_date,
-    progress_percentage: Math.round(kr.progress_percentage * 100) / 100,
+    progress_percentage: Math.round((kr.progress_percentage || 0) * 100) / 100,
     evaluation_method: kr.evaluation_method,
     days_until_due: kr.due_date ? daysBetweenUtc(kr.due_date, now) : null,
 });

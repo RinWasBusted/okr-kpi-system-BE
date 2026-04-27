@@ -59,19 +59,53 @@ export const findCompanyAdminByEmail = async (companyId, email) =>
     where: { company_id: companyId, role: COMPANY_ADMIN_ROLE, email },
   });
 
-export const createCompanyAdmin = async (companyId, { full_name, email, password, avatar_url }) =>
-  prisma.users.create({
-    data: {
-      company_id: companyId,
-      full_name,
-      email,
-      password: await hashPassword(password, 10),
-      role: COMPANY_ADMIN_ROLE,
-      is_active: true,
-      avatar_url: avatar_url ?? null,
-    },
-    select: adminSelect,
-  }).then(formatAdmin);
+export const createCompanyAdmin = async (companyId, { full_name, email, password, avatar_url }) => {
+  const hashedPassword = await hashPassword(password, 10);
+  
+  return await prisma.$transaction(async (tx) => {
+    // 1. Create the admin user
+    const admin = await tx.users.create({
+      data: {
+        company_id: companyId,
+        full_name,
+        email,
+        password: hashedPassword,
+        role: COMPANY_ADMIN_ROLE,
+        is_active: true,
+        avatar_url: avatar_url ?? null,
+      },
+      select: adminSelect,
+    });
+
+    // 2. Check if this is the first admin for this company
+    const adminCount = await tx.users.count({
+      where: { company_id: companyId, role: COMPANY_ADMIN_ROLE },
+    });
+
+    if (adminCount === 1) {
+      // 3. Find the root unit of the company (parent_id is null)
+      const rootUnit = await tx.units.findFirst({
+        where: { company_id: companyId, parent_id: null },
+      });
+
+      if (rootUnit) {
+        // 4. Assign admin as manager of the root unit
+        await tx.units.update({
+          where: { id: rootUnit.id },
+          data: { manager_id: admin.id },
+        });
+
+        // 5. Assign admin to that root unit
+        await tx.users.update({
+          where: { id: admin.id },
+          data: { unit_id: rootUnit.id },
+        });
+      }
+    }
+
+    return formatAdmin(admin);
+  });
+};
 
 export const updateCompanyAdmin = async (adminId, updates) =>
   prisma.users.update({

@@ -2,6 +2,11 @@ import * as unitService from "./unit.service.js";
 import * as evaluationService from "../evaluations/evaluations.service.js";
 import AppError from "../../utils/appError.js";
 
+const parsePositiveInt = (value, fallback) => {
+    const n = parseInt(value, 10);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
 // GET /units
 export const getUnits = async (req, res) => {
     try {
@@ -147,7 +152,18 @@ export const getUnitEvaluations = async (req, res) => {
         throw new AppError("cycle_id is required", 422);
     }
 
-    const evaluations = await evaluationService.listUnitEvaluations(companyId, unitId, cycleId);
-
-    res.success("Unit evaluations retrieved successfully", 200, evaluations);
+    try {
+        const evaluations = await evaluationService.listUnitEvaluations(companyId, unitId, cycleId);
+        res.success("Unit evaluations retrieved successfully", 200, evaluations);
+    } catch (error) {
+        const code = error.code || "";
+        const msg = (error.message || "").toLowerCase();
+        // P2010 = raw query failed (e.g. relation "Evaluations" does not exist)
+        if (code === "P2010" || (msg.includes("does not exist") && msg.includes("relation"))) {
+            return res.success("Unit evaluations retrieved successfully", 200, [], {
+                _notice: "Chưa có dữ liệu đánh giá. Dữ liệu sẽ được hệ thống tự động khởi tạo sau khi chu kỳ kết thúc.",
+            });
+        }
+        throw error;
+    }
 };

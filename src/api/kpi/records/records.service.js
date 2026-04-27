@@ -208,9 +208,17 @@ export const createKPIRecord = async (user, assignmentId, payload) => {
 
   return {
     ...record,
+    actual_value: Math.round((record.actual_value || 0) * 100) / 100,
+    progress_percentage: Math.round((record.progress_percentage || 0) * 100) / 100,
     time_elapsed_percentage: Math.round(timeElapsedPercentage * 100) / 100,
   };
 };
+
+const formatRecord = (record) => ({
+  ...record,
+  actual_value: Math.round((record.actual_value || 0) * 100) / 100,
+  progress_percentage: Math.round((record.progress_percentage || 0) * 100) / 100,
+});
 
 export const listKPIRecords = async (user, assignmentId) => {
   const assignment = await prisma.kPIAssignments.findFirst({
@@ -247,7 +255,7 @@ export const listKPIRecords = async (user, assignmentId) => {
     select: recordSelect,
   });
 
-  return records;
+  return records.map(formatRecord);
 };
 
 // Helper function to check if user owns any parent assignment

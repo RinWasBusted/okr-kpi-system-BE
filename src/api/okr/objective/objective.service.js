@@ -133,12 +133,12 @@ const keyResultSelect = {
 const formatKeyResult = (kr, now) => ({
   id: kr.id,
   title: kr.title,
-  target_value: kr.target_value,
-  current_value: kr.current_value,
+  target_value: Math.round((kr.target_value || 0) * 100) / 100,
+  current_value: Math.round((kr.current_value || 0) * 100) / 100,
   unit: kr.unit,
   weight: kr.weight,
   due_date: kr.due_date,
-  progress_percentage: kr.progress_percentage,
+  progress_percentage: Math.round((kr.progress_percentage || 0) * 100) / 100,
   days_until_due: kr.due_date ? daysBetweenUtc(kr.due_date, now) : null,
 });
 
@@ -285,8 +285,8 @@ const formatObjective = async (
     description: objective.description ?? null,
     status: displayStatus,
     visibility: objective.visibility,
-    progress_percentage: objective.progress_percentage,
-    expected_progress: expectedProgress,
+    progress_percentage: Math.round((objective.progress_percentage || 0) * 100) / 100,
+    expected_progress: expectedProgress !== null ? Math.round(expectedProgress * 100) / 100 : null,
     days_remaining: daysRemaining,
     cycle: objective.cycle ?? null,
     unit_id: objective.unit_id,
