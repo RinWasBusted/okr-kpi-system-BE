@@ -17,5 +17,7 @@
 
 Lệnh copy .env vào github secret: `gh secret set BE_ENV < .env.production` (Nếu chưa đăng nhập thì chạy `gh auth login` )
 
+export $(grep -v '^#' .env | xargs) && \docker stack deploy --with-registry-auth -c docker-compose.yml okr_kpi_system_server
 
 
+scp .env.production okready@157.66.46.72:~/okr-kpi-system/okr-kpi-system-be/.env 
