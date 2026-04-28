@@ -25,3 +25,7 @@ export const listEvaluationHistoryQuerySchema = z.object({
         .optional()
         .default("10"),
 }).passthrough();
+
+export const companyEmployeesEvaluationsQuerySchema = z.object({
+    cycle_id: positiveIntString,
+}).passthrough();

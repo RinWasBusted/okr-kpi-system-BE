@@ -55,3 +55,14 @@ export const getEvaluationDetail = async (req, res) => {
 
     res.success("Evaluation retrieved successfully", 200, evaluation);
 };
+
+// GET /evaluations/employees
+export const getCompanyEmployees = async (req, res) => {
+    const companyId = req.user.company_id;
+    if (!companyId) throw new AppError("Company context is required", 403);
+
+    const { cycle_id } = req.validated.query;
+    const result = await evaluationService.getCompanyEmployeesEvaluations(companyId, Number(cycle_id));
+
+    res.success("Company employees evaluations retrieved successfully", 200, result);
+};
