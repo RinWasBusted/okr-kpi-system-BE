@@ -6,11 +6,13 @@ import {
     getEvaluations,
     getMyEvaluations,
     getEvaluationDetail,
+    getCompanyEmployees,
 } from "./evaluations.controller.js";
 import {
     generateEvaluationsBodySchema,
     listEvaluationsQuerySchema,
     listEvaluationHistoryQuerySchema,
+    companyEmployeesEvaluationsQuerySchema,
 } from "../../schemas/evaluation.schema.js";
 
 const router = express.Router();
@@ -256,6 +258,103 @@ router.get(
     authorize("ADMIN_COMPANY"),
     validate(listEvaluationsQuerySchema, "query"),
     getEvaluations,
+);
+
+/**
+ * @swagger
+ * /evaluations/employees:
+ *   get:
+ *     summary: Lấy danh sách toàn bộ nhân viên trong công ty và thông tin đánh giá
+ *     description: |
+ *       Lấy danh sách tất cả các nhân viên đang hoạt động trong công ty dựa trên chu kỳ.
+ *       Bao gồm thông tin cơ bản của nhân viên và các trường id, cycle_id, avg_kpi_progress từ bảng Evaluations sau khi đã có đánh giá ở cuối chu kỳ đó.
+ *     tags:
+ *       - Evaluations
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: cycle_id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^\d+$'
+ *         description: ID của chu kỳ đánh giá
+ *         example: "1"
+ *     responses:
+ *       200:
+ *         description: Lấy danh sách nhân viên thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Company employees evaluations retrieved successfully"
+ *                 status:
+ *                   type: integer
+ *                   example: 200
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       user_id:
+ *                         type: integer
+ *                         example: 10
+ *                       full_name:
+ *                         type: string
+ *                         example: "Nguyễn Văn A"
+ *                       email:
+ *                         type: string
+ *                         example: "nguyenvana@example.com"
+ *                       avatar_url:
+ *                         type: string
+ *                         nullable: true
+ *                         format: url
+ *                       job_title:
+ *                         type: string
+ *                         nullable: true
+ *                         example: "Developer"
+ *                       id:
+ *                         type: integer
+ *                         nullable: true
+ *                         description: ID của bản ghi đánh giá
+ *                         example: 1
+ *                       cycle_id:
+ *                         type: integer
+ *                         nullable: true
+ *                         example: 1
+ *                       avg_kpi_progress:
+ *                         type: number
+ *                         nullable: true
+ *                         example: 85.5
+ *                       z_score:
+ *                         type: number
+ *                         nullable: true
+ *                         example: 1.25
+ *                       verdict:
+ *                         type: string
+ *                         nullable: true
+ *                         example: "AVERAGE"
+ *       400:
+ *         description: Invalid query parameters
+ *       403:
+ *         description: Forbidden (người dùng không phải Admin hoặc thiếu company context)
+ *       404:
+ *         description: Cycle not found
+ *       500:
+ *         description: Internal server error
+ */
+router.get(
+    "/employees",
+    authorize("ADMIN_COMPANY"),
+    validate(companyEmployeesEvaluationsQuerySchema, "query"),
+    getCompanyEmployees,
 );
 
 /**

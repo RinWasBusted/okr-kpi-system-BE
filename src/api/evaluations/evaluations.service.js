@@ -777,3 +777,89 @@ export const getEvaluationStatisticsSummary = async (companyId) => {
         },
     };
 };
+
+export const getCompanyEmployeesEvaluations = async (companyId, cycleId) => {
+    const cycle = await prisma.cycles.findFirst({
+        where: { id: cycleId, company_id: companyId }
+    });
+
+    if (!cycle) {
+        throw new AppError("Cycle not found", 404);
+    }
+
+    const users = await prisma.users.findMany({
+        where: {
+            company_id: companyId,
+            is_active: true,
+            deleted_at: null,
+            role: { not: UserRole.ADMIN },
+        },
+        select: {
+            id: true,
+            full_name: true,
+            email: true,
+            avatar_url: true,
+            job_title: true,
+            evaluations_as_evaluatee: {
+                where: {
+                    cycle_id: cycleId,
+                    deleted_at: null
+                },
+                select: {
+                    id: true,
+                    cycle_id: true,
+                    avg_kpi_progress: true
+                }
+            }
+        },
+        orderBy: {
+            full_name: 'asc'
+        }
+    });
+
+
+    const scores = users.map(u => {
+        const evaluation = u.evaluations_as_evaluatee && u.evaluations_as_evaluatee[0];
+        return evaluation ? (Number(evaluation.avg_kpi_progress) || 0) : 0;
+    });
+
+    let mean = 0;
+    let stdDev = 0;
+
+    if (scores.length > 0) {
+        mean = scores.reduce((sum, val) => sum + val, 0) / scores.length;
+        const variance = scores.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / scores.length;
+        stdDev = Math.sqrt(variance);
+    }
+
+    const Z_SCORE_TOP_10 = 1.28155; //>= 90%
+    const Z_SCORE_BOTTOM_20 = -0.84162; // <= 20%
+
+    const getVerdict = (zScore) => {
+        if (zScore > Z_SCORE_TOP_10) return "EXCELENT";
+        if (zScore < Z_SCORE_BOTTOM_20) return "WEAK";
+        return "AVERAGE";
+    };
+
+    return users.map(user => {
+        const evaluation = user.evaluations_as_evaluatee && user.evaluations_as_evaluatee[0];
+        const progress = evaluation ? (Number(evaluation.avg_kpi_progress) || 0) : 0;
+        
+        let z_score = stdDev > 0 ? (progress - mean) / stdDev : 0;
+        const verdict = getVerdict(z_score);
+        z_score = roundMetric(z_score);
+
+        return {
+            user_id: user.id,
+            full_name: user.full_name,
+            email: user.email,
+            avatar_url: user.avatar_url ? getCloudinaryImageUrl(user.avatar_url, 50, 50, "fill") : null,
+            job_title: user.job_title,
+            id: evaluation ? evaluation.id : null,
+            cycle_id: evaluation ? evaluation.cycle_id : null,
+            avg_kpi_progress: roundMetric(progress),
+            z_score,
+            verdict
+        };
+    });
+};
