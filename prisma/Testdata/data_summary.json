@@ -1,0 +1,92 @@
+{
+  "dataset_info": {
+    "company_name": "Công ty TNHH Phát Triển Công Nghệ Alpha",
+    "company_slug": "alpha-tech",
+    "total_employees": 100,
+    "cycles": [
+      {
+        "id": 1,
+        "name": "Tháng 4/2026",
+        "date_range": "2026-04-01 to 2026-04-30"
+      },
+      {
+        "id": 2,
+        "name": "Tháng 5/2026",
+        "date_range": "2026-05-01 to 2026-05-31"
+      }
+    ],
+    "departments": 7
+  },
+  "normal_case": {
+    "description": "Điểm KPI/OKR thô ngẫu nhiên từ 80-95",
+    "kpi_progress_range": "80.02 - 94.99",
+    "okr_progress_range": "80.09 - 94.99",
+    "composite_score_range": {
+      "cycle_1": "84.33 - 92.46",
+      "cycle_2": "81.83 - 91.61"
+    },
+    "rating_distribution": {
+      "cycle_1": {
+        "EXCELLENT": 12,
+        "GOOD": 88
+      },
+      "cycle_2": {
+        "EXCELLENT": 4,
+        "GOOD": 96
+      }
+    },
+    "file": "seed_normal.sql"
+  },
+  "all_excellent_case": {
+    "description": "Test case 'Tất cả cùng giỏi' - 100 nhân viên điểm 90-100",
+    "kpi_progress_range": "90.00 - 100.00",
+    "okr_progress_range": "90.00 - 100.00",
+    "composite_score_range": {
+      "cycle_1": "92.50 - 96.59",
+      "cycle_2": "91.95 - 97.05"
+    },
+    "rating_distribution": {
+      "cycle_1": {
+        "EXCELLENT": 100
+      },
+      "cycle_2": {
+        "EXCELLENT": 100
+      }
+    },
+    "file": "seed_all_excellent.sql"
+  },
+  "data_counts": {
+    "companies": 1,
+    "units": 8,
+    "users": 109,
+    "cycles": 2,
+    "kpi_dictionaries": 29,
+    "kpi_assignments": 636,
+    "kpi_records": 636,
+    "objectives": 292,
+    "key_results": 719,
+    "check_ins": 1789,
+    "feedbacks": 285,
+    "notifications": 14,
+    "notification_recipients": 59,
+    "ai_usage_logs": 20,
+    "evaluations": 200
+  },
+  "table_insert_order": [
+    "Companies",
+    "Units",
+    "Users",
+    "Cycles",
+    "KPIDictionaries",
+    "KPIAssignments",
+    "KPIRecords",
+    "Objectives",
+    "KeyResults",
+    "CheckIns",
+    "Feedbacks",
+    "Notifications",
+    "NotificationRecipients",
+    "AIUsageLogs",
+    "Evaluations"
+  ]
+}
