@@ -27,19 +27,14 @@ jobs:
             tylerpham2708/okr-kpi-system-server:latest
             tylerpham2708/okr-kpi-system-server:${{ github.sha }}
 
-      # Bước mới: Tạo file .env từ Secret BE_ENV
-      - name: Create .env file
-        run: |
-          echo "${{ secrets.BE_ENV }}" > .env
-
-      # Cập nhật bước SCP: Copy cả docker-compose.yml và .env
-      - name: Copy files to VPS
+      # Chỉ copy docker-compose.yml, không tạo/copy file .env từ GitHub nữa
+      - name: Copy docker-compose.yml to VPS
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "docker-compose.yml,.env"
+          source: "docker-compose.yml"
           target: "~/okr-kpi-system/okr-kpi-system-be/"
 
       - name: Executing remote SSH commands to deploy
@@ -53,15 +48,19 @@ jobs:
           script: |
             cd ~/okr-kpi-system/okr-kpi-system-be/
             
-            # 1. Export IMAGE_TAG để docker-compose interpolation nhận diện được
+            # 1. Export IMAGE_TAG để docker-compose.yml nhận diện được image mới
             export IMAGE_TAG=$IMAGE_TAG
             
-            # 2. Load các biến từ file .env vừa mới được copy lên để dùng trong stack deploy
-            # Lệnh này sẽ nạp các biến vào môi trường hiện tại của shell trên VPS
-            export $(grep -v '^#' .env | xargs)
+            # 2. Đọc và Export các biến từ file .env có sẵn trên VPS vào môi trường shell
+            # Lệnh này bỏ qua các dòng comment (#) và nạp biến để 'docker stack deploy' có thể dùng để interpolate
+            if [ -f .env ]; then
+              export $(grep -v '^#' .env | xargs)
+            else
+              echo "Warning: .env file not found at $(pwd)"
+            fi
             
-            # 3. Deploy stack với tag cụ thể
+            # 3. Deploy stack (Docker Swarm sẽ dùng các biến đã export ở trên)
             docker stack deploy --with-registry-auth -c docker-compose.yml okr_kpi_system_server
             
-            # Dọn dẹp image cũ để tránh đầy ổ cứng VPS
+            # Dọn dẹp image cũ
             docker image prune -f
